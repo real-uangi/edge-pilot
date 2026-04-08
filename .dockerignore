@@ -1,0 +1,7 @@
+# 忽略所有
+**
+
+# 只保留运行需要的文件
+!.env
+!edge-pilot
+!config*.yaml
