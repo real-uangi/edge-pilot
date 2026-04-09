@@ -19,6 +19,16 @@ func (s *RuntimeState) Start(taskID string) {
 	s.running[taskID] = struct{}{}
 }
 
+func (s *RuntimeState) TryStart(taskID string) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if _, ok := s.running[taskID]; ok {
+		return false
+	}
+	s.running[taskID] = struct{}{}
+	return true
+}
+
 func (s *RuntimeState) Done(taskID string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()

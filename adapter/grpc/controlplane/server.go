@@ -24,8 +24,11 @@ type sessionHub struct {
 }
 
 type agentSession struct {
-	agentID string
-	sendCh  chan *grpcapi.ControlMessage
+	mu       sync.Mutex
+	agentID  string
+	sendCh   chan *grpcapi.ControlMessage
+	closed   bool
+	replayed map[string]struct{}
 }
 
 func NewSessionHub() *sessionHub {
@@ -37,9 +40,13 @@ func NewSessionHub() *sessionHub {
 func (h *sessionHub) register(agentID string) *agentSession {
 	h.mu.Lock()
 	defer h.mu.Unlock()
+	if existing, ok := h.sessions[agentID]; ok {
+		existing.close()
+	}
 	session := &agentSession{
-		agentID: agentID,
-		sendCh:  make(chan *grpcapi.ControlMessage, 16),
+		agentID:  agentID,
+		sendCh:   make(chan *grpcapi.ControlMessage, 16),
+		replayed: make(map[string]struct{}),
 	}
 	h.sessions[agentID] = session
 	return session
@@ -49,7 +56,7 @@ func (h *sessionHub) unregister(agentID string) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	if session, ok := h.sessions[agentID]; ok {
-		close(session.sendCh)
+		session.close()
 		delete(h.sessions, agentID)
 	}
 }
@@ -61,14 +68,31 @@ func (h *sessionHub) DispatchTask(agentID string, task *model.Task) error {
 	if !ok {
 		return fmt.Errorf("agent %s is offline", agentID)
 	}
-	payload := getPayload(task)
-	_ = payload
-	session.sendCh <- &grpcapi.ControlMessage{
+	return session.send(&grpcapi.ControlMessage{
 		Payload: &grpcapi.ControlMessage_Task{
 			Task: taskToProto(task),
 		},
+	})
+}
+
+func (h *sessionHub) ReplayTask(agentID string, task *model.Task) (bool, error) {
+	h.mu.RLock()
+	session, ok := h.sessions[agentID]
+	h.mu.RUnlock()
+	if !ok {
+		return false, fmt.Errorf("agent %s is offline", agentID)
 	}
-	return nil
+	if !session.markReplay(task.ID.String()) {
+		return false, nil
+	}
+	if err := session.send(&grpcapi.ControlMessage{
+		Payload: &grpcapi.ControlMessage_Task{
+			Task: taskToProto(task),
+		},
+	}); err != nil {
+		return false, err
+	}
+	return true, nil
 }
 
 type Server struct {
@@ -142,6 +166,9 @@ func (s *Server) Connect(stream grpcapi.AgentControl_ConnectServer) error {
 			if err := s.agents.Heartbeat(message.GetHeartbeat().GetAgentId()); err != nil {
 				return err
 			}
+			if err := s.releases.RecoverAgentTasks(hello.GetAgentId(), message.GetHeartbeat().GetRunningTaskIds()); err != nil {
+				return err
+			}
 		case message.GetTaskUpdate() != nil:
 			if err := s.releases.HandleTaskUpdate(hello.GetAgentId(), message.GetTaskUpdate()); err != nil {
 				return err
@@ -195,4 +222,37 @@ func getPayload(task *model.Task) model.TaskPayload {
 		return model.TaskPayload{}
 	}
 	return task.Payload.Get()
+}
+
+func (s *agentSession) send(message *grpcapi.ControlMessage) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.closed {
+		return fmt.Errorf("agent %s session closed", s.agentID)
+	}
+	s.sendCh <- message
+	return nil
+}
+
+func (s *agentSession) markReplay(taskID string) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.closed {
+		return false
+	}
+	if _, ok := s.replayed[taskID]; ok {
+		return false
+	}
+	s.replayed[taskID] = struct{}{}
+	return true
+}
+
+func (s *agentSession) close() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.closed {
+		return
+	}
+	close(s.sendCh)
+	s.closed = true
 }

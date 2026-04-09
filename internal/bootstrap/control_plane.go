@@ -3,6 +3,7 @@ package bootstrap
 import (
 	controlgrpc "edge-pilot/adapter/grpc/controlplane"
 	controlhttp "edge-pilot/adapter/http/controlplane"
+	"edge-pilot/adapter/schedule"
 	"edge-pilot/internal/agent"
 	"edge-pilot/internal/observability"
 	"edge-pilot/internal/release"
@@ -29,6 +30,7 @@ func RunControlPlane() {
 	app.Current().Option(observability.ControlPlaneModule)
 	app.Current().Option(controlgrpc.Module)
 	app.Current().Option(controlhttp.Module)
+	app.Current().Option(schedule.Module)
 	app.Current().Option(web.Module)
 	app.Current().Run()
 }

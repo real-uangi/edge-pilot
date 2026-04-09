@@ -141,7 +141,9 @@ func (c *Client) connectOnce(ctx context.Context) error {
 }
 
 func (c *Client) handleTask(ctx context.Context, task *grpcapi.TaskCommand, outbound chan<- *grpcapi.AgentMessage) {
-	c.state.Start(task.GetTaskId())
+	if !c.state.TryStart(task.GetTaskId()) {
+		return
+	}
 	defer c.state.Done(task.GetTaskId())
 	err := c.executor.Execute(ctx, task, func(update *grpcapi.TaskUpdate) error {
 		outbound <- &grpcapi.AgentMessage{
@@ -152,12 +154,16 @@ func (c *Client) handleTask(ctx context.Context, task *grpcapi.TaskCommand, outb
 		return nil
 	})
 	if err != nil {
+		step := "execution_failed"
+		if execErr, ok := err.(*agentapp.TaskExecutionError); ok && execErr.Step != "" {
+			step = execErr.Step
+		}
 		outbound <- &grpcapi.AgentMessage{
 			Payload: &grpcapi.AgentMessage_TaskUpdate{
 				TaskUpdate: &grpcapi.TaskUpdate{
 					TaskId:       task.GetTaskId(),
 					Status:       grpcapi.TaskStatus_TASK_STATUS_FAILED,
-					Step:         "execution_failed",
+					Step:         step,
 					ErrorMessage: err.Error(),
 				},
 			},

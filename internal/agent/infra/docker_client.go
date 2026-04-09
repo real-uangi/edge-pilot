@@ -12,6 +12,7 @@ import (
 	"net/http"
 	"net/url"
 	"strconv"
+	"strings"
 	"time"
 )
 
@@ -36,6 +37,14 @@ func (c *DockerClient) DeployContainer(ctx context.Context, task *grpcapi.TaskCo
 		Env:        flattenEnv(task.GetEnv()),
 		Cmd:        task.GetCommand(),
 		Entrypoint: task.GetEntrypoint(),
+		Labels: map[string]string{
+			application.ManagedLabelKey:        application.ManagedLabelValue,
+			application.ManagedLabelAgentID:    task.GetAgentId(),
+			application.ManagedLabelServiceID:  task.GetServiceId(),
+			application.ManagedLabelServiceKey: task.GetServiceKey(),
+			application.ManagedLabelSlot:       application.ManagedSlotValue(task.GetTargetSlot()),
+			application.ManagedLabelReleaseID:  task.GetReleaseId(),
+		},
 		ExposedPorts: map[string]map[string]string{
 			portKey(int(task.GetContainerPort())): {},
 		},
@@ -52,7 +61,7 @@ func (c *DockerClient) DeployContainer(ctx context.Context, task *grpcapi.TaskCo
 	if err != nil {
 		return nil, err
 	}
-	name := fmt.Sprintf("%s-%d-%d", task.GetServiceKey(), task.GetTargetSlot(), time.Now().Unix())
+	name := application.ManagedContainerName(task.GetServiceKey(), task.GetTargetSlot())
 	createURL := "http://docker/containers/create?name=" + url.QueryEscape(name)
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, createURL, bytes.NewReader(body))
 	if err != nil {
@@ -110,9 +119,84 @@ func (c *DockerClient) InspectHealth(ctx context.Context, containerID string) (s
 		if inspectResp.State.Running {
 			return "", nil
 		}
-		return "stopped", nil
+		return inspectResp.State.Status, nil
 	}
 	return inspectResp.State.Health.Status, nil
+}
+
+func (c *DockerClient) FindContainerByName(ctx context.Context, name string) (*application.ManagedContainer, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "http://docker/containers/"+url.PathEscape(name)+"/json", nil)
+	if err != nil {
+		return nil, err
+	}
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode == http.StatusNotFound {
+		return nil, nil
+	}
+	if resp.StatusCode >= 300 {
+		return nil, fmt.Errorf("docker inspect failed: %s", resp.Status)
+	}
+	var inspectResp dockerInspectResponse
+	if err := json.NewDecoder(resp.Body).Decode(&inspectResp); err != nil {
+		return nil, err
+	}
+	return toManagedContainer(&inspectResp), nil
+}
+
+func (c *DockerClient) RemoveContainer(ctx context.Context, containerID string) error {
+	req, err := http.NewRequestWithContext(ctx, http.MethodDelete, "http://docker/containers/"+url.PathEscape(containerID)+"?force=1", nil)
+	if err != nil {
+		return err
+	}
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode == http.StatusNotFound {
+		return nil
+	}
+	if resp.StatusCode >= 300 {
+		return fmt.Errorf("docker remove failed: %s", resp.Status)
+	}
+	return nil
+}
+
+func (c *DockerClient) ListManagedContainers(ctx context.Context, agentID string, serviceKey string) ([]*application.ManagedContainer, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "http://docker/containers/json?all=1", nil)
+	if err != nil {
+		return nil, err
+	}
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode >= 300 {
+		return nil, fmt.Errorf("docker list failed: %s", resp.Status)
+	}
+	var items []dockerContainerSummary
+	if err := json.NewDecoder(resp.Body).Decode(&items); err != nil {
+		return nil, err
+	}
+	out := make([]*application.ManagedContainer, 0, len(items))
+	for _, item := range items {
+		if item.Labels[application.ManagedLabelKey] != application.ManagedLabelValue {
+			continue
+		}
+		if item.Labels[application.ManagedLabelAgentID] != agentID {
+			continue
+		}
+		if item.Labels[application.ManagedLabelServiceKey] != serviceKey {
+			continue
+		}
+		out = append(out, summaryToManagedContainer(item))
+	}
+	return out, nil
 }
 
 type dockerCreateRequest struct {
@@ -120,6 +204,7 @@ type dockerCreateRequest struct {
 	Env          []string                     `json:"Env,omitempty"`
 	Cmd          []string                     `json:"Cmd,omitempty"`
 	Entrypoint   []string                     `json:"Entrypoint,omitempty"`
+	Labels       map[string]string            `json:"Labels,omitempty"`
 	ExposedPorts map[string]map[string]string `json:"ExposedPorts,omitempty"`
 	HostConfig   dockerHostConfig             `json:"HostConfig"`
 }
@@ -139,12 +224,25 @@ type dockerCreateResponse struct {
 }
 
 type dockerInspectResponse struct {
+	ID     string `json:"Id"`
+	Name   string `json:"Name"`
+	Config struct {
+		Labels map[string]string `json:"Labels"`
+	} `json:"Config"`
 	State struct {
-		Running bool `json:"Running"`
+		Status  string `json:"Status"`
+		Running bool   `json:"Running"`
 		Health  *struct {
 			Status string `json:"Status"`
 		} `json:"Health"`
 	} `json:"State"`
+}
+
+type dockerContainerSummary struct {
+	ID     string            `json:"Id"`
+	Names  []string          `json:"Names"`
+	State  string            `json:"State"`
+	Labels map[string]string `json:"Labels"`
 }
 
 func flattenEnv(m map[string]string) []string {
@@ -175,4 +273,53 @@ func flattenVolumes(items []*grpcapi.VolumeMount) []string {
 
 func portKey(port int) string {
 	return strconv.Itoa(port) + "/tcp"
+}
+
+func toManagedContainer(resp *dockerInspectResponse) *application.ManagedContainer {
+	labels := resp.Config.Labels
+	return &application.ManagedContainer{
+		ContainerRuntime: application.ContainerRuntime{
+			ContainerID:   resp.ID,
+			ListenAddress: "",
+		},
+		Name:       strings.TrimPrefix(resp.Name, "/"),
+		Managed:    labels[application.ManagedLabelKey] == application.ManagedLabelValue,
+		AgentID:    labels[application.ManagedLabelAgentID],
+		ServiceID:  labels[application.ManagedLabelServiceID],
+		ServiceKey: labels[application.ManagedLabelServiceKey],
+		ReleaseID:  labels[application.ManagedLabelReleaseID],
+		Slot:       parseSlot(labels[application.ManagedLabelSlot]),
+		State:      resp.State.Status,
+	}
+}
+
+func summaryToManagedContainer(item dockerContainerSummary) *application.ManagedContainer {
+	name := ""
+	if len(item.Names) > 0 {
+		name = strings.TrimPrefix(item.Names[0], "/")
+	}
+	return &application.ManagedContainer{
+		ContainerRuntime: application.ContainerRuntime{
+			ContainerID: item.ID,
+		},
+		Name:       name,
+		Managed:    item.Labels[application.ManagedLabelKey] == application.ManagedLabelValue,
+		AgentID:    item.Labels[application.ManagedLabelAgentID],
+		ServiceID:  item.Labels[application.ManagedLabelServiceID],
+		ServiceKey: item.Labels[application.ManagedLabelServiceKey],
+		ReleaseID:  item.Labels[application.ManagedLabelReleaseID],
+		Slot:       parseSlot(item.Labels[application.ManagedLabelSlot]),
+		State:      item.State,
+	}
+}
+
+func parseSlot(value string) grpcapi.Slot {
+	switch value {
+	case "blue":
+		return grpcapi.Slot_SLOT_BLUE
+	case "green":
+		return grpcapi.Slot_SLOT_GREEN
+	default:
+		return grpcapi.Slot_SLOT_UNSPECIFIED
+	}
 }

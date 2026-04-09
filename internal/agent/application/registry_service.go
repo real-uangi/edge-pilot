@@ -73,6 +73,10 @@ func (s *RegistryService) MarkDisconnected(agentID string, reason string) error 
 	return s.repo.MarkOffline(agentID, reason)
 }
 
+func (s *RegistryService) MarkOfflineStale(before time.Time) ([]string, error) {
+	return s.repo.MarkOfflineStale(before)
+}
+
 func (s *RegistryService) IsOnline(agentID string) (bool, error) {
 	node, err := s.repo.Get(agentID)
 	if err != nil {

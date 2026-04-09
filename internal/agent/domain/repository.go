@@ -2,6 +2,7 @@ package domain
 
 import (
 	"edge-pilot/internal/shared/model"
+	"time"
 )
 
 type Repository interface {
@@ -9,4 +10,5 @@ type Repository interface {
 	Get(string) (*model.AgentNode, error)
 	List() ([]model.AgentNode, error)
 	MarkOffline(string, string) error
+	MarkOfflineStale(time.Time) ([]string, error)
 }

@@ -7,6 +7,7 @@ import (
 	"edge-pilot/internal/shared/dto"
 	"edge-pilot/internal/shared/grpcapi"
 	"edge-pilot/internal/shared/model"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -224,18 +225,23 @@ func (s *Service) HandleTaskUpdate(agentID string, update *grpcapi.TaskUpdate) e
 	switch update.GetStatus() {
 	case grpcapi.TaskStatus_TASK_STATUS_RUNNING:
 		task.Status = model.TaskStatusRunning
-		task.StartedAt = &now
+		if task.StartedAt == nil {
+			task.StartedAt = &now
+		}
 		if err := s.repo.UpdateTask(task); err != nil {
 			return err
 		}
-		return s.repo.CreateTaskAttempt(&model.TaskAttempt{
+		if err := s.repo.CreateTaskAttempt(&model.TaskAttempt{
 			ID:        uuid.New(),
 			TaskID:    task.ID,
 			AgentID:   agentID,
 			Status:    model.TaskStatusRunning,
 			Message:   update.GetStep(),
 			StartedAt: &now,
-		})
+		}); err != nil {
+			return err
+		}
+		return s.recordRunningAudit(release, task, update)
 	case grpcapi.TaskStatus_TASK_STATUS_SUCCEEDED:
 		task.Status = model.TaskStatusSucceeded
 		task.CompletedAt = &now
@@ -270,15 +276,140 @@ func (s *Service) HandleTaskUpdate(agentID string, update *grpcapi.TaskUpdate) e
 			TaskID:      task.ID,
 			AgentID:     agentID,
 			Status:      model.TaskStatusFailed,
-			Message:     update.GetErrorMessage(),
+			Message:     coalesceNonEmpty(update.GetErrorMessage(), update.GetStep()),
 			CompletedAt: &now,
 		}); err != nil {
 			return err
+		}
+		if update.GetStep() == "managed_container_conflict" {
+			return s.repo.CreateAudit(newAudit("release", release.ID.String(), "managed_container_conflict", release.TraceID, update.GetErrorMessage()))
 		}
 		return s.repo.CreateAudit(newAudit("release", release.ID.String(), "task_failed", release.TraceID, update.GetErrorMessage()))
 	default:
 		return nil
 	}
+}
+
+func (s *Service) RecoverAgentTasks(agentID string, runningTaskIDs []string) error {
+	tasks, err := s.repo.ListRecoverableTasksByAgent(agentID)
+	if err != nil {
+		return err
+	}
+	if len(tasks) == 0 {
+		return nil
+	}
+	running := make(map[string]struct{}, len(runningTaskIDs))
+	for _, taskID := range runningTaskIDs {
+		running[taskID] = struct{}{}
+	}
+	now := time.Now()
+	for i := range tasks {
+		task := tasks[i]
+		if _, ok := running[task.ID.String()]; ok {
+			if task.Status != model.TaskStatusRunning {
+				task.Status = model.TaskStatusRunning
+				if task.StartedAt == nil {
+					task.StartedAt = &now
+				}
+				if err := s.repo.UpdateTask(&task); err != nil {
+					return err
+				}
+				if err := s.repo.CreateTaskAttempt(&model.TaskAttempt{
+					ID:        uuid.New(),
+					TaskID:    task.ID,
+					AgentID:   agentID,
+					Status:    model.TaskStatusRunning,
+					Message:   "recovered_running",
+					StartedAt: &now,
+				}); err != nil {
+					return err
+				}
+			}
+			continue
+		}
+		replayed, err := s.dispatcher.ReplayTask(agentID, &task)
+		if err != nil {
+			return err
+		}
+		if !replayed {
+			continue
+		}
+		task.Status = model.TaskStatusDispatched
+		task.DispatchedAt = &now
+		if err := s.repo.UpdateTask(&task); err != nil {
+			return err
+		}
+		if err := s.repo.CreateTaskAttempt(&model.TaskAttempt{
+			ID:        uuid.New(),
+			TaskID:    task.ID,
+			AgentID:   agentID,
+			Status:    model.TaskStatusDispatched,
+			Message:   "replayed_after_reconnect",
+			StartedAt: &now,
+		}); err != nil {
+			return err
+		}
+		release, err := s.repo.GetRelease(task.ReleaseID)
+		if err != nil {
+			return err
+		}
+		if release != nil {
+			if err := s.repo.CreateAudit(newAudit("release", release.ID.String(), "task_replayed", release.TraceID, task.ID.String())); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+func (s *Service) FailStaleTasks(before time.Time) error {
+	tasks, err := s.repo.ListStaleTasks(before)
+	if err != nil {
+		return err
+	}
+	if len(tasks) == 0 {
+		return nil
+	}
+	now := time.Now()
+	for i := range tasks {
+		task := tasks[i]
+		release, err := s.repo.GetRelease(task.ReleaseID)
+		if err != nil {
+			return err
+		}
+		if release == nil {
+			continue
+		}
+		task.Status = model.TaskStatusTimedOut
+		task.CompletedAt = &now
+		task.LastError = "task timed out"
+		if err := s.repo.UpdateTask(&task); err != nil {
+			return err
+		}
+		release.Status = model.ReleaseStatusFailed
+		release.CompletedAt = &now
+		if err := s.repo.UpdateRelease(release); err != nil {
+			return err
+		}
+		if err := s.repo.CreateTaskAttempt(&model.TaskAttempt{
+			ID:          uuid.New(),
+			TaskID:      task.ID,
+			AgentID:     task.AgentID,
+			Status:      model.TaskStatusTimedOut,
+			Message:     "task timed out",
+			CompletedAt: &now,
+		}); err != nil {
+			return err
+		}
+		if err := s.repo.CreateAudit(newAudit("release", release.ID.String(), "task_timed_out", release.TraceID, task.ID.String())); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (s *Service) RecordAgentOfflineTimeout(agentID string) error {
+	return s.repo.CreateAudit(newAudit("agent", agentID, "agent_offline_timeout", "", "agent offline due to heartbeat timeout"))
 }
 
 func (s *Service) GetRuntimeInstances(serviceID uuid.UUID) ([]model.RuntimeInstance, error) {
@@ -303,6 +434,21 @@ func (s *Service) dispatch(task *model.Task) error {
 		return err
 	}
 	return s.dispatcher.DispatchTask(task.AgentID, task)
+}
+
+func (s *Service) recordRunningAudit(release *model.Release, task *model.Task, update *grpcapi.TaskUpdate) error {
+	if release == nil {
+		return nil
+	}
+	step := update.GetStep()
+	switch {
+	case strings.HasPrefix(step, "cleanup_pruned"):
+		return s.repo.CreateAudit(newAudit("release", release.ID.String(), "cleanup_pruned", release.TraceID, step))
+	case step == "cleanup_failed":
+		return s.repo.CreateAudit(newAudit("release", release.ID.String(), "cleanup_failed", release.TraceID, coalesceNonEmpty(update.GetErrorMessage(), step)))
+	default:
+		return nil
+	}
 }
 
 func (s *Service) applyTaskSuccess(release *model.Release, task *model.Task, update *grpcapi.TaskUpdate, now time.Time) error {
@@ -528,6 +674,15 @@ func newAudit(aggregateType string, aggregateID string, eventType string, traceI
 		Message:       message,
 		Metadata:      commondb.NewJSONB(map[string]string{"message": message}),
 	}
+}
+
+func coalesceNonEmpty(values ...string) string {
+	for _, value := range values {
+		if strings.TrimSpace(value) != "" {
+			return value
+		}
+	}
+	return ""
 }
 
 func nextSlot(current model.Slot) model.Slot {

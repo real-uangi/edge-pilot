@@ -3,6 +3,7 @@ package infra
 import (
 	"edge-pilot/internal/agent/domain"
 	"edge-pilot/internal/shared/model"
+	"time"
 
 	"github.com/real-uangi/allingo/common/db"
 	"gorm.io/gorm"
@@ -46,4 +47,26 @@ func (r *repository) MarkOffline(id string, lastError string) error {
 		"online":     &offline,
 		"last_error": lastError,
 	}).Error
+}
+
+func (r *repository) MarkOfflineStale(before time.Time) ([]string, error) {
+	var ids []string
+	if err := r.conn.Model(&model.AgentNode{}).
+		Where("online = ? AND last_heartbeat_at IS NOT NULL AND last_heartbeat_at < ?", true, before).
+		Pluck("id", &ids).Error; err != nil {
+		return nil, err
+	}
+	if len(ids) == 0 {
+		return nil, nil
+	}
+	offline := false
+	if err := r.conn.Model(&model.AgentNode{}).
+		Where("id IN ?", ids).
+		Updates(map[string]any{
+			"online":     &offline,
+			"last_error": "heartbeat timeout",
+		}).Error; err != nil {
+		return nil, err
+	}
+	return ids, nil
 }

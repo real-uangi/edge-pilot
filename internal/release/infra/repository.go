@@ -3,6 +3,7 @@ package infra
 import (
 	"edge-pilot/internal/release/domain"
 	"edge-pilot/internal/shared/model"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/real-uangi/allingo/common/db"
@@ -87,6 +88,38 @@ func (r *repository) GetTask(id uuid.UUID) (*model.Task, error) {
 func (r *repository) ListTasksByRelease(releaseID uuid.UUID) ([]model.Task, error) {
 	var tasks []model.Task
 	if err := r.conn.Where("release_id = ?", releaseID).Order("created_at asc").Find(&tasks).Error; err != nil {
+		return nil, err
+	}
+	return tasks, nil
+}
+
+func (r *repository) ListRecoverableTasksByAgent(agentID string) ([]model.Task, error) {
+	var tasks []model.Task
+	if err := r.conn.Model(&model.Task{}).
+		Joins("JOIN ep_release ON ep_release.current_task_id = ep_task.id").
+		Where("ep_task.agent_id = ? AND ep_task.status IN ?", agentID, []model.TaskStatus{
+			model.TaskStatusPending,
+			model.TaskStatusDispatched,
+			model.TaskStatusRunning,
+		}).
+		Order("ep_task.created_at asc").
+		Find(&tasks).Error; err != nil {
+		return nil, err
+	}
+	return tasks, nil
+}
+
+func (r *repository) ListStaleTasks(before time.Time) ([]model.Task, error) {
+	var tasks []model.Task
+	if err := r.conn.Model(&model.Task{}).
+		Joins("JOIN ep_release ON ep_release.current_task_id = ep_task.id").
+		Where("ep_task.status IN ? AND ep_task.updated_at < ?", []model.TaskStatus{
+			model.TaskStatusPending,
+			model.TaskStatusDispatched,
+			model.TaskStatusRunning,
+		}, before).
+		Order("ep_task.updated_at asc").
+		Find(&tasks).Error; err != nil {
 		return nil, err
 	}
 	return tasks, nil

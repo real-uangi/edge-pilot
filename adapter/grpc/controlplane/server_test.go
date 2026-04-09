@@ -7,6 +7,7 @@ import (
 	"edge-pilot/internal/shared/grpcapi"
 	"io"
 	"testing"
+	"time"
 
 	"edge-pilot/internal/shared/model"
 
@@ -70,3 +71,6 @@ func (r *fakeAgentRepo) Save(*model.AgentNode) error          { return nil }
 func (r *fakeAgentRepo) Get(string) (*model.AgentNode, error) { return nil, nil }
 func (r *fakeAgentRepo) List() ([]model.AgentNode, error)     { return nil, nil }
 func (r *fakeAgentRepo) MarkOffline(string, string) error     { return nil }
+func (r *fakeAgentRepo) MarkOfflineStale(time.Time) ([]string, error) {
+	return nil, nil
+}

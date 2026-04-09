@@ -175,6 +175,137 @@ func TestHandleTaskUpdateMovesReleaseToReadyToSwitch(t *testing.T) {
 	}
 }
 
+func TestRecoverAgentTasksReplaysOnlyMissingTasks(t *testing.T) {
+	serviceRepo := &fakeServiceRepo{}
+	agentRepo := &fakeAgentRepo{nodes: map[string]*model.AgentNode{}}
+	releaseRepo := newFakeReleaseRepo()
+	dispatcher := &fakeDispatcher{}
+
+	serviceCatalog := servicecatalogapp.NewService(serviceRepo)
+	registry := agentapp.NewRegistryService(&config.AgentAuthConfig{SharedToken: "token"}, agentRepo)
+	releaseService := NewService(releaseRepo, dispatcher, serviceCatalog, registry)
+
+	releaseID := uuid.New()
+	serviceID := uuid.New()
+	taskID := uuid.New()
+	switchConfirmed := false
+	releaseRepo.releases[releaseID] = &model.Release{
+		ID:              releaseID,
+		ServiceID:       serviceID,
+		AgentID:         "agent-a",
+		TraceID:         "trace-1",
+		Status:          model.ReleaseStatusDispatching,
+		CurrentTaskID:   &taskID,
+		SwitchConfirmed: &switchConfirmed,
+	}
+	releaseRepo.tasks[taskID] = &model.Task{
+		ID:        taskID,
+		ReleaseID: releaseID,
+		ServiceID: serviceID,
+		AgentID:   "agent-a",
+		Type:      model.TaskTypeDeployGreen,
+		Status:    model.TaskStatusDispatched,
+	}
+
+	if err := releaseService.RecoverAgentTasks("agent-a", nil); err != nil {
+		t.Fatalf("RecoverAgentTasks() error = %v", err)
+	}
+	if len(dispatcher.replayedTasks) != 1 {
+		t.Fatalf("expected one replayed task, got %d", len(dispatcher.replayedTasks))
+	}
+	if releaseRepo.tasks[taskID].Status != model.TaskStatusDispatched {
+		t.Fatalf("expected dispatched status after replay, got %v", releaseRepo.tasks[taskID].Status)
+	}
+}
+
+func TestRecoverAgentTasksMarksRunningWhenHeartbeatReportsTask(t *testing.T) {
+	serviceRepo := &fakeServiceRepo{}
+	agentRepo := &fakeAgentRepo{nodes: map[string]*model.AgentNode{}}
+	releaseRepo := newFakeReleaseRepo()
+	dispatcher := &fakeDispatcher{}
+
+	serviceCatalog := servicecatalogapp.NewService(serviceRepo)
+	registry := agentapp.NewRegistryService(&config.AgentAuthConfig{SharedToken: "token"}, agentRepo)
+	releaseService := NewService(releaseRepo, dispatcher, serviceCatalog, registry)
+
+	releaseID := uuid.New()
+	serviceID := uuid.New()
+	taskID := uuid.New()
+	switchConfirmed := false
+	releaseRepo.releases[releaseID] = &model.Release{
+		ID:              releaseID,
+		ServiceID:       serviceID,
+		AgentID:         "agent-a",
+		TraceID:         "trace-2",
+		Status:          model.ReleaseStatusDispatching,
+		CurrentTaskID:   &taskID,
+		SwitchConfirmed: &switchConfirmed,
+	}
+	releaseRepo.tasks[taskID] = &model.Task{
+		ID:        taskID,
+		ReleaseID: releaseID,
+		ServiceID: serviceID,
+		AgentID:   "agent-a",
+		Type:      model.TaskTypeDeployGreen,
+		Status:    model.TaskStatusDispatched,
+	}
+
+	if err := releaseService.RecoverAgentTasks("agent-a", []string{taskID.String()}); err != nil {
+		t.Fatalf("RecoverAgentTasks() error = %v", err)
+	}
+	if len(dispatcher.replayedTasks) != 0 {
+		t.Fatalf("expected no replay when task is reported running")
+	}
+	if releaseRepo.tasks[taskID].Status != model.TaskStatusRunning {
+		t.Fatalf("expected running status, got %v", releaseRepo.tasks[taskID].Status)
+	}
+}
+
+func TestFailStaleTasksMarksReleaseFailed(t *testing.T) {
+	serviceRepo := &fakeServiceRepo{}
+	agentRepo := &fakeAgentRepo{nodes: map[string]*model.AgentNode{}}
+	releaseRepo := newFakeReleaseRepo()
+	dispatcher := &fakeDispatcher{}
+
+	serviceCatalog := servicecatalogapp.NewService(serviceRepo)
+	registry := agentapp.NewRegistryService(&config.AgentAuthConfig{SharedToken: "token"}, agentRepo)
+	releaseService := NewService(releaseRepo, dispatcher, serviceCatalog, registry)
+
+	releaseID := uuid.New()
+	serviceID := uuid.New()
+	taskID := uuid.New()
+	switchConfirmed := false
+	releaseRepo.releases[releaseID] = &model.Release{
+		ID:              releaseID,
+		ServiceID:       serviceID,
+		AgentID:         "agent-a",
+		TraceID:         "trace-3",
+		Status:          model.ReleaseStatusDispatching,
+		CurrentTaskID:   &taskID,
+		SwitchConfirmed: &switchConfirmed,
+	}
+	staleAt := time.Now().Add(-11 * time.Minute)
+	releaseRepo.tasks[taskID] = &model.Task{
+		ID:        taskID,
+		ReleaseID: releaseID,
+		ServiceID: serviceID,
+		AgentID:   "agent-a",
+		Type:      model.TaskTypeDeployGreen,
+		Status:    model.TaskStatusRunning,
+	}
+	releaseRepo.taskUpdatedAt[taskID] = staleAt
+
+	if err := releaseService.FailStaleTasks(time.Now().Add(-10 * time.Minute)); err != nil {
+		t.Fatalf("FailStaleTasks() error = %v", err)
+	}
+	if releaseRepo.tasks[taskID].Status != model.TaskStatusTimedOut {
+		t.Fatalf("expected timed out task, got %v", releaseRepo.tasks[taskID].Status)
+	}
+	if releaseRepo.releases[releaseID].Status != model.ReleaseStatusFailed {
+		t.Fatalf("expected failed release, got %v", releaseRepo.releases[releaseID].Status)
+	}
+}
+
 type fakeServiceRepo struct {
 	byID  map[uuid.UUID]*model.Service
 	byKey map[string]*model.Service
@@ -274,11 +405,28 @@ func (r *fakeAgentRepo) MarkOffline(id string, reason string) error {
 	return nil
 }
 
+func (r *fakeAgentRepo) MarkOfflineStale(before time.Time) ([]string, error) {
+	var ids []string
+	for id, node := range r.nodes {
+		if node == nil || node.Online == nil || !*node.Online || node.LastHeartbeatAt == nil {
+			continue
+		}
+		if node.LastHeartbeatAt.Before(before) {
+			offline := false
+			node.Online = &offline
+			node.LastError = "heartbeat timeout"
+			ids = append(ids, id)
+		}
+	}
+	return ids, nil
+}
+
 var _ agentdomain.Repository = (*fakeAgentRepo)(nil)
 
 type fakeReleaseRepo struct {
 	releases         map[uuid.UUID]*model.Release
 	tasks            map[uuid.UUID]*model.Task
+	taskUpdatedAt    map[uuid.UUID]time.Time
 	taskAttempts     []*model.TaskAttempt
 	audits           []*model.AuditLog
 	runtimeByService map[uuid.UUID]map[model.Slot]*model.RuntimeInstance
@@ -288,6 +436,7 @@ func newFakeReleaseRepo() *fakeReleaseRepo {
 	return &fakeReleaseRepo{
 		releases:         make(map[uuid.UUID]*model.Release),
 		tasks:            make(map[uuid.UUID]*model.Task),
+		taskUpdatedAt:    make(map[uuid.UUID]time.Time),
 		runtimeByService: make(map[uuid.UUID]map[model.Slot]*model.RuntimeInstance),
 	}
 }
@@ -332,12 +481,14 @@ func (r *fakeReleaseRepo) HasActiveRelease(serviceID uuid.UUID) (bool, error) {
 func (r *fakeReleaseRepo) CreateTask(task *model.Task) error {
 	copyTask := *task
 	r.tasks[task.ID] = &copyTask
+	r.taskUpdatedAt[task.ID] = time.Now()
 	return nil
 }
 
 func (r *fakeReleaseRepo) UpdateTask(task *model.Task) error {
 	copyTask := *task
 	r.tasks[task.ID] = &copyTask
+	r.taskUpdatedAt[task.ID] = time.Now()
 	return nil
 }
 
@@ -354,6 +505,40 @@ func (r *fakeReleaseRepo) ListTasksByRelease(releaseID uuid.UUID) ([]model.Task,
 	for _, item := range r.tasks {
 		if item.ReleaseID == releaseID {
 			out = append(out, *item)
+		}
+	}
+	return out, nil
+}
+
+func (r *fakeReleaseRepo) ListRecoverableTasksByAgent(agentID string) ([]model.Task, error) {
+	out := make([]model.Task, 0)
+	for _, task := range r.tasks {
+		if task.AgentID != agentID {
+			continue
+		}
+		release := r.releases[task.ReleaseID]
+		if release == nil || release.CurrentTaskID == nil || *release.CurrentTaskID != task.ID {
+			continue
+		}
+		if task.Status == model.TaskStatusPending || task.Status == model.TaskStatusDispatched || task.Status == model.TaskStatusRunning {
+			out = append(out, *task)
+		}
+	}
+	return out, nil
+}
+
+func (r *fakeReleaseRepo) ListStaleTasks(before time.Time) ([]model.Task, error) {
+	out := make([]model.Task, 0)
+	for _, task := range r.tasks {
+		release := r.releases[task.ReleaseID]
+		if release == nil || release.CurrentTaskID == nil || *release.CurrentTaskID != task.ID {
+			continue
+		}
+		if !(task.Status == model.TaskStatusPending || task.Status == model.TaskStatusDispatched || task.Status == model.TaskStatusRunning) {
+			continue
+		}
+		if updatedAt, ok := r.taskUpdatedAt[task.ID]; ok && updatedAt.Before(before) {
+			out = append(out, *task)
 		}
 	}
 	return out, nil
@@ -399,13 +584,20 @@ func (r *fakeReleaseRepo) CreateAudit(log *model.AuditLog) error {
 }
 
 type fakeDispatcher struct {
-	tasks []*model.Task
+	tasks         []*model.Task
+	replayedTasks []*model.Task
 }
 
 func (d *fakeDispatcher) DispatchTask(agentID string, task *model.Task) error {
 	copyTask := *task
 	d.tasks = append(d.tasks, &copyTask)
 	return nil
+}
+
+func (d *fakeDispatcher) ReplayTask(agentID string, task *model.Task) (bool, error) {
+	copyTask := *task
+	d.replayedTasks = append(d.replayedTasks, &copyTask)
+	return true, nil
 }
 
 func mustJSONB(payload model.TaskPayload) *commondb.JSONB[model.TaskPayload] {

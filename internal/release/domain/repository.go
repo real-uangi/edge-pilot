@@ -2,6 +2,7 @@ package domain
 
 import (
 	"edge-pilot/internal/shared/model"
+	"time"
 
 	"github.com/google/uuid"
 )
@@ -16,6 +17,8 @@ type Repository interface {
 	UpdateTask(*model.Task) error
 	GetTask(uuid.UUID) (*model.Task, error)
 	ListTasksByRelease(uuid.UUID) ([]model.Task, error)
+	ListRecoverableTasksByAgent(string) ([]model.Task, error)
+	ListStaleTasks(time.Time) ([]model.Task, error)
 	CreateTaskAttempt(*model.TaskAttempt) error
 	UpsertRuntimeInstance(*model.RuntimeInstance) error
 	GetRuntimeInstanceByServiceAndSlot(uuid.UUID, model.Slot) (*model.RuntimeInstance, error)
@@ -25,4 +28,5 @@ type Repository interface {
 
 type TaskDispatcher interface {
 	DispatchTask(agentID string, task *model.Task) error
+	ReplayTask(agentID string, task *model.Task) (bool, error)
 }
