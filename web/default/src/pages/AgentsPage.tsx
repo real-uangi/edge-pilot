@@ -35,7 +35,6 @@ export function AgentsPage() {
       <section className={styles.sectionHeader}>
         <div>
           <h1 className={styles.sectionTitle}>节点</h1>
-          <p className={styles.sectionCopy}>管理注册节点、在线态和一次性 token 派发。</p>
         </div>
         <div className={styles.buttonRow}>
           <button className={styles.secondaryButton} onClick={() => agentsQuery.refetch()} type="button">

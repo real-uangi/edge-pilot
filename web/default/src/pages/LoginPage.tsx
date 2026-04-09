@@ -25,7 +25,6 @@ export function LoginPage() {
         <div className={styles.copy}>
           <span className={styles.eyebrow}>Edge Pilot</span>
           <h1 className={styles.title}>登录管理面板</h1>
-          <p className={styles.subtitle}>服务编排、节点控制、发布操作和运行态视图都从这里进入。</p>
         </div>
         <form
           className={styles.form}

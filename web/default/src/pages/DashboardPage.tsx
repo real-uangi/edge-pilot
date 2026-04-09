@@ -29,9 +29,6 @@ export function DashboardPage() {
       <section className={styles.hero}>
         <span className={styles.eyebrow}>总览</span>
         <h1 className={styles.title}>把单机服务运行成一套可控的发布面板</h1>
-        <p className={styles.subtitle}>
-          这里集中看服务配置、节点存活、发布流转和运行态实例，信息更紧凑，动作更直接。
-        </p>
       </section>
 
       <section className={styles.cardGrid}>
@@ -43,17 +40,17 @@ export function DashboardPage() {
         <article className={styles.statCard}>
           <span className={styles.metricLabel}>在线节点</span>
           <span className={styles.metricValue}>{onlineAgents}</span>
-          <span className={styles.metricMeta}>注册总数 {agents.length}</span>
+          <span className={styles.metricMeta}>总数 {agents.length}</span>
         </article>
         <article className={styles.statCard}>
           <span className={styles.metricLabel}>启用服务</span>
           <span className={styles.metricValue}>{enabledServices}</span>
-          <span className={styles.metricMeta}>服务总数 {services.length}</span>
+          <span className={styles.metricMeta}>总数 {services.length}</span>
         </article>
         <article className={styles.statCard}>
           <span className={styles.metricLabel}>活动发布</span>
           <span className={styles.metricValue}>{activeReleases}</span>
-          <span className={styles.metricMeta}>最近发布中的活动单</span>
+          <span className={styles.metricMeta}>当前活动中的发布单</span>
         </article>
       </section>
 
@@ -61,7 +58,6 @@ export function DashboardPage() {
         <div className={styles.sectionHeader}>
           <div>
             <h2 className={styles.sectionTitle}>服务</h2>
-            <p className={styles.sectionCopy}>优先看路由、归属节点和启用状态。</p>
           </div>
           <Link className={styles.primaryButton} to="/services">
             查看服务
@@ -102,7 +98,6 @@ export function DashboardPage() {
           <div className={styles.sectionHeader}>
             <div>
               <h2 className={styles.sectionTitle}>节点</h2>
-              <p className={styles.sectionCopy}>轮询在线态和最近心跳。</p>
             </div>
             <Link className={styles.secondaryButton} to="/agents">
               查看节点
@@ -145,7 +140,6 @@ export function DashboardPage() {
           <div className={styles.sectionHeader}>
             <div>
               <h2 className={styles.sectionTitle}>最近发布</h2>
-              <p className={styles.sectionCopy}>排队、部署、切流和回滚都在这里看。</p>
             </div>
             <Link className={styles.secondaryButton} to="/releases">
               查看发布

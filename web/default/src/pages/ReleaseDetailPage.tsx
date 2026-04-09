@@ -156,7 +156,6 @@ export function ReleaseDetailPage() {
         <div className={styles.sectionHeader}>
           <div>
             <h2 className={styles.sectionTitle}>任务时间线</h2>
-            <p className={styles.sectionCopy}>轮询任务状态直到发布结束。</p>
           </div>
         </div>
         <div className={styles.tableWrap}>

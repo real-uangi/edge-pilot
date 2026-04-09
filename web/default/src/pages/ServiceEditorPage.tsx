@@ -70,7 +70,6 @@ export function ServiceEditorPage() {
       <section className={styles.sectionHeader}>
         <div>
           <h1 className={styles.sectionTitle}>{isEdit ? "服务详情" : "新建服务"}</h1>
-          <p className={styles.sectionCopy}>录入发布必需项，并把复杂结构保持在受控文本块里。</p>
         </div>
         {isEdit && serviceQuery.data ? (
           <StatusPill
@@ -194,7 +193,6 @@ export function ServiceEditorPage() {
             <div className={styles.sectionHeader}>
               <div>
                 <h2 className={styles.sectionTitle}>运行摘要</h2>
-                <p className={styles.sectionCopy}>已落库的运行实例与流量状态。</p>
               </div>
             </div>
             <div className={styles.keyValueGrid}>
@@ -217,7 +215,6 @@ export function ServiceEditorPage() {
             <div className={styles.sectionHeader}>
               <div>
                 <h2 className={styles.sectionTitle}>运行观测</h2>
-                <p className={styles.sectionCopy}>这里轮询运行实例和 backend snapshot。</p>
               </div>
             </div>
             <div className={styles.tableWrap}>

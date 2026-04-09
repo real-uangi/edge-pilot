@@ -16,7 +16,6 @@ export function ReleasesPage() {
       <section className={styles.sectionHeader}>
         <div>
           <h1 className={styles.sectionTitle}>发布</h1>
-          <p className={styles.sectionCopy}>查看排队、部署和切流状态，深入操作放在详情页。</p>
         </div>
         <button className={styles.secondaryButton} onClick={() => releasesQuery.refetch()} type="button">
           刷新

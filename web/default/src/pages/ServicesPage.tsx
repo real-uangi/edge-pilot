@@ -16,7 +16,6 @@ export function ServicesPage() {
       <section className={styles.sectionHeader}>
         <div>
           <h1 className={styles.sectionTitle}>服务</h1>
-          <p className={styles.sectionCopy}>管理路由、探活、镜像仓库和容器暴露端口。</p>
         </div>
         <div className={styles.buttonRow}>
           <button className={styles.secondaryButton} onClick={() => servicesQuery.refetch()} type="button">
