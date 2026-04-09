@@ -1,0 +1,593 @@
+package application
+
+import (
+	"edge-pilot/internal/agent/application"
+	releasedomain "edge-pilot/internal/release/domain"
+	servicecatalogapp "edge-pilot/internal/servicecatalog/application"
+	"edge-pilot/internal/shared/dto"
+	"edge-pilot/internal/shared/grpcapi"
+	"edge-pilot/internal/shared/model"
+	"time"
+
+	"github.com/google/uuid"
+	"github.com/real-uangi/allingo/common/business"
+	commondb "github.com/real-uangi/allingo/common/db"
+)
+
+type Service struct {
+	repo          releasedomain.Repository
+	dispatcher    releasedomain.TaskDispatcher
+	services      *servicecatalogapp.Service
+	agentRegistry *application.RegistryService
+}
+
+func NewService(
+	repo releasedomain.Repository,
+	dispatcher releasedomain.TaskDispatcher,
+	services *servicecatalogapp.Service,
+	agentRegistry *application.RegistryService,
+) *Service {
+	return &Service{
+		repo:          repo,
+		dispatcher:    dispatcher,
+		services:      services,
+		agentRegistry: agentRegistry,
+	}
+}
+
+func (s *Service) CreateFromCI(req dto.CreateReleaseFromCIRequest) (*dto.ReleaseOutput, error) {
+	spec, err := s.services.GetSpecByKey(req.ServiceKey)
+	if err != nil {
+		return nil, err
+	}
+	if !spec.Enabled {
+		return nil, business.NewBadRequest("service 已禁用")
+	}
+	online, err := s.agentRegistry.IsOnline(spec.AgentID)
+	if err != nil {
+		return nil, err
+	}
+	if !online {
+		return nil, business.NewErrorWithCode("agent not online", 409)
+	}
+	active, err := s.repo.HasActiveRelease(spec.ID)
+	if err != nil {
+		return nil, err
+	}
+	if active {
+		return nil, business.NewErrorWithCode("service has active release", 409)
+	}
+
+	release := &model.Release{
+		ID:               uuid.New(),
+		ServiceID:        spec.ID,
+		AgentID:          spec.AgentID,
+		ImageTag:         req.ImageTag,
+		CommitSHA:        req.CommitSHA,
+		TriggeredBy:      req.TriggeredBy,
+		TraceID:          req.TraceID,
+		Status:           model.ReleaseStatusDispatching,
+		TargetSlot:       nextSlot(spec.CurrentLiveSlot),
+		PreviousLiveSlot: spec.CurrentLiveSlot,
+		SwitchConfirmed:  boolPointer(false),
+	}
+	task := s.newDeployTask(release, spec, req)
+	release.CurrentTaskID = &task.ID
+
+	if err := s.repo.CreateRelease(release); err != nil {
+		return nil, err
+	}
+	if err := s.repo.CreateTask(task); err != nil {
+		return nil, err
+	}
+	if err := s.repo.CreateAudit(newAudit("release", release.ID.String(), "created", req.TraceID, "release created")); err != nil {
+		return nil, err
+	}
+	if err := s.dispatch(task); err != nil {
+		return nil, err
+	}
+	output := toReleaseOutput(release)
+	return &output, nil
+}
+
+func (s *Service) ConfirmSwitch(id uuid.UUID, operator string) (*dto.ReleaseOutput, error) {
+	release, err := s.repo.GetRelease(id)
+	if err != nil {
+		return nil, err
+	}
+	if release == nil {
+		return nil, business.ErrNotFound
+	}
+	if release.Status != model.ReleaseStatusReadyToSwitch {
+		return nil, business.NewErrorWithCode("release is not ready to switch", 409)
+	}
+	spec, err := s.services.GetSpecByID(release.ServiceID)
+	if err != nil {
+		return nil, err
+	}
+	task := s.newSwitchTask(release, spec, model.TaskTypeSwitchTraffic)
+	if err := s.repo.CreateTask(task); err != nil {
+		return nil, err
+	}
+	release.CurrentTaskID = &task.ID
+	release.SwitchConfirmed = boolPointer(true)
+	if err := s.repo.UpdateRelease(release); err != nil {
+		return nil, err
+	}
+	if err := s.repo.CreateAudit(newAudit("release", release.ID.String(), "switch_confirmed", release.TraceID, operator)); err != nil {
+		return nil, err
+	}
+	if err := s.dispatch(task); err != nil {
+		return nil, err
+	}
+	output := toReleaseOutput(release)
+	return &output, nil
+}
+
+func (s *Service) Rollback(id uuid.UUID, operator string) (*dto.ReleaseOutput, error) {
+	release, err := s.repo.GetRelease(id)
+	if err != nil {
+		return nil, err
+	}
+	if release == nil {
+		return nil, business.ErrNotFound
+	}
+	if release.PreviousLiveSlot == 0 {
+		return nil, business.NewErrorWithCode("release has no rollback target", 409)
+	}
+	spec, err := s.services.GetSpecByID(release.ServiceID)
+	if err != nil {
+		return nil, err
+	}
+	task := s.newRollbackTask(release, spec)
+	if err := s.repo.CreateTask(task); err != nil {
+		return nil, err
+	}
+	release.CurrentTaskID = &task.ID
+	if err := s.repo.UpdateRelease(release); err != nil {
+		return nil, err
+	}
+	if err := s.repo.CreateAudit(newAudit("release", release.ID.String(), "rollback_requested", release.TraceID, operator)); err != nil {
+		return nil, err
+	}
+	if err := s.dispatch(task); err != nil {
+		return nil, err
+	}
+	output := toReleaseOutput(release)
+	return &output, nil
+}
+
+func (s *Service) Get(id uuid.UUID) (*dto.ReleaseOutput, error) {
+	release, err := s.repo.GetRelease(id)
+	if err != nil {
+		return nil, err
+	}
+	if release == nil {
+		return nil, business.ErrNotFound
+	}
+	output := toReleaseOutput(release)
+	return &output, nil
+}
+
+func (s *Service) List() ([]dto.ReleaseOutput, error) {
+	releases, err := s.repo.ListReleases(50)
+	if err != nil {
+		return nil, err
+	}
+	output := make([]dto.ReleaseOutput, 0, len(releases))
+	for i := range releases {
+		output = append(output, toReleaseOutput(&releases[i]))
+	}
+	return output, nil
+}
+
+func (s *Service) ListTaskSnapshots(releaseID uuid.UUID) ([]dto.TaskSnapshot, error) {
+	tasks, err := s.repo.ListTasksByRelease(releaseID)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]dto.TaskSnapshot, 0, len(tasks))
+	for i := range tasks {
+		out = append(out, dto.TaskSnapshot{
+			ID:           tasks[i].ID,
+			Type:         tasks[i].Type,
+			Status:       tasks[i].Status,
+			LastError:    tasks[i].LastError,
+			DispatchedAt: tasks[i].DispatchedAt,
+			StartedAt:    tasks[i].StartedAt,
+			CompletedAt:  tasks[i].CompletedAt,
+		})
+	}
+	return out, nil
+}
+
+func (s *Service) HandleTaskUpdate(agentID string, update *grpcapi.TaskUpdate) error {
+	taskID, err := uuid.Parse(update.TaskID)
+	if err != nil {
+		return err
+	}
+	task, err := s.repo.GetTask(taskID)
+	if err != nil {
+		return err
+	}
+	if task == nil {
+		return business.ErrNotFound
+	}
+	release, err := s.repo.GetRelease(task.ReleaseID)
+	if err != nil {
+		return err
+	}
+	if release == nil {
+		return business.ErrNotFound
+	}
+	now := time.Now()
+	switch update.Status {
+	case "running":
+		task.Status = model.TaskStatusRunning
+		task.StartedAt = &now
+		if err := s.repo.UpdateTask(task); err != nil {
+			return err
+		}
+		return s.repo.CreateTaskAttempt(&model.TaskAttempt{
+			ID:        uuid.New(),
+			TaskID:    task.ID,
+			AgentID:   agentID,
+			Status:    model.TaskStatusRunning,
+			Message:   update.Step,
+			StartedAt: &now,
+		})
+	case "succeeded":
+		task.Status = model.TaskStatusSucceeded
+		task.CompletedAt = &now
+		if err := s.repo.UpdateTask(task); err != nil {
+			return err
+		}
+		if err := s.repo.CreateTaskAttempt(&model.TaskAttempt{
+			ID:          uuid.New(),
+			TaskID:      task.ID,
+			AgentID:     agentID,
+			Status:      model.TaskStatusSucceeded,
+			Message:     update.Step,
+			CompletedAt: &now,
+		}); err != nil {
+			return err
+		}
+		return s.applyTaskSuccess(release, task, update, now)
+	case "failed":
+		task.Status = model.TaskStatusFailed
+		task.CompletedAt = &now
+		task.LastError = update.ErrorMessage
+		release.Status = model.ReleaseStatusFailed
+		release.CompletedAt = &now
+		if err := s.repo.UpdateTask(task); err != nil {
+			return err
+		}
+		if err := s.repo.UpdateRelease(release); err != nil {
+			return err
+		}
+		if err := s.repo.CreateTaskAttempt(&model.TaskAttempt{
+			ID:          uuid.New(),
+			TaskID:      task.ID,
+			AgentID:     agentID,
+			Status:      model.TaskStatusFailed,
+			Message:     update.ErrorMessage,
+			CompletedAt: &now,
+		}); err != nil {
+			return err
+		}
+		return s.repo.CreateAudit(newAudit("release", release.ID.String(), "task_failed", release.TraceID, update.ErrorMessage))
+	default:
+		return nil
+	}
+}
+
+func (s *Service) GetRuntimeInstances(serviceID uuid.UUID) ([]model.RuntimeInstance, error) {
+	return s.repo.ListRuntimeInstancesByService(serviceID)
+}
+
+func (s *Service) dispatch(task *model.Task) error {
+	now := time.Now()
+	task.Status = model.TaskStatusDispatched
+	task.DispatchedAt = &now
+	if err := s.repo.UpdateTask(task); err != nil {
+		return err
+	}
+	if err := s.repo.CreateTaskAttempt(&model.TaskAttempt{
+		ID:        uuid.New(),
+		TaskID:    task.ID,
+		AgentID:   task.AgentID,
+		Status:    model.TaskStatusDispatched,
+		Message:   "dispatched",
+		StartedAt: &now,
+	}); err != nil {
+		return err
+	}
+	return s.dispatcher.DispatchTask(task.AgentID, task)
+}
+
+func (s *Service) applyTaskSuccess(release *model.Release, task *model.Task, update *grpcapi.TaskUpdate, now time.Time) error {
+	payload := getJSON(task.Payload)
+	switch task.Type {
+	case model.TaskTypeDeployGreen:
+		healthy := true
+		accepting := false
+		active := true
+		instance := &model.RuntimeInstance{
+			ID:               uuid.New(),
+			ServiceID:        task.ServiceID,
+			ReleaseID:        task.ReleaseID,
+			Slot:             model.Slot(update.Slot),
+			ContainerID:      update.ContainerID,
+			ImageTag:         release.ImageTag,
+			ListenAddress:    update.ListenAddress,
+			HostPort:         payload.HostPort,
+			ServerName:       payload.ServerName,
+			Healthy:          &healthy,
+			AcceptingTraffic: &accepting,
+			Active:           &active,
+		}
+		if err := s.repo.UpsertRuntimeInstance(instance); err != nil {
+			return err
+		}
+		release.Status = model.ReleaseStatusReadyToSwitch
+		if err := s.repo.UpdateRelease(release); err != nil {
+			return err
+		}
+		return s.repo.CreateAudit(newAudit("release", release.ID.String(), "ready_to_switch", release.TraceID, update.ListenAddress))
+	case model.TaskTypeSwitchTraffic:
+		release.Status = model.ReleaseStatusCompleted
+		release.CompletedAt = &now
+		if err := s.services.UpdateLiveSlot(task.ServiceID, payload.TargetSlot); err != nil {
+			return err
+		}
+		if err := s.updateTrafficFlags(task.ServiceID, payload.TargetSlot, release.PreviousLiveSlot); err != nil {
+			return err
+		}
+		if err := s.repo.UpdateRelease(release); err != nil {
+			return err
+		}
+		return s.repo.CreateAudit(newAudit("release", release.ID.String(), "traffic_switched", release.TraceID, update.ServerName))
+	case model.TaskTypeRollback:
+		release.Status = model.ReleaseStatusRolledBack
+		release.CompletedAt = &now
+		if err := s.services.UpdateLiveSlot(task.ServiceID, payload.TargetSlot); err != nil {
+			return err
+		}
+		if err := s.updateTrafficFlags(task.ServiceID, payload.TargetSlot, payload.CurrentLiveSlot); err != nil {
+			return err
+		}
+		if err := s.repo.UpdateRelease(release); err != nil {
+			return err
+		}
+		return s.repo.CreateAudit(newAudit("release", release.ID.String(), "rolled_back", release.TraceID, update.ServerName))
+	default:
+		return nil
+	}
+}
+
+func (s *Service) updateTrafficFlags(serviceID uuid.UUID, liveSlot model.Slot, oldSlot model.Slot) error {
+	current, err := s.repo.GetRuntimeInstanceByServiceAndSlot(serviceID, liveSlot)
+	if err != nil {
+		return err
+	}
+	if current != nil {
+		healthy := true
+		accepting := true
+		active := true
+		current.Healthy = &healthy
+		current.AcceptingTraffic = &accepting
+		current.Active = &active
+		if err := s.repo.UpsertRuntimeInstance(current); err != nil {
+			return err
+		}
+	}
+	old, err := s.repo.GetRuntimeInstanceByServiceAndSlot(serviceID, oldSlot)
+	if err != nil {
+		return err
+	}
+	if old != nil {
+		healthy := true
+		accepting := false
+		active := true
+		old.Healthy = &healthy
+		old.AcceptingTraffic = &accepting
+		old.Active = &active
+		if err := s.repo.UpsertRuntimeInstance(old); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (s *Service) newDeployTask(release *model.Release, spec *dto.ServiceDeploymentSpec, req dto.CreateReleaseFromCIRequest) *model.Task {
+	payload := model.TaskPayload{
+		ServiceID:         spec.ID,
+		ServiceKey:        spec.ServiceKey,
+		ImageRepo:         firstNonEmpty(req.ImageRepo, spec.ImageRepo),
+		ImageTag:          req.ImageTag,
+		CommitSHA:         req.CommitSHA,
+		TraceID:           req.TraceID,
+		TargetSlot:        release.TargetSlot,
+		CurrentLiveSlot:   spec.CurrentLiveSlot,
+		ContainerPort:     spec.ContainerPort,
+		HostPort:          hostPortForSlot(spec, release.TargetSlot),
+		HTTPHealthPath:    firstNonEmpty(spec.HTTPHealthPath, "/health"),
+		HTTPExpectedCode:  defaultInt(spec.HTTPExpectedCode, 200),
+		HTTPTimeoutSecond: defaultInt(spec.HTTPTimeoutSecond, 5),
+		BackendName:       spec.HAProxyBackend,
+		ServerName:        serverNameForSlot(spec, release.TargetSlot),
+		PreviousServer:    serverNameForSlot(spec, spec.CurrentLiveSlot),
+		Env:               spec.Env,
+		Command:           spec.Command,
+		Entrypoint:        spec.Entrypoint,
+		Volumes:           toModelVolumeMounts(spec.Volumes),
+	}
+	return &model.Task{
+		ID:        uuid.New(),
+		ReleaseID: release.ID,
+		ServiceID: spec.ID,
+		AgentID:   spec.AgentID,
+		Type:      model.TaskTypeDeployGreen,
+		Status:    model.TaskStatusPending,
+		Payload:   commondb.NewJSONB(payload),
+	}
+}
+
+func (s *Service) newSwitchTask(release *model.Release, spec *dto.ServiceDeploymentSpec, taskType model.TaskType) *model.Task {
+	payload := model.TaskPayload{
+		ServiceID:         spec.ID,
+		ServiceKey:        spec.ServiceKey,
+		ImageRepo:         spec.ImageRepo,
+		ImageTag:          release.ImageTag,
+		CommitSHA:         release.CommitSHA,
+		TraceID:           release.TraceID,
+		TargetSlot:        release.TargetSlot,
+		CurrentLiveSlot:   release.PreviousLiveSlot,
+		ContainerPort:     spec.ContainerPort,
+		HostPort:          hostPortForSlot(spec, release.TargetSlot),
+		HTTPHealthPath:    firstNonEmpty(spec.HTTPHealthPath, "/health"),
+		HTTPExpectedCode:  defaultInt(spec.HTTPExpectedCode, 200),
+		HTTPTimeoutSecond: defaultInt(spec.HTTPTimeoutSecond, 5),
+		BackendName:       spec.HAProxyBackend,
+		ServerName:        serverNameForSlot(spec, release.TargetSlot),
+		PreviousServer:    serverNameForSlot(spec, release.PreviousLiveSlot),
+		Env:               spec.Env,
+		Command:           spec.Command,
+		Entrypoint:        spec.Entrypoint,
+		Volumes:           toModelVolumeMounts(spec.Volumes),
+	}
+	return &model.Task{
+		ID:        uuid.New(),
+		ReleaseID: release.ID,
+		ServiceID: spec.ID,
+		AgentID:   spec.AgentID,
+		Type:      taskType,
+		Status:    model.TaskStatusPending,
+		Payload:   commondb.NewJSONB(payload),
+	}
+}
+
+func (s *Service) newRollbackTask(release *model.Release, spec *dto.ServiceDeploymentSpec) *model.Task {
+	payload := model.TaskPayload{
+		ServiceID:       spec.ID,
+		ServiceKey:      spec.ServiceKey,
+		ImageRepo:       spec.ImageRepo,
+		ImageTag:        release.ImageTag,
+		CommitSHA:       release.CommitSHA,
+		TraceID:         release.TraceID,
+		TargetSlot:      release.PreviousLiveSlot,
+		CurrentLiveSlot: spec.CurrentLiveSlot,
+		ContainerPort:   spec.ContainerPort,
+		HostPort:        hostPortForSlot(spec, release.PreviousLiveSlot),
+		BackendName:     spec.HAProxyBackend,
+		ServerName:      serverNameForSlot(spec, release.PreviousLiveSlot),
+		PreviousServer:  serverNameForSlot(spec, spec.CurrentLiveSlot),
+		Env:             spec.Env,
+		Command:         spec.Command,
+		Entrypoint:      spec.Entrypoint,
+		Volumes:         toModelVolumeMounts(spec.Volumes),
+	}
+	return &model.Task{
+		ID:        uuid.New(),
+		ReleaseID: release.ID,
+		ServiceID: spec.ID,
+		AgentID:   spec.AgentID,
+		Type:      model.TaskTypeRollback,
+		Status:    model.TaskStatusPending,
+		Payload:   commondb.NewJSONB(payload),
+	}
+}
+
+func toReleaseOutput(release *model.Release) dto.ReleaseOutput {
+	return dto.ReleaseOutput{
+		ID:               release.ID,
+		ServiceID:        release.ServiceID,
+		AgentID:          release.AgentID,
+		ImageTag:         release.ImageTag,
+		CommitSHA:        release.CommitSHA,
+		TriggeredBy:      release.TriggeredBy,
+		TraceID:          release.TraceID,
+		Status:           release.Status,
+		TargetSlot:       release.TargetSlot,
+		PreviousLiveSlot: release.PreviousLiveSlot,
+		CurrentTaskID:    release.CurrentTaskID,
+		SwitchConfirmed:  release.SwitchConfirmed,
+		CreatedAt:        release.CreatedAt,
+		UpdatedAt:        release.UpdatedAt,
+		CompletedAt:      release.CompletedAt,
+	}
+}
+
+func newAudit(aggregateType string, aggregateID string, eventType string, traceID string, message string) *model.AuditLog {
+	return &model.AuditLog{
+		ID:            uuid.New(),
+		AggregateType: aggregateType,
+		AggregateID:   aggregateID,
+		EventType:     eventType,
+		TraceID:       traceID,
+		Message:       message,
+		Metadata:      commondb.NewJSONB(map[string]string{"message": message}),
+	}
+}
+
+func nextSlot(current model.Slot) model.Slot {
+	if current == model.SlotBlue {
+		return model.SlotGreen
+	}
+	return model.SlotBlue
+}
+
+func hostPortForSlot(spec *dto.ServiceDeploymentSpec, slot model.Slot) int {
+	if slot == model.SlotBlue {
+		return spec.BlueHostPort
+	}
+	return spec.GreenHostPort
+}
+
+func serverNameForSlot(spec *dto.ServiceDeploymentSpec, slot model.Slot) string {
+	if slot == model.SlotBlue {
+		return spec.HAProxyBlueServer
+	}
+	if slot == model.SlotGreen {
+		return spec.HAProxyGreenServer
+	}
+	return ""
+}
+
+func toModelVolumeMounts(items []dto.VolumeMount) []model.VolumeMount {
+	out := make([]model.VolumeMount, 0, len(items))
+	for _, item := range items {
+		out = append(out, model.VolumeMount{
+			Source:   item.Source,
+			Target:   item.Target,
+			ReadOnly: item.ReadOnly,
+		})
+	}
+	return out
+}
+
+func getJSON[T any](value *commondb.JSONB[T]) T {
+	var zero T
+	if value == nil {
+		return zero
+	}
+	return value.Get()
+}
+
+func boolPointer(v bool) *bool {
+	return &v
+}
+
+func firstNonEmpty(v string, fallback string) string {
+	if v != "" {
+		return v
+	}
+	return fallback
+}
+
+func defaultInt(v int, fallback int) int {
+	if v != 0 {
+		return v
+	}
+	return fallback
+}

@@ -20,15 +20,24 @@
 ## 项目结构速览
 
 - 入口与装配：
-  - `main.go`：使用 `fx` 组装所有模块（`app.Current().Option(...)`）。
+  - `cmd/control-plane`：control-plane 独立二进制入口，负责 HTTP 管理面、Web、CI 集成、内部 gRPC 服务与持久化装配。
+  - `cmd/agent`：agent 独立二进制入口，负责本机执行器、内部 gRPC 客户端、本地健康检查与指标。
+  - `internal/bootstrap`：两种角色的 `fx` 装配入口。
 - 适配器层：
-  - `adapter/http`：HTTP 路由、中间件、静态资源。
+  - `adapter/http/controlplane`：control-plane HTTP 路由、中间件装配、CI 集成接口、静态站点挂载。
+  - `adapter/http/agent`：agent 本地健康检查与指标接口。
+  - `adapter/http/routes`：共享基础路由（如 metrics）。
+  - `adapter/grpc/controlplane`：control-plane 内部 gRPC 服务端与 agent 会话管理。
+  - `adapter/grpc/agent`：agent 到 control-plane 的长连接客户端。
   - `adapter/schedule`：定时任务与事件订阅注册。
 - 业务层（按领域拆分）：
-  - `internal/<domain>/{application,domain,infra}`
+  - `internal/servicecatalog/{application,domain,infra}`：服务定义、镜像、端口、探活、HAProxy 绑定。
+  - `internal/release/{application,domain,infra}`：发布单、任务、切流、回滚、审计。
+  - `internal/agent/{application,domain,infra}`：agent 注册、鉴权、心跳、执行器、本机 Docker/HAProxy 适配。
+  - `internal/observability/{application,domain,infra}`：总览、实例状态、后端指标快照查询与上报入库。
 - 共享层：
   - `internal/shared/config`：环境配置读取。
-  - `internal/shared/events`：领域事件定义。
+  - `internal/shared/grpcapi`：control-plane 与 agent 共用的 gRPC 协议与 codec。
   - `internal/shared/model`：ORM 模型定义。
   - `internal/shared/dto`：通用 DTO。
 - 前端：
@@ -41,11 +50,13 @@
   - 以后端 `fx` 模块化 DI 为核心，按领域拆分为 `application/domain/infra` 三层。
   - 标准架构依赖为 `github.com/real-uangi/allingo`，如需数据库、缓存、定时任务、消息队列等基础能力，优先使用其中的公共架构，禁止手搓连接。
 - 关键交互：
-  - 同步链路：HTTP Route -> Application Service -> Mapper/Infra。
-  - 异步链路：通过 `eventbus` 发布/订阅事件（订阅集中在 `adapter/schedule/fx.go`）。
+  - control-plane 同步链路：HTTP Route -> Application Service -> Domain Port/Infra。
+  - agent 执行链路：Agent gRPC Stream -> Task Executor -> Docker/HAProxy Infra。
+  - control-plane 与 agent 之间使用内部 gRPC 双向流传输任务、心跳、任务状态和观测上报。
 - 持久化与基础设施：
-  - 主要使用 PostgreSQL（GORM + BaseMapper）。
-  - 使用 KV（本地/Redis）做缓存、锁、短期状态（如验证码、幂等标记）。
+  - PostgreSQL 仅由 control-plane 持有，用于服务配置、发布单、任务、审计、agent 节点状态与观测快照固化。
+  - agent 不连接数据库，只连接 control-plane 内部 gRPC 通道。
+  - agent 通过 Docker Socket 与 HAProxy Runtime Socket 复用现有成熟能力。
 - HTTP API相关：
   - 对于单值入参的方法，一般使用api.SingleQueryFunc。对于复杂结构体入参，优先POST+api.JsonFunc
   - 新增API时需要注意水平与垂直越权问题
