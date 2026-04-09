@@ -47,8 +47,7 @@ func buildProxyConfigSnapshot(agentID string, services []model.Service) *grpcapi
 			BackendName:     item.BackendName,
 			BlueServerName:  servicecatalogapp.ServerName(model.SlotBlue),
 			GreenServerName: servicecatalogapp.ServerName(model.SlotGreen),
-			BlueHostPort:    int32(item.BlueHostPort),
-			GreenHostPort:   int32(item.GreenHostPort),
+			ContainerPort:   int32(item.ContainerPort),
 			CurrentLiveSlot: toProtoSlot(item.CurrentLiveSlot),
 		})
 	}

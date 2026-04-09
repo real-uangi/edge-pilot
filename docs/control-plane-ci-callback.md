@@ -20,7 +20,7 @@
 调用前需要满足以下条件：
 
 - 目标服务已经在 control-plane 中完成配置
-- 服务配置已经包含目标 agent、`routeHost` 和 `routePathPrefix`
+- 服务配置已经包含目标 agent、`containerPort`、`routeHost` 和 `routePathPrefix`
 - 请求中的 `serviceKey` 能匹配到已存在服务
 - 服务处于启用状态
 

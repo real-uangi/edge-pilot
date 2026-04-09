@@ -13,14 +13,17 @@ type VolumeMount struct {
 	ReadOnly bool   `json:"readOnly"`
 }
 
+type PublishedPort struct {
+	HostPort      int `json:"hostPort"`
+	ContainerPort int `json:"containerPort"`
+}
+
 type UpsertServiceRequest struct {
 	Name              string            `json:"name" binding:"required"`
 	ServiceKey        string            `json:"serviceKey" binding:"required"`
 	AgentID           string            `json:"agentId" binding:"required"`
 	ImageRepo         string            `json:"imageRepo" binding:"required"`
 	ContainerPort     int               `json:"containerPort" binding:"required"`
-	BlueHostPort      int               `json:"blueHostPort" binding:"required"`
-	GreenHostPort     int               `json:"greenHostPort" binding:"required"`
 	DockerHealthCheck *bool             `json:"dockerHealthCheck"`
 	HTTPHealthPath    string            `json:"httpHealthPath"`
 	HTTPExpectedCode  int               `json:"httpExpectedCode"`
@@ -31,6 +34,7 @@ type UpsertServiceRequest struct {
 	Command           []string          `json:"command"`
 	Entrypoint        []string          `json:"entrypoint"`
 	Volumes           []VolumeMount     `json:"volumes"`
+	PublishedPorts    []PublishedPort   `json:"publishedPorts"`
 	Enabled           *bool             `json:"enabled"`
 }
 
@@ -41,8 +45,6 @@ type ServiceOutput struct {
 	AgentID           string            `json:"agentId"`
 	ImageRepo         string            `json:"imageRepo"`
 	ContainerPort     int               `json:"containerPort"`
-	BlueHostPort      int               `json:"blueHostPort"`
-	GreenHostPort     int               `json:"greenHostPort"`
 	CurrentLiveSlot   model.Slot        `json:"currentLiveSlot"`
 	DockerHealthCheck *bool             `json:"dockerHealthCheck"`
 	HTTPHealthPath    string            `json:"httpHealthPath"`
@@ -54,6 +56,7 @@ type ServiceOutput struct {
 	Command           []string          `json:"command"`
 	Entrypoint        []string          `json:"entrypoint"`
 	Volumes           []VolumeMount     `json:"volumes"`
+	PublishedPorts    []PublishedPort   `json:"publishedPorts"`
 	Enabled           *bool             `json:"enabled"`
 	CreatedAt         time.Time         `json:"createdAt"`
 	UpdatedAt         time.Time         `json:"updatedAt"`
@@ -66,8 +69,6 @@ type ServiceDeploymentSpec struct {
 	AgentID           string
 	ImageRepo         string
 	ContainerPort     int
-	BlueHostPort      int
-	GreenHostPort     int
 	CurrentLiveSlot   model.Slot
 	DockerHealthCheck bool
 	HTTPHealthPath    string
@@ -79,5 +80,6 @@ type ServiceDeploymentSpec struct {
 	Command           []string
 	Entrypoint        []string
 	Volumes           []VolumeMount
+	PublishedPorts    []PublishedPort
 	Enabled           bool
 }

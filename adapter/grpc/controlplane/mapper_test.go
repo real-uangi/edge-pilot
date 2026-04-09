@@ -29,7 +29,7 @@ func TestTaskToProtoPreservesFields(t *testing.T) {
 			TargetSlot:        model.SlotGreen,
 			CurrentLiveSlot:   model.SlotBlue,
 			ContainerPort:     8080,
-			HostPort:          18081,
+			DockerHealthCheck: true,
 			HTTPHealthPath:    "/health",
 			HTTPExpectedCode:  200,
 			HTTPTimeoutSecond: 5,
@@ -41,6 +41,9 @@ func TestTaskToProtoPreservesFields(t *testing.T) {
 			Entrypoint:        []string{"/bin/app"},
 			Volumes: []model.VolumeMount{
 				{Source: "/tmp/a", Target: "/data", ReadOnly: true},
+			},
+			PublishedPorts: []model.PublishedPort{
+				{HostPort: 18081, ContainerPort: 8080},
 			},
 		}),
 	}
@@ -55,8 +58,11 @@ func TestTaskToProtoPreservesFields(t *testing.T) {
 	if pb.GetTargetSlot() != grpcapi.Slot_SLOT_GREEN || pb.GetCurrentLiveSlot() != grpcapi.Slot_SLOT_BLUE {
 		t.Fatalf("unexpected slots: target=%v current=%v", pb.GetTargetSlot(), pb.GetCurrentLiveSlot())
 	}
-	if pb.GetHostPort() != 18081 || pb.GetContainerPort() != 8080 {
-		t.Fatalf("unexpected ports: host=%d container=%d", pb.GetHostPort(), pb.GetContainerPort())
+	if pb.GetContainerPort() != 8080 || !pb.GetDockerHealthCheck() {
+		t.Fatalf("unexpected ports/health: container=%d health=%v", pb.GetContainerPort(), pb.GetDockerHealthCheck())
+	}
+	if len(pb.GetPublishedPorts()) != 1 || pb.GetPublishedPorts()[0].GetHostPort() != 18081 {
+		t.Fatalf("unexpected published ports: %#v", pb.GetPublishedPorts())
 	}
 	if len(pb.GetVolumes()) != 1 || pb.GetVolumes()[0].GetTarget() != "/data" || !pb.GetVolumes()[0].GetReadOnly() {
 		t.Fatalf("unexpected volumes: %#v", pb.GetVolumes())

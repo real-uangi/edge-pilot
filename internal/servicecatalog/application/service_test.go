@@ -20,8 +20,6 @@ func TestCreateRejectsDuplicateRouteOnSameAgent(t *testing.T) {
 		AgentID:         "agent-a",
 		ImageRepo:       "repo/app",
 		ContainerPort:   8080,
-		BlueHostPort:    18080,
-		GreenHostPort:   18081,
 		RouteHost:       "Example.COM",
 		RoutePathPrefix: "/api/",
 	})
@@ -41,8 +39,6 @@ func TestCreateRejectsDuplicateRouteOnSameAgent(t *testing.T) {
 		AgentID:         "agent-a",
 		ImageRepo:       "repo/app",
 		ContainerPort:   8080,
-		BlueHostPort:    18082,
-		GreenHostPort:   18083,
 		RouteHost:       "example.com",
 		RoutePathPrefix: "/api",
 	})
@@ -60,8 +56,7 @@ func TestBuildProxyServiceConfigsSortsLongestPathFirst(t *testing.T) {
 			RouteHost:       "api.example.com",
 			RoutePathPrefix: "/",
 			CurrentLiveSlot: model.SlotBlue,
-			BlueHostPort:    18080,
-			GreenHostPort:   18081,
+			ContainerPort:   8080,
 			Enabled:         &enabled,
 		},
 		{
@@ -70,8 +65,7 @@ func TestBuildProxyServiceConfigsSortsLongestPathFirst(t *testing.T) {
 			RouteHost:       "api.example.com",
 			RoutePathPrefix: "/v1/internal",
 			CurrentLiveSlot: model.SlotGreen,
-			BlueHostPort:    18082,
-			GreenHostPort:   18083,
+			ContainerPort:   8080,
 			Enabled:         &enabled,
 		},
 	})
@@ -86,6 +80,39 @@ func TestBuildProxyServiceConfigsSortsLongestPathFirst(t *testing.T) {
 	}
 	if configs[0].CurrentLiveSlot != model.SlotGreen {
 		t.Fatalf("expected current live slot to be preserved")
+	}
+}
+
+func TestCreateRejectsDuplicatePublishedPortOnSameAgent(t *testing.T) {
+	repo := newFakeServiceCatalogRepo()
+	svc := NewServiceWithPublisher(repo, nil)
+
+	if _, err := svc.Create(dto.UpsertServiceRequest{
+		Name:          "svc-a",
+		ServiceKey:    "svc-a",
+		AgentID:       "agent-a",
+		ImageRepo:     "repo/app",
+		ContainerPort: 8080,
+		RouteHost:     "a.example.com",
+		PublishedPorts: []dto.PublishedPort{
+			{HostPort: 18080, ContainerPort: 8080},
+		},
+	}); err != nil {
+		t.Fatalf("Create() first error = %v", err)
+	}
+
+	if _, err := svc.Create(dto.UpsertServiceRequest{
+		Name:          "svc-b",
+		ServiceKey:    "svc-b",
+		AgentID:       "agent-a",
+		ImageRepo:     "repo/app",
+		ContainerPort: 8080,
+		RouteHost:     "b.example.com",
+		PublishedPorts: []dto.PublishedPort{
+			{HostPort: 18080, ContainerPort: 9090},
+		},
+	}); err == nil {
+		t.Fatalf("expected duplicate published host port validation error")
 	}
 }
 

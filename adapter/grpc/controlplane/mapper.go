@@ -21,7 +21,7 @@ func taskToProto(task *model.Task) *grpcapi.TaskCommand {
 		TargetSlot:        toProtoSlot(payload.TargetSlot),
 		CurrentLiveSlot:   toProtoSlot(payload.CurrentLiveSlot),
 		ContainerPort:     int32(payload.ContainerPort),
-		HostPort:          int32(payload.HostPort),
+		DockerHealthCheck: payload.DockerHealthCheck,
 		HttpHealthPath:    payload.HTTPHealthPath,
 		HttpExpectedCode:  int32(payload.HTTPExpectedCode),
 		HttpTimeoutSecond: int32(payload.HTTPTimeoutSecond),
@@ -32,6 +32,7 @@ func taskToProto(task *model.Task) *grpcapi.TaskCommand {
 		Command:           payload.Command,
 		Entrypoint:        payload.Entrypoint,
 		Volumes:           toProtoVolumes(payload.Volumes),
+		PublishedPorts:    toProtoPublishedPorts(payload.PublishedPorts),
 	}
 }
 
@@ -105,6 +106,17 @@ func toProtoVolumes(items []model.VolumeMount) []*grpcapi.VolumeMount {
 			Source:   item.Source,
 			Target:   item.Target,
 			ReadOnly: item.ReadOnly,
+		})
+	}
+	return out
+}
+
+func toProtoPublishedPorts(items []model.PublishedPort) []*grpcapi.PublishedPort {
+	out := make([]*grpcapi.PublishedPort, 0, len(items))
+	for _, item := range items {
+		out = append(out, &grpcapi.PublishedPort{
+			HostPort:      int32(item.HostPort),
+			ContainerPort: int32(item.ContainerPort),
 		})
 	}
 	return out

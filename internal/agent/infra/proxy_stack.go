@@ -159,6 +159,9 @@ func (m *ManagedProxyRuntime) ensureProxyStackLocked(ctx context.Context) error 
 	if err := m.docker.ensureNetwork(ctx, m.cfg.ProxyNetworkName, m.cfg.ProxyNetworkSubnet); err != nil {
 		return err
 	}
+	if err := m.ensureReservedProxyIPLocked(ctx); err != nil {
+		return err
+	}
 	if err := m.docker.ensureVolume(ctx, m.cfg.HAProxyConfigVolume); err != nil {
 		return err
 	}
@@ -221,16 +224,16 @@ func (m *ManagedProxyRuntime) reconcileLocked(ctx context.Context, snapshot *grp
 		}
 		if err := m.dataplane.EnsureServer(ctx, service.GetBackendName(), backendServer{
 			Name:    service.GetBlueServerName(),
-			Address: "127.0.0.1",
-			Port:    int(service.GetBlueHostPort()),
+			Address: application.ManagedContainerName(service.GetServiceKey(), grpcapi.Slot_SLOT_BLUE),
+			Port:    int(service.GetContainerPort()),
 			Check:   "enabled",
 		}); err != nil {
 			return err
 		}
 		if err := m.dataplane.EnsureServer(ctx, service.GetBackendName(), backendServer{
 			Name:    service.GetGreenServerName(),
-			Address: "127.0.0.1",
-			Port:    int(service.GetGreenHostPort()),
+			Address: application.ManagedContainerName(service.GetServiceKey(), grpcapi.Slot_SLOT_GREEN),
+			Port:    int(service.GetContainerPort()),
 			Check:   "enabled",
 		}); err != nil {
 			return err
@@ -259,6 +262,44 @@ func (m *ManagedProxyRuntime) reconcileLocked(ctx context.Context, snapshot *grp
 		if err := m.applyLiveSlot(ctx, service); err != nil {
 			return err
 		}
+	}
+	return nil
+}
+
+func (m *ManagedProxyRuntime) ensureReservedProxyIPLocked(ctx context.Context) error {
+	ip := net.ParseIP(strings.TrimSpace(m.cfg.ProxyIPAddress))
+	if ip == nil {
+		return fmt.Errorf("invalid proxy ip address: %s", m.cfg.ProxyIPAddress)
+	}
+	_, network, err := net.ParseCIDR(strings.TrimSpace(m.cfg.ProxyNetworkSubnet))
+	if err != nil {
+		return fmt.Errorf("invalid proxy network subnet: %w", err)
+	}
+	if !network.Contains(ip) {
+		return fmt.Errorf("proxy ip %s is outside subnet %s", m.cfg.ProxyIPAddress, m.cfg.ProxyNetworkSubnet)
+	}
+	if ip.Equal(network.IP) || ip.Equal(lastIPv4(network)) {
+		return fmt.Errorf("proxy ip %s cannot use network or broadcast address", m.cfg.ProxyIPAddress)
+	}
+	inspect, err := m.docker.inspectNetwork(ctx, m.cfg.ProxyNetworkName)
+	if err != nil {
+		return err
+	}
+	if inspect == nil {
+		return fmt.Errorf("proxy network %s not found", m.cfg.ProxyNetworkName)
+	}
+	if len(inspect.IPAM.Config) > 0 && strings.TrimSpace(inspect.IPAM.Config[0].Subnet) != "" && strings.TrimSpace(inspect.IPAM.Config[0].Subnet) != strings.TrimSpace(m.cfg.ProxyNetworkSubnet) {
+		return fmt.Errorf("proxy network subnet mismatch: expected %s got %s", m.cfg.ProxyNetworkSubnet, inspect.IPAM.Config[0].Subnet)
+	}
+	for _, item := range inspect.Containers {
+		candidate := strings.TrimSpace(strings.Split(item.IPv4Address, "/")[0])
+		if candidate == "" || candidate != m.cfg.ProxyIPAddress {
+			continue
+		}
+		if item.Name == m.cfg.ProxyContainerName {
+			return nil
+		}
+		return fmt.Errorf("proxy ip %s is already occupied by container %s", m.cfg.ProxyIPAddress, item.Name)
 	}
 	return nil
 }
@@ -504,8 +545,7 @@ func cloneSnapshot(snapshot *grpcapi.ProxyConfigSnapshot) *grpcapi.ProxyConfigSn
 			BackendName:     item.GetBackendName(),
 			BlueServerName:  item.GetBlueServerName(),
 			GreenServerName: item.GetGreenServerName(),
-			BlueHostPort:    item.GetBlueHostPort(),
-			GreenHostPort:   item.GetGreenHostPort(),
+			ContainerPort:   item.GetContainerPort(),
 			CurrentLiveSlot: item.GetCurrentLiveSlot(),
 		})
 	}
@@ -536,6 +576,19 @@ func retry(ctx context.Context, attempts int, delay time.Duration, fn func() err
 		return nil
 	}
 	return lastErr
+}
+
+func lastIPv4(network *net.IPNet) net.IP {
+	base := network.IP.To4()
+	if base == nil {
+		return nil
+	}
+	mask := network.Mask
+	out := make(net.IP, len(base))
+	for i := range base {
+		out[i] = base[i] | ^mask[i]
+	}
+	return out
 }
 
 var _ application.ProxyRuntime = (*ManagedProxyRuntime)(nil)

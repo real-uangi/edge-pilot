@@ -4,6 +4,7 @@ import (
 	"edge-pilot/internal/servicecatalog/domain"
 	"edge-pilot/internal/shared/dto"
 	"edge-pilot/internal/shared/model"
+	"fmt"
 	"strings"
 
 	"github.com/google/uuid"
@@ -36,7 +37,13 @@ func (s *Service) Create(req dto.UpsertServiceRequest) (*dto.ServiceOutput, erro
 		return nil, business.NewBadRequest("serviceKey 已存在")
 	}
 	entity := buildServiceEntity(uuid.New(), req)
+	if err := validatePublishedPorts(entity.PublishedPorts.Get()); err != nil {
+		return nil, err
+	}
 	if err := s.ensureRouteAvailable(entity.AgentID, entity.RouteHost, entity.RoutePathPrefix, entity.ID); err != nil {
+		return nil, err
+	}
+	if err := s.ensurePublishedPortsAvailable(entity.AgentID, entity.PublishedPorts.Get(), entity.ID); err != nil {
 		return nil, err
 	}
 	if err := s.repo.Create(entity); err != nil {
@@ -60,7 +67,13 @@ func (s *Service) Update(id uuid.UUID, req dto.UpsertServiceRequest) (*dto.Servi
 	updated := buildServiceEntity(id, req)
 	updated.CreatedAt = current.CreatedAt
 	updated.CurrentLiveSlot = current.CurrentLiveSlot
+	if err := validatePublishedPorts(updated.PublishedPorts.Get()); err != nil {
+		return nil, err
+	}
 	if err := s.ensureRouteAvailable(updated.AgentID, updated.RouteHost, updated.RoutePathPrefix, updated.ID); err != nil {
+		return nil, err
+	}
+	if err := s.ensurePublishedPortsAvailable(updated.AgentID, updated.PublishedPorts.Get(), updated.ID); err != nil {
 		return nil, err
 	}
 	if err := s.repo.Update(updated); err != nil {
@@ -155,8 +168,6 @@ func buildServiceEntity(id uuid.UUID, req dto.UpsertServiceRequest) *model.Servi
 		AgentID:           req.AgentID,
 		ImageRepo:         req.ImageRepo,
 		ContainerPort:     req.ContainerPort,
-		BlueHostPort:      req.BlueHostPort,
-		GreenHostPort:     req.GreenHostPort,
 		DockerHealthCheck: dockerHealth,
 		HTTPHealthPath:    req.HTTPHealthPath,
 		HTTPExpectedCode:  expectedCode,
@@ -167,6 +178,7 @@ func buildServiceEntity(id uuid.UUID, req dto.UpsertServiceRequest) *model.Servi
 		Command:           commondb.NewJSONB(req.Command),
 		Entrypoint:        commondb.NewJSONB(req.Entrypoint),
 		Volumes:           commondb.NewJSONB(toModelVolumes(req.Volumes)),
+		PublishedPorts:    commondb.NewJSONB(toModelPublishedPorts(req.PublishedPorts)),
 		Enabled:           enabled,
 	}
 }
@@ -179,8 +191,6 @@ func toServiceOutput(service *model.Service) dto.ServiceOutput {
 		AgentID:           service.AgentID,
 		ImageRepo:         service.ImageRepo,
 		ContainerPort:     service.ContainerPort,
-		BlueHostPort:      service.BlueHostPort,
-		GreenHostPort:     service.GreenHostPort,
 		CurrentLiveSlot:   service.CurrentLiveSlot,
 		DockerHealthCheck: service.DockerHealthCheck,
 		HTTPHealthPath:    service.HTTPHealthPath,
@@ -192,6 +202,7 @@ func toServiceOutput(service *model.Service) dto.ServiceOutput {
 		Command:           getJSON(service.Command),
 		Entrypoint:        getJSON(service.Entrypoint),
 		Volumes:           toDTOVolumes(getJSON(service.Volumes)),
+		PublishedPorts:    toDTOPublishedPorts(getJSON(service.PublishedPorts)),
 		Enabled:           service.Enabled,
 		CreatedAt:         service.CreatedAt,
 		UpdatedAt:         service.UpdatedAt,
@@ -206,8 +217,6 @@ func toDeploymentSpec(service *model.Service) dto.ServiceDeploymentSpec {
 		AgentID:           service.AgentID,
 		ImageRepo:         service.ImageRepo,
 		ContainerPort:     service.ContainerPort,
-		BlueHostPort:      service.BlueHostPort,
-		GreenHostPort:     service.GreenHostPort,
 		CurrentLiveSlot:   service.CurrentLiveSlot,
 		DockerHealthCheck: service.DockerHealthCheck != nil && *service.DockerHealthCheck,
 		HTTPHealthPath:    service.HTTPHealthPath,
@@ -219,6 +228,7 @@ func toDeploymentSpec(service *model.Service) dto.ServiceDeploymentSpec {
 		Command:           getJSON(service.Command),
 		Entrypoint:        getJSON(service.Entrypoint),
 		Volumes:           toDTOVolumes(getJSON(service.Volumes)),
+		PublishedPorts:    toDTOPublishedPorts(getJSON(service.PublishedPorts)),
 		Enabled:           service.Enabled != nil && *service.Enabled,
 	}
 }
@@ -247,8 +257,50 @@ func toDTOVolumes(items []model.VolumeMount) []dto.VolumeMount {
 	return out
 }
 
+func toModelPublishedPorts(items []dto.PublishedPort) []model.PublishedPort {
+	out := make([]model.PublishedPort, 0, len(items))
+	for _, item := range items {
+		out = append(out, model.PublishedPort{
+			HostPort:      item.HostPort,
+			ContainerPort: item.ContainerPort,
+		})
+	}
+	return out
+}
+
+func toDTOPublishedPorts(items []model.PublishedPort) []dto.PublishedPort {
+	out := make([]dto.PublishedPort, 0, len(items))
+	for _, item := range items {
+		out = append(out, dto.PublishedPort{
+			HostPort:      item.HostPort,
+			ContainerPort: item.ContainerPort,
+		})
+	}
+	return out
+}
+
 func boolPointer(v bool) *bool {
 	return &v
+}
+
+func validatePublishedPorts(items []model.PublishedPort) error {
+	seen := make(map[int]struct{}, len(items))
+	for _, item := range items {
+		if item.HostPort <= 0 || item.HostPort > 65535 {
+			return business.NewBadRequest("publishedPorts.hostPort 非法")
+		}
+		if item.ContainerPort <= 0 || item.ContainerPort > 65535 {
+			return business.NewBadRequest("publishedPorts.containerPort 非法")
+		}
+		if item.HostPort == SharedFrontendBindPort {
+			return business.NewBadRequest("publishedPorts.hostPort 与代理保留端口冲突")
+		}
+		if _, ok := seen[item.HostPort]; ok {
+			return business.NewBadRequest("publishedPorts.hostPort 重复")
+		}
+		seen[item.HostPort] = struct{}{}
+	}
+	return nil
 }
 
 func (s *Service) ensureRouteAvailable(agentID string, routeHost string, routePathPrefix string, selfID uuid.UUID) error {
@@ -258,6 +310,29 @@ func (s *Service) ensureRouteAvailable(agentID string, routeHost string, routePa
 	}
 	if existing != nil && existing.ID != selfID {
 		return business.NewBadRequest("routeHost + routePathPrefix 已存在")
+	}
+	return nil
+}
+
+func (s *Service) ensurePublishedPortsAvailable(agentID string, ports []model.PublishedPort, selfID uuid.UUID) error {
+	if len(ports) == 0 {
+		return nil
+	}
+	services, err := s.repo.ListByAgent(agentID)
+	if err != nil {
+		return err
+	}
+	for _, candidate := range ports {
+		for i := range services {
+			if services[i].ID == selfID {
+				continue
+			}
+			for _, port := range getJSON(services[i].PublishedPorts) {
+				if port.HostPort == candidate.HostPort {
+					return business.NewBadRequest(fmt.Sprintf("publishedPorts.hostPort 已被服务 %s 占用", services[i].ServiceKey))
+				}
+			}
+		}
 	}
 	return nil
 }

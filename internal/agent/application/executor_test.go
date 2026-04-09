@@ -12,8 +12,7 @@ func TestExecuteDeployReusesHealthyManagedContainer(t *testing.T) {
 		foundByName: map[string]*ManagedContainer{
 			ManagedContainerName("svc-a", grpcapi.Slot_SLOT_GREEN): {
 				ContainerRuntime: ContainerRuntime{
-					ContainerID:   "container-1",
-					ListenAddress: "127.0.0.1:18081",
+					ContainerID: "container-1",
 				},
 				Name:       ManagedContainerName("svc-a", grpcapi.Slot_SLOT_GREEN),
 				Managed:    true,
@@ -24,6 +23,9 @@ func TestExecuteDeployReusesHealthyManagedContainer(t *testing.T) {
 		},
 		healthByID: map[string]string{
 			"container-1": "",
+		},
+		listenByID: map[string]string{
+			"container-1": "172.29.0.21:8080",
 		},
 	}
 	executor := NewExecutor(&config.AgentRuntimeConfig{AgentID: "agent-a", HTTPProbeTimeoutS: 1}, docker, &fakeProxyRuntime{})
@@ -37,7 +39,8 @@ func TestExecuteDeployReusesHealthyManagedContainer(t *testing.T) {
 		Type:              grpcapi.TaskType_TASK_TYPE_DEPLOY_GREEN,
 		TargetSlot:        grpcapi.Slot_SLOT_GREEN,
 		ServerName:        "srv-green",
-		HostPort:          18081,
+		ContainerPort:     8080,
+		DockerHealthCheck: true,
 		HttpHealthPath:    "/health",
 		HttpExpectedCode:  0,
 		HttpTimeoutSecond: 1,
@@ -68,14 +71,14 @@ func TestExecuteDeployFailsOnManagedContainerConflict(t *testing.T) {
 	executor := NewExecutor(&config.AgentRuntimeConfig{AgentID: "agent-a", HTTPProbeTimeoutS: 1}, docker, &fakeProxyRuntime{})
 
 	err := executor.Execute(context.Background(), &grpcapi.TaskCommand{
-		TaskId:     "task-2",
-		ReleaseId:  "release-2",
-		ServiceKey: "svc-a",
-		AgentId:    "agent-a",
-		Type:       grpcapi.TaskType_TASK_TYPE_DEPLOY_GREEN,
-		TargetSlot: grpcapi.Slot_SLOT_GREEN,
-		ServerName: "srv-green",
-		HostPort:   18081,
+		TaskId:        "task-2",
+		ReleaseId:     "release-2",
+		ServiceKey:    "svc-a",
+		AgentId:       "agent-a",
+		Type:          grpcapi.TaskType_TASK_TYPE_DEPLOY_GREEN,
+		TargetSlot:    grpcapi.Slot_SLOT_GREEN,
+		ServerName:    "srv-green",
+		ContainerPort: 8080,
 	}, func(update *grpcapi.TaskUpdate) error { return nil })
 	if err == nil {
 		t.Fatalf("expected conflict error")
@@ -137,7 +140,7 @@ func TestExecuteTrafficSwitchCleansOnlyCurrentAgentManagedContainers(t *testing.
 		PreviousServer:  "srv-blue",
 		TargetSlot:      grpcapi.Slot_SLOT_GREEN,
 		CurrentLiveSlot: grpcapi.Slot_SLOT_BLUE,
-		HostPort:        18081,
+		ContainerPort:   8080,
 	}, func(update *grpcapi.TaskUpdate) error { return nil })
 	if err != nil {
 		t.Fatalf("Execute() error = %v", err)
@@ -147,17 +150,41 @@ func TestExecuteTrafficSwitchCleansOnlyCurrentAgentManagedContainers(t *testing.
 	}
 }
 
+func TestExecuteDeployCanSkipDockerHealthCheck(t *testing.T) {
+	docker := &fakeDockerRuntime{}
+	executor := NewExecutor(&config.AgentRuntimeConfig{AgentID: "agent-a", HTTPProbeTimeoutS: 1}, docker, &fakeProxyRuntime{})
+	executor.httpProbe = func(string, string, int, int) error { return nil }
+
+	err := executor.Execute(context.Background(), &grpcapi.TaskCommand{
+		TaskId:            "task-4",
+		ReleaseId:         "release-4",
+		ServiceKey:        "svc-a",
+		AgentId:           "agent-a",
+		Type:              grpcapi.TaskType_TASK_TYPE_DEPLOY_GREEN,
+		TargetSlot:        grpcapi.Slot_SLOT_GREEN,
+		ContainerPort:     8080,
+		DockerHealthCheck: false,
+	}, func(update *grpcapi.TaskUpdate) error { return nil })
+	if err != nil {
+		t.Fatalf("Execute() error = %v", err)
+	}
+	if len(docker.deployedTasks) != 1 {
+		t.Fatalf("expected one deployment, got %d", len(docker.deployedTasks))
+	}
+}
+
 type fakeDockerRuntime struct {
 	foundByName   map[string]*ManagedContainer
 	managedItems  []*ManagedContainer
 	healthByID    map[string]string
+	listenByID    map[string]string
 	deployedTasks []*grpcapi.TaskCommand
 	removedIDs    []string
 }
 
 func (f *fakeDockerRuntime) DeployContainer(ctx context.Context, task *grpcapi.TaskCommand) (*ContainerRuntime, error) {
 	f.deployedTasks = append(f.deployedTasks, task)
-	return &ContainerRuntime{ContainerID: "new-container", ListenAddress: "127.0.0.1:18081"}, nil
+	return &ContainerRuntime{ContainerID: "new-container", ListenAddress: "172.29.0.22:8080"}, nil
 }
 
 func (f *fakeDockerRuntime) InspectHealth(ctx context.Context, containerID string) (string, error) {
@@ -169,6 +196,13 @@ func (f *fakeDockerRuntime) InspectHealth(ctx context.Context, containerID strin
 
 func (f *fakeDockerRuntime) FindContainerByName(ctx context.Context, name string) (*ManagedContainer, error) {
 	return f.foundByName[name], nil
+}
+
+func (f *fakeDockerRuntime) ResolveListenAddress(ctx context.Context, containerID string, port int) (string, error) {
+	if listen, ok := f.listenByID[containerID]; ok {
+		return listen, nil
+	}
+	return "172.29.0.22:8080", nil
 }
 
 func (f *fakeDockerRuntime) RemoveContainer(ctx context.Context, containerID string) error {

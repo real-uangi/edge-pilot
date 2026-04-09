@@ -36,8 +36,6 @@ func TestCreateFromCICreatesQueuedReleaseWithoutDispatch(t *testing.T) {
 		AgentID:           "agent-a",
 		ImageRepo:         "repo/app",
 		ContainerPort:     8080,
-		BlueHostPort:      18080,
-		GreenHostPort:     18081,
 		DockerHealthCheck: &dockerHealth,
 		Enabled:           &enabled,
 	}
@@ -86,8 +84,6 @@ func TestCreateFromCIDeduplicatesSameImageRequest(t *testing.T) {
 		AgentID:           "agent-a",
 		ImageRepo:         "repo/app",
 		ContainerPort:     8080,
-		BlueHostPort:      18080,
-		GreenHostPort:     18081,
 		DockerHealthCheck: &dockerHealth,
 		HTTPHealthPath:    "/health",
 		HTTPExpectedCode:  200,
@@ -148,8 +144,6 @@ func TestCreateFromCIAllowsMultipleQueuedRequestsForDifferentImages(t *testing.T
 		AgentID:           "agent-a",
 		ImageRepo:         "repo/app",
 		ContainerPort:     8080,
-		BlueHostPort:      18080,
-		GreenHostPort:     18081,
 		DockerHealthCheck: &dockerHealth,
 		Enabled:           &enabled,
 	}
@@ -200,8 +194,6 @@ func TestStartQueuedReleaseDispatchesDeployTask(t *testing.T) {
 		AgentID:           "agent-a",
 		ImageRepo:         "repo/app",
 		ContainerPort:     8080,
-		BlueHostPort:      18080,
-		GreenHostPort:     18081,
 		DockerHealthCheck: &dockerHealth,
 		HTTPHealthPath:    "/health",
 		HTTPExpectedCode:  200,
@@ -272,8 +264,6 @@ func TestStartQueuedReleaseRecalculatesTargetSlotFromCurrentLiveSlot(t *testing.
 		AgentID:           "agent-a",
 		ImageRepo:         "repo/app",
 		ContainerPort:     8080,
-		BlueHostPort:      18080,
-		GreenHostPort:     18081,
 		CurrentLiveSlot:   model.SlotBlue,
 		DockerHealthCheck: &dockerHealth,
 		Enabled:           &enabled,
@@ -328,8 +318,6 @@ func TestStartQueuedReleaseRejectsWhenAnotherReleaseIsActive(t *testing.T) {
 		AgentID:           "agent-a",
 		ImageRepo:         "repo/app",
 		ContainerPort:     8080,
-		BlueHostPort:      18080,
-		GreenHostPort:     18081,
 		DockerHealthCheck: &dockerHealth,
 		Enabled:           &enabled,
 	}
@@ -384,8 +372,6 @@ func TestStartQueuedReleaseRejectsOfflineAgentAndKeepsQueued(t *testing.T) {
 		AgentID:           "agent-a",
 		ImageRepo:         "repo/app",
 		ContainerPort:     8080,
-		BlueHostPort:      18080,
-		GreenHostPort:     18081,
 		DockerHealthCheck: &dockerHealth,
 		Enabled:           &enabled,
 	}
@@ -431,8 +417,6 @@ func TestSkipQueuedReleaseMarksSkipped(t *testing.T) {
 		AgentID:           "agent-a",
 		ImageRepo:         "repo/app",
 		ContainerPort:     8080,
-		BlueHostPort:      18080,
-		GreenHostPort:     18081,
 		DockerHealthCheck: &dockerHealth,
 		Enabled:           &enabled,
 	}
@@ -546,11 +530,11 @@ func TestHandleTaskUpdateMovesReleaseToReadyToSwitch(t *testing.T) {
 	serviceID := uuid.New()
 	taskID := uuid.New()
 	payload := model.TaskPayload{
-		ServiceID:  serviceID,
-		ServiceKey: "svc-a",
-		TargetSlot: model.SlotGreen,
-		HostPort:   18081,
-		ServerName: "srv_green",
+		ServiceID:      serviceID,
+		ServiceKey:     "svc-a",
+		TargetSlot:     model.SlotGreen,
+		PublishedPorts: []model.PublishedPort{{HostPort: 18081, ContainerPort: 8080}},
+		ServerName:     "srv_green",
 	}
 
 	switchConfirmed := false

@@ -72,8 +72,6 @@ type Service struct {
 	AgentID           string                             `json:"agentId" gorm:"size:128;index;not null"`
 	ImageRepo         string                             `json:"imageRepo" gorm:"size:512;not null"`
 	ContainerPort     int                                `json:"containerPort"`
-	BlueHostPort      int                                `json:"blueHostPort"`
-	GreenHostPort     int                                `json:"greenHostPort"`
 	CurrentLiveSlot   Slot                               `json:"currentLiveSlot"`
 	DockerHealthCheck *bool                              `json:"dockerHealthCheck" gorm:"not null"`
 	HTTPHealthPath    string                             `json:"httpHealthPath" gorm:"size:255"`
@@ -85,6 +83,7 @@ type Service struct {
 	Command           *commondb.JSONB[[]string]          `json:"command" gorm:"type:jsonb"`
 	Entrypoint        *commondb.JSONB[[]string]          `json:"entrypoint" gorm:"type:jsonb"`
 	Volumes           *commondb.JSONB[[]VolumeMount]     `json:"volumes" gorm:"type:jsonb"`
+	PublishedPorts    *commondb.JSONB[[]PublishedPort]   `json:"publishedPorts" gorm:"type:jsonb"`
 	Enabled           *bool                              `json:"enabled" gorm:"not null"`
 }
 
@@ -96,6 +95,11 @@ type VolumeMount struct {
 	Source   string `json:"source"`
 	Target   string `json:"target"`
 	ReadOnly bool   `json:"readOnly"`
+}
+
+type PublishedPort struct {
+	HostPort      int `json:"hostPort"`
+	ContainerPort int `json:"containerPort"`
 }
 
 type Release struct {
@@ -149,7 +153,7 @@ type TaskPayload struct {
 	TargetSlot        Slot              `json:"targetSlot"`
 	CurrentLiveSlot   Slot              `json:"currentLiveSlot"`
 	ContainerPort     int               `json:"containerPort"`
-	HostPort          int               `json:"hostPort"`
+	DockerHealthCheck bool              `json:"dockerHealthCheck"`
 	HTTPHealthPath    string            `json:"httpHealthPath"`
 	HTTPExpectedCode  int               `json:"httpExpectedCode"`
 	HTTPTimeoutSecond int               `json:"httpTimeoutSecond"`
@@ -160,6 +164,7 @@ type TaskPayload struct {
 	Command           []string          `json:"command,omitempty"`
 	Entrypoint        []string          `json:"entrypoint,omitempty"`
 	Volumes           []VolumeMount     `json:"volumes,omitempty"`
+	PublishedPorts    []PublishedPort   `json:"publishedPorts,omitempty"`
 }
 
 type TaskAttempt struct {

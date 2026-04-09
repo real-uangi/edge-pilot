@@ -57,6 +57,15 @@ type dockerContainerInspect struct {
 
 type dockerNetworkInspect struct {
 	Name string `json:"Name"`
+	IPAM struct {
+		Config []struct {
+			Subnet string `json:"Subnet"`
+		} `json:"Config"`
+	} `json:"IPAM"`
+	Containers map[string]struct {
+		Name        string `json:"Name"`
+		IPv4Address string `json:"IPv4Address"`
+	} `json:"Containers"`
 }
 
 type dockerVolumeInspect struct {
@@ -179,6 +188,29 @@ func (c *DockerClient) ensureNetwork(ctx context.Context, name string, subnet st
 		return fmt.Errorf("docker inspect network failed: %s", resp.Status)
 	}
 	return nil
+}
+
+func (c *DockerClient) inspectNetwork(ctx context.Context, name string) (*dockerNetworkInspect, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "http://docker/networks/"+url.PathEscape(name), nil)
+	if err != nil {
+		return nil, err
+	}
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode == http.StatusNotFound {
+		return nil, nil
+	}
+	if resp.StatusCode >= 300 {
+		return nil, fmt.Errorf("docker inspect network failed: %s", resp.Status)
+	}
+	var inspect dockerNetworkInspect
+	if err := json.NewDecoder(resp.Body).Decode(&inspect); err != nil {
+		return nil, err
+	}
+	return &inspect, nil
 }
 
 func (c *DockerClient) ensureVolume(ctx context.Context, name string) error {

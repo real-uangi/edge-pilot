@@ -17,8 +17,7 @@ func TestBuildProxyConfigSnapshotCarriesSortedRoutesAndLiveSlot(t *testing.T) {
 			RouteHost:       "api.example.com",
 			RoutePathPrefix: "/",
 			CurrentLiveSlot: model.SlotBlue,
-			BlueHostPort:    18080,
-			GreenHostPort:   18081,
+			ContainerPort:   8080,
 			Enabled:         &enabled,
 		},
 		{
@@ -28,8 +27,7 @@ func TestBuildProxyConfigSnapshotCarriesSortedRoutesAndLiveSlot(t *testing.T) {
 			RouteHost:       "api.example.com",
 			RoutePathPrefix: "/v1/internal",
 			CurrentLiveSlot: model.SlotGreen,
-			BlueHostPort:    18082,
-			GreenHostPort:   18083,
+			ContainerPort:   8080,
 			Enabled:         &enabled,
 		},
 	}

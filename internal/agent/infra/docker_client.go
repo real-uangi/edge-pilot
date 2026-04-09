@@ -20,6 +20,7 @@ import (
 
 type DockerClient struct {
 	httpClient *http.Client
+	cfg        *config.AgentRuntimeConfig
 	logger     *log.StdLogger
 }
 
@@ -31,6 +32,7 @@ func NewRawDockerClient(cfg *config.AgentRuntimeConfig) *DockerClient {
 	}
 	return &DockerClient{
 		httpClient: &http.Client{Transport: transport, Timeout: 15 * time.Second},
+		cfg:        cfg,
 		logger:     log.NewStdLogger("agent.docker"),
 	}
 }
@@ -69,16 +71,16 @@ func (c *DockerClient) DeployContainer(ctx context.Context, task *grpcapi.TaskCo
 			application.ManagedLabelSlot:       application.ManagedSlotValue(task.GetTargetSlot()),
 			application.ManagedLabelReleaseID:  task.GetReleaseId(),
 		},
-		ExposedPorts: map[string]map[string]string{
-			portKey(int(task.GetContainerPort())): {},
-		},
+		ExposedPorts: exposedPorts(task),
 		HostConfig: dockerHostConfig{
-			PortBindings: map[string][]dockerPortBinding{
-				portKey(int(task.GetContainerPort())): {
-					{HostIP: "0.0.0.0", HostPort: strconv.Itoa(int(task.GetHostPort()))},
-				},
+			PortBindings:  flattenPublishedPorts(task.GetPublishedPorts()),
+			Binds:         flattenVolumes(task.GetVolumes()),
+			RestartPolicy: dockerRestartPolicy{Name: "unless-stopped"},
+		},
+		NetworkingConfig: dockerNetworkingConfig{
+			EndpointsConfig: map[string]dockerEndpointSettings{
+				c.cfg.ProxyNetworkName: {},
 			},
-			Binds: flattenVolumes(task.GetVolumes()),
 		},
 	}
 	body, err := json.Marshal(createReq)
@@ -116,9 +118,13 @@ func (c *DockerClient) DeployContainer(ctx context.Context, task *grpcapi.TaskCo
 	if startResp.StatusCode >= 300 {
 		return nil, fmt.Errorf("docker start failed: %s", startResp.Status)
 	}
+	listenAddress, err := c.ResolveListenAddress(ctx, createResp.ID, int(task.GetContainerPort()))
+	if err != nil {
+		return nil, err
+	}
 	return &application.ContainerRuntime{
 		ContainerID:   createResp.ID,
-		ListenAddress: "127.0.0.1:" + strconv.Itoa(int(task.GetHostPort())),
+		ListenAddress: listenAddress,
 	}, nil
 }
 
@@ -169,6 +175,30 @@ func (c *DockerClient) FindContainerByName(ctx context.Context, name string) (*a
 		return nil, err
 	}
 	return toManagedContainer(&inspectResp), nil
+}
+
+func (c *DockerClient) ResolveListenAddress(ctx context.Context, containerID string, port int) (string, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "http://docker/containers/"+url.PathEscape(containerID)+"/json", nil)
+	if err != nil {
+		return "", err
+	}
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return "", err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode >= 300 {
+		return "", fmt.Errorf("docker inspect failed: %s", resp.Status)
+	}
+	var inspectResp dockerInspectResponse
+	if err := json.NewDecoder(resp.Body).Decode(&inspectResp); err != nil {
+		return "", err
+	}
+	endpoint, ok := inspectResp.NetworkSettings.Networks[c.cfg.ProxyNetworkName]
+	if !ok || strings.TrimSpace(endpoint.IPAddress) == "" {
+		return "", fmt.Errorf("container %s is not attached to network %s", containerID, c.cfg.ProxyNetworkName)
+	}
+	return net.JoinHostPort(endpoint.IPAddress, strconv.Itoa(port)), nil
 }
 
 func (c *DockerClient) RemoveContainer(ctx context.Context, containerID string) error {
@@ -224,13 +254,14 @@ func (c *DockerClient) ListManagedContainers(ctx context.Context, agentID string
 }
 
 type dockerCreateRequest struct {
-	Image        string                       `json:"Image"`
-	Env          []string                     `json:"Env,omitempty"`
-	Cmd          []string                     `json:"Cmd,omitempty"`
-	Entrypoint   []string                     `json:"Entrypoint,omitempty"`
-	Labels       map[string]string            `json:"Labels,omitempty"`
-	ExposedPorts map[string]map[string]string `json:"ExposedPorts,omitempty"`
-	HostConfig   dockerHostConfig             `json:"HostConfig"`
+	Image            string                       `json:"Image"`
+	Env              []string                     `json:"Env,omitempty"`
+	Cmd              []string                     `json:"Cmd,omitempty"`
+	Entrypoint       []string                     `json:"Entrypoint,omitempty"`
+	Labels           map[string]string            `json:"Labels,omitempty"`
+	ExposedPorts     map[string]map[string]string `json:"ExposedPorts,omitempty"`
+	HostConfig       dockerHostConfig             `json:"HostConfig"`
+	NetworkingConfig dockerNetworkingConfig       `json:"NetworkingConfig,omitempty"`
 }
 
 type dockerHostConfig struct {
@@ -261,6 +292,11 @@ type dockerInspectResponse struct {
 			Status string `json:"Status"`
 		} `json:"Health"`
 	} `json:"State"`
+	NetworkSettings struct {
+		Networks map[string]struct {
+			IPAddress string `json:"IPAddress"`
+		} `json:"Networks"`
+	} `json:"NetworkSettings"`
 }
 
 type dockerContainerSummary struct {
@@ -292,6 +328,31 @@ func flattenVolumes(items []*grpcapi.VolumeMount) []string {
 			bind += ":ro"
 		}
 		out = append(out, bind)
+	}
+	return out
+}
+
+func flattenPublishedPorts(items []*grpcapi.PublishedPort) map[string][]dockerPortBinding {
+	if len(items) == 0 {
+		return nil
+	}
+	out := make(map[string][]dockerPortBinding, len(items))
+	for _, item := range items {
+		key := portKey(int(item.GetContainerPort()))
+		out[key] = append(out[key], dockerPortBinding{
+			HostIP:   "0.0.0.0",
+			HostPort: strconv.Itoa(int(item.GetHostPort())),
+		})
+	}
+	return out
+}
+
+func exposedPorts(task *grpcapi.TaskCommand) map[string]map[string]string {
+	out := map[string]map[string]string{
+		portKey(int(task.GetContainerPort())): {},
+	}
+	for _, item := range task.GetPublishedPorts() {
+		out[portKey(int(item.GetContainerPort()))] = map[string]string{}
 	}
 	return out
 }

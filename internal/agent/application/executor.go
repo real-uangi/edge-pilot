@@ -15,6 +15,7 @@ type DockerRuntime interface {
 	DeployContainer(context.Context, *grpcapi.TaskCommand) (*ContainerRuntime, error)
 	InspectHealth(context.Context, string) (string, error)
 	FindContainerByName(context.Context, string) (*ManagedContainer, error)
+	ResolveListenAddress(context.Context, string, int) (string, error)
 	RemoveContainer(context.Context, string) error
 	ListManagedContainers(context.Context, string, string) ([]*ManagedContainer, error)
 }
@@ -147,7 +148,7 @@ func (e *Executor) executeTrafficSwitch(ctx context.Context, task *grpcapi.TaskC
 	if err := e.proxy.EnsureReady(ctx); err != nil {
 		return &TaskExecutionError{Step: "proxy_stack_not_ready", Err: err}
 	}
-	if err := e.proxy.SetServerAddress(ctx, task.GetBackendName(), task.GetServerName(), "127.0.0.1", int(task.GetHostPort())); err != nil {
+	if err := e.proxy.SetServerAddress(ctx, task.GetBackendName(), task.GetServerName(), ManagedContainerName(task.GetServiceKey(), task.GetTargetSlot()), int(task.GetContainerPort())); err != nil {
 		return err
 	}
 	if err := e.proxy.EnableServer(ctx, task.GetBackendName(), task.GetServerName()); err != nil {
@@ -197,13 +198,9 @@ func (e *Executor) ensureDeployContainer(ctx context.Context, task *grpcapi.Task
 		}
 	}
 	if existing.ReleaseID == task.GetReleaseId() {
-		health, err := e.docker.InspectHealth(ctx, existing.ContainerID)
-		if err == nil && (health == "" || health == "healthy") {
-			listenAddress := existing.ListenAddress
-			if listenAddress == "" {
-				listenAddress = "127.0.0.1:" + fmt.Sprintf("%d", task.GetHostPort())
-			}
-			if err := e.httpProbe(listenAddress, defaultString(task.GetHttpHealthPath(), "/health"), defaultCode(task.GetHttpExpectedCode()), defaultTimeout(task.GetHttpTimeoutSecond(), e.cfg.HTTPProbeTimeoutS)); err == nil {
+		listenAddress, err := e.docker.ResolveListenAddress(ctx, existing.ContainerID, int(task.GetContainerPort()))
+		if err == nil {
+			if err := e.verifyHealth(ctx, task, existing.ContainerID, listenAddress); err == nil {
 				return &ContainerRuntime{
 					ContainerID:   existing.ContainerID,
 					ListenAddress: listenAddress,
@@ -231,17 +228,27 @@ func (e *Executor) waitForHealth(ctx context.Context, task *grpcapi.TaskCommand,
 			return ctx.Err()
 		default:
 		}
-		health, err := e.docker.InspectHealth(ctx, runtime.ContainerID)
-		if err == nil && (health == "" || health == "healthy") {
-			if err := e.httpProbe(runtime.ListenAddress, task.GetHttpHealthPath(), int(task.GetHttpExpectedCode()), int(task.GetHttpTimeoutSecond())); err == nil {
-				return nil
-			}
+		if err := e.verifyHealth(ctx, task, runtime.ContainerID, runtime.ListenAddress); err == nil {
+			return nil
 		}
 		if time.Now().After(deadline) {
 			return fmt.Errorf("health check timeout for task %s", task.GetTaskId())
 		}
 		time.Sleep(time.Second)
 	}
+}
+
+func (e *Executor) verifyHealth(ctx context.Context, task *grpcapi.TaskCommand, containerID string, listenAddress string) error {
+	if task.GetDockerHealthCheck() {
+		health, err := e.docker.InspectHealth(ctx, containerID)
+		if err != nil {
+			return err
+		}
+		if health != "" && health != "healthy" {
+			return errors.New("docker health not ready")
+		}
+	}
+	return e.httpProbe(listenAddress, defaultString(task.GetHttpHealthPath(), "/health"), defaultCode(task.GetHttpExpectedCode()), defaultTimeout(task.GetHttpTimeoutSecond(), e.cfg.HTTPProbeTimeoutS))
 }
 
 func (e *Executor) cleanupManagedContainers(ctx context.Context, task *grpcapi.TaskCommand) (int, error) {

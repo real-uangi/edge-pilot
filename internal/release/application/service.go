@@ -563,7 +563,7 @@ func (s *Service) applyTaskSuccess(release *model.Release, task *model.Task, upd
 			ContainerID:      update.GetContainerId(),
 			ImageTag:         release.ImageTag,
 			ListenAddress:    update.GetListenAddress(),
-			HostPort:         payload.HostPort,
+			HostPort:         firstPublishedHostPort(payload.PublishedPorts),
 			ServerName:       payload.ServerName,
 			Healthy:          &healthy,
 			AcceptingTraffic: &accepting,
@@ -653,7 +653,7 @@ func (s *Service) newDeployTask(release *model.Release, spec *dto.ServiceDeploym
 		TargetSlot:        release.TargetSlot,
 		CurrentLiveSlot:   spec.CurrentLiveSlot,
 		ContainerPort:     spec.ContainerPort,
-		HostPort:          hostPortForSlot(spec, release.TargetSlot),
+		DockerHealthCheck: spec.DockerHealthCheck,
 		HTTPHealthPath:    firstNonEmpty(spec.HTTPHealthPath, "/health"),
 		HTTPExpectedCode:  defaultInt(spec.HTTPExpectedCode, 200),
 		HTTPTimeoutSecond: defaultInt(spec.HTTPTimeoutSecond, 5),
@@ -664,6 +664,7 @@ func (s *Service) newDeployTask(release *model.Release, spec *dto.ServiceDeploym
 		Command:           spec.Command,
 		Entrypoint:        spec.Entrypoint,
 		Volumes:           toModelVolumeMounts(spec.Volumes),
+		PublishedPorts:    toModelPublishedPorts(spec.PublishedPorts),
 	}
 	return &model.Task{
 		ID:        uuid.New(),
@@ -687,7 +688,7 @@ func (s *Service) newSwitchTask(release *model.Release, spec *dto.ServiceDeploym
 		TargetSlot:        release.TargetSlot,
 		CurrentLiveSlot:   release.PreviousLiveSlot,
 		ContainerPort:     spec.ContainerPort,
-		HostPort:          hostPortForSlot(spec, release.TargetSlot),
+		DockerHealthCheck: spec.DockerHealthCheck,
 		HTTPHealthPath:    firstNonEmpty(spec.HTTPHealthPath, "/health"),
 		HTTPExpectedCode:  defaultInt(spec.HTTPExpectedCode, 200),
 		HTTPTimeoutSecond: defaultInt(spec.HTTPTimeoutSecond, 5),
@@ -698,6 +699,7 @@ func (s *Service) newSwitchTask(release *model.Release, spec *dto.ServiceDeploym
 		Command:           spec.Command,
 		Entrypoint:        spec.Entrypoint,
 		Volumes:           toModelVolumeMounts(spec.Volumes),
+		PublishedPorts:    toModelPublishedPorts(spec.PublishedPorts),
 	}
 	return &model.Task{
 		ID:        uuid.New(),
@@ -712,23 +714,24 @@ func (s *Service) newSwitchTask(release *model.Release, spec *dto.ServiceDeploym
 
 func (s *Service) newRollbackTask(release *model.Release, spec *dto.ServiceDeploymentSpec) *model.Task {
 	payload := model.TaskPayload{
-		ServiceID:       spec.ID,
-		ServiceKey:      spec.ServiceKey,
-		ImageRepo:       spec.ImageRepo,
-		ImageTag:        release.ImageTag,
-		CommitSHA:       release.CommitSHA,
-		TraceID:         release.TraceID,
-		TargetSlot:      release.PreviousLiveSlot,
-		CurrentLiveSlot: spec.CurrentLiveSlot,
-		ContainerPort:   spec.ContainerPort,
-		HostPort:        hostPortForSlot(spec, release.PreviousLiveSlot),
-		BackendName:     servicecatalogapp.BackendName(spec.ID),
-		ServerName:      servicecatalogapp.ServerName(release.PreviousLiveSlot),
-		PreviousServer:  servicecatalogapp.ServerName(spec.CurrentLiveSlot),
-		Env:             spec.Env,
-		Command:         spec.Command,
-		Entrypoint:      spec.Entrypoint,
-		Volumes:         toModelVolumeMounts(spec.Volumes),
+		ServiceID:         spec.ID,
+		ServiceKey:        spec.ServiceKey,
+		ImageRepo:         spec.ImageRepo,
+		ImageTag:          release.ImageTag,
+		CommitSHA:         release.CommitSHA,
+		TraceID:           release.TraceID,
+		TargetSlot:        release.PreviousLiveSlot,
+		CurrentLiveSlot:   spec.CurrentLiveSlot,
+		ContainerPort:     spec.ContainerPort,
+		DockerHealthCheck: spec.DockerHealthCheck,
+		BackendName:       servicecatalogapp.BackendName(spec.ID),
+		ServerName:        servicecatalogapp.ServerName(release.PreviousLiveSlot),
+		PreviousServer:    servicecatalogapp.ServerName(spec.CurrentLiveSlot),
+		Env:               spec.Env,
+		Command:           spec.Command,
+		Entrypoint:        spec.Entrypoint,
+		Volumes:           toModelVolumeMounts(spec.Volumes),
+		PublishedPorts:    toModelPublishedPorts(spec.PublishedPorts),
 	}
 	return &model.Task{
 		ID:        uuid.New(),
@@ -804,13 +807,6 @@ func nextSlot(current model.Slot) model.Slot {
 	return model.SlotBlue
 }
 
-func hostPortForSlot(spec *dto.ServiceDeploymentSpec, slot model.Slot) int {
-	if slot == model.SlotBlue {
-		return spec.BlueHostPort
-	}
-	return spec.GreenHostPort
-}
-
 func toModelVolumeMounts(items []dto.VolumeMount) []model.VolumeMount {
 	out := make([]model.VolumeMount, 0, len(items))
 	for _, item := range items {
@@ -821,6 +817,24 @@ func toModelVolumeMounts(items []dto.VolumeMount) []model.VolumeMount {
 		})
 	}
 	return out
+}
+
+func toModelPublishedPorts(items []dto.PublishedPort) []model.PublishedPort {
+	out := make([]model.PublishedPort, 0, len(items))
+	for _, item := range items {
+		out = append(out, model.PublishedPort{
+			HostPort:      item.HostPort,
+			ContainerPort: item.ContainerPort,
+		})
+	}
+	return out
+}
+
+func firstPublishedHostPort(items []model.PublishedPort) int {
+	if len(items) == 0 {
+		return 0
+	}
+	return items[0].HostPort
 }
 
 func getJSON[T any](value *commondb.JSONB[T]) T {

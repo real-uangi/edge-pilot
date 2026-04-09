@@ -69,6 +69,11 @@ message VolumeMount {
   bool read_only = 3;
 }
 
+message PublishedPort {
+  int32 host_port = 1;
+  int32 container_port = 2;
+}
+
 message TaskCommand {
   string task_id = 1;
   string release_id = 2;
@@ -83,7 +88,7 @@ message TaskCommand {
   Slot target_slot = 11;
   Slot current_live_slot = 12;
   int32 container_port = 13;
-  int32 host_port = 14;
+  bool docker_health_check = 14;
   string http_health_path = 15;
   int32 http_expected_code = 16;
   int32 http_timeout_second = 17;
@@ -94,6 +99,7 @@ message TaskCommand {
   repeated string command = 22;
   repeated string entrypoint = 23;
   repeated VolumeMount volumes = 24;
+  repeated PublishedPort published_ports = 25;
 }
 
 message TaskUpdate {
@@ -116,9 +122,8 @@ message ProxyServiceConfig {
   string backend_name = 5;
   string blue_server_name = 6;
   string green_server_name = 7;
-  int32 blue_host_port = 8;
-  int32 green_host_port = 9;
-  Slot current_live_slot = 10;
+  int32 container_port = 8;
+  Slot current_live_slot = 9;
 }
 
 message ProxyConfigSnapshot {

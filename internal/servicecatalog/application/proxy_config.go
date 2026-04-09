@@ -21,8 +21,7 @@ type ProxyServiceConfig struct {
 	RoutePathPrefix string
 	BackendName     string
 	CurrentLiveSlot model.Slot
-	BlueHostPort    int
-	GreenHostPort   int
+	ContainerPort   int
 }
 
 func NormalizeRouteHost(value string) string {
@@ -74,8 +73,7 @@ func BuildProxyServiceConfigs(services []model.Service) []ProxyServiceConfig {
 			RoutePathPrefix: NormalizeRoutePathPrefix(item.RoutePathPrefix),
 			BackendName:     BackendName(item.ID),
 			CurrentLiveSlot: item.CurrentLiveSlot,
-			BlueHostPort:    item.BlueHostPort,
-			GreenHostPort:   item.GreenHostPort,
+			ContainerPort:   item.ContainerPort,
 		})
 	}
 	sort.Slice(out, func(i, j int) bool {
