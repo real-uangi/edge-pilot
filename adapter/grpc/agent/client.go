@@ -8,6 +8,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/real-uangi/allingo/common/log"
 	"go.uber.org/fx"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
@@ -18,6 +19,7 @@ type Client struct {
 	executor *agentapp.Executor
 	proxy    agentapp.ProxyRuntime
 	state    *agentapp.RuntimeState
+	logger   *log.StdLogger
 }
 
 func NewClient(cfg *config.AgentRuntimeConfig, executor *agentapp.Executor, proxy agentapp.ProxyRuntime, state *agentapp.RuntimeState) *Client {
@@ -26,6 +28,7 @@ func NewClient(cfg *config.AgentRuntimeConfig, executor *agentapp.Executor, prox
 		executor: executor,
 		proxy:    proxy,
 		state:    state,
+		logger:   log.NewStdLogger("agent.grpc-client"),
 	}
 }
 
@@ -51,12 +54,14 @@ func (c *Client) run(ctx context.Context) {
 		default:
 		}
 		if err := c.connectOnce(ctx); err != nil {
+			c.logger.Errorf(err, "grpc client disconnected, retrying in 3s: agentId=%s addr=%s", c.cfg.AgentID, c.cfg.ControlPlaneAddr)
 			time.Sleep(3 * time.Second)
 		}
 	}
 }
 
 func (c *Client) connectOnce(ctx context.Context) error {
+	c.logger.Infof("connecting to control-plane: agentId=%s addr=%s", c.cfg.AgentID, c.cfg.ControlPlaneAddr)
 	conn, err := grpc.DialContext(
 		ctx,
 		c.cfg.ControlPlaneAddr,
@@ -77,7 +82,9 @@ func (c *Client) connectOnce(ctx context.Context) error {
 	go func() {
 		for msg := range outbound {
 			sendMu.Lock()
-			_ = stream.Send(msg)
+			if err := stream.Send(msg); err != nil {
+				c.logger.Errorf(err, "failed to send grpc message: agentId=%s addr=%s", c.cfg.AgentID, c.cfg.ControlPlaneAddr)
+			}
 			sendMu.Unlock()
 		}
 	}()
@@ -93,6 +100,7 @@ func (c *Client) connectOnce(ctx context.Context) error {
 			},
 		},
 	}
+	c.logger.Infof("grpc hello sent: agentId=%s version=%s", c.cfg.AgentID, c.cfg.AgentVersion)
 
 	heartbeatTicker := time.NewTicker(5 * time.Second)
 	statsTicker := time.NewTicker(15 * time.Second)
@@ -115,7 +123,11 @@ func (c *Client) connectOnce(ctx context.Context) error {
 				}
 			case <-statsTicker.C:
 				stats, err := c.executor.CollectStats(ctx)
-				if err == nil && len(stats) > 0 {
+				if err != nil {
+					c.logger.Errorf(err, "failed to collect stats: agentId=%s", c.cfg.AgentID)
+					continue
+				}
+				if len(stats) > 0 {
 					outbound <- &grpcapi.AgentMessage{
 						Payload: &grpcapi.AgentMessage_Stats{
 							Stats: &grpcapi.StatsReport{
@@ -133,26 +145,36 @@ func (c *Client) connectOnce(ctx context.Context) error {
 		msg, err := stream.Recv()
 		if err != nil {
 			close(outbound)
+			c.logger.Errorf(err, "grpc stream receive failed: agentId=%s addr=%s", c.cfg.AgentID, c.cfg.ControlPlaneAddr)
 			return err
+		}
+		if msg.GetAck() != nil {
+			c.logger.Infof("grpc connected: agentId=%s message=%s", c.cfg.AgentID, msg.GetAck().GetMessage())
+			continue
 		}
 		if msg.GetTask() != nil {
 			task := msg.GetTask()
+			c.logger.Infof("received task: agentId=%s taskId=%s type=%s serviceKey=%s", c.cfg.AgentID, task.GetTaskId(), task.GetType().String(), task.GetServiceKey())
 			go c.handleTask(ctx, task, outbound)
 			continue
 		}
 		if msg.GetProxyConfig() != nil {
 			if err := c.proxy.ApplySnapshot(ctx, msg.GetProxyConfig()); err != nil {
+				c.logger.Errorf(err, "failed to apply proxy snapshot: agentId=%s services=%d", c.cfg.AgentID, len(msg.GetProxyConfig().GetServices()))
 				continue
 			}
+			c.logger.Infof("proxy snapshot applied: agentId=%s services=%d", c.cfg.AgentID, len(msg.GetProxyConfig().GetServices()))
 		}
 	}
 }
 
 func (c *Client) handleTask(ctx context.Context, task *grpcapi.TaskCommand, outbound chan<- *grpcapi.AgentMessage) {
 	if !c.state.TryStart(task.GetTaskId()) {
+		c.logger.Infof("skip duplicated running task: agentId=%s taskId=%s", c.cfg.AgentID, task.GetTaskId())
 		return
 	}
 	defer c.state.Done(task.GetTaskId())
+	c.logger.Infof("start task execution: agentId=%s taskId=%s type=%s serviceKey=%s", c.cfg.AgentID, task.GetTaskId(), task.GetType().String(), task.GetServiceKey())
 	err := c.executor.Execute(ctx, task, func(update *grpcapi.TaskUpdate) error {
 		outbound <- &grpcapi.AgentMessage{
 			Payload: &grpcapi.AgentMessage_TaskUpdate{
@@ -162,6 +184,7 @@ func (c *Client) handleTask(ctx context.Context, task *grpcapi.TaskCommand, outb
 		return nil
 	})
 	if err != nil {
+		c.logger.Errorf(err, "task execution failed: agentId=%s taskId=%s type=%s", c.cfg.AgentID, task.GetTaskId(), task.GetType().String())
 		step := "execution_failed"
 		if execErr, ok := err.(*agentapp.TaskExecutionError); ok && execErr.Step != "" {
 			step = execErr.Step
@@ -176,5 +199,7 @@ func (c *Client) handleTask(ctx context.Context, task *grpcapi.TaskCommand, outb
 				},
 			},
 		}
+		return
 	}
+	c.logger.Infof("task execution finished: agentId=%s taskId=%s type=%s", c.cfg.AgentID, task.GetTaskId(), task.GetType().String())
 }

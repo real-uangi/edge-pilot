@@ -14,10 +14,13 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/real-uangi/allingo/common/log"
 )
 
 type DockerClient struct {
 	httpClient *http.Client
+	logger     *log.StdLogger
 }
 
 func NewRawDockerClient(cfg *config.AgentRuntimeConfig) *DockerClient {
@@ -28,11 +31,28 @@ func NewRawDockerClient(cfg *config.AgentRuntimeConfig) *DockerClient {
 	}
 	return &DockerClient{
 		httpClient: &http.Client{Transport: transport, Timeout: 15 * time.Second},
+		logger:     log.NewStdLogger("agent.docker"),
 	}
 }
 
 func NewDockerClient(cfg *config.AgentRuntimeConfig) application.DockerRuntime {
 	return NewRawDockerClient(cfg)
+}
+
+func (c *DockerClient) Ping(ctx context.Context) error {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "http://docker/_ping", nil)
+	if err != nil {
+		return err
+	}
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode >= 300 {
+		return fmt.Errorf("docker ping failed: %s", resp.Status)
+	}
+	return nil
 }
 
 func (c *DockerClient) DeployContainer(ctx context.Context, task *grpcapi.TaskCommand) (*application.ContainerRuntime, error) {

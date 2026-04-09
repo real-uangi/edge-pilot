@@ -55,7 +55,13 @@ func NewManagedProxyRuntime(cfg *config.AgentRuntimeConfig, docker *DockerClient
 func StartManagedProxyRuntime(lc fx.Lifecycle, runtime *ManagedProxyRuntime) {
 	ctx, cancel := context.WithCancel(context.Background())
 	lc.Append(fx.Hook{
-		OnStart: func(context.Context) error {
+		OnStart: func(startCtx context.Context) error {
+			runtime.logger.Infof("checking docker socket connectivity: agentId=%s", runtime.cfg.AgentID)
+			if err := runtime.docker.Ping(startCtx); err != nil {
+				runtime.logger.Errorf(err, "docker socket is not accessible: agentId=%s socket=%s", runtime.cfg.AgentID, runtime.cfg.DockerSocketPath)
+				return err
+			}
+			runtime.logger.Infof("docker socket is accessible: agentId=%s socket=%s", runtime.cfg.AgentID, runtime.cfg.DockerSocketPath)
 			go runtime.runSelfHeal(ctx)
 			return nil
 		},
@@ -101,6 +107,7 @@ func (m *ManagedProxyRuntime) ApplySnapshot(ctx context.Context, snapshot *grpca
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.desired = cloneSnapshot(snapshot)
+	m.logger.Infof("received proxy snapshot: agentId=%s services=%d frontend=%s", m.cfg.AgentID, len(snapshot.GetServices()), snapshot.GetFrontendName())
 	return m.ensureReadyLocked(ctx)
 }
 
@@ -148,6 +155,7 @@ func (m *ManagedProxyRuntime) ensureReadyLocked(ctx context.Context) error {
 }
 
 func (m *ManagedProxyRuntime) ensureProxyStackLocked(ctx context.Context) error {
+	m.logger.Infof("ensuring managed proxy stack: container=%s network=%s", m.cfg.ProxyContainerName, m.cfg.ProxyNetworkName)
 	if err := m.docker.ensureNetwork(ctx, m.cfg.ProxyNetworkName, m.cfg.ProxyNetworkSubnet); err != nil {
 		return err
 	}
@@ -191,10 +199,12 @@ func (m *ManagedProxyRuntime) bootstrapBaseFiles(ctx context.Context) error {
 		"haproxy.cfg":      m.baseHAProxyConfig(),
 		"dataplaneapi.yml": m.dataPlaneConfig(),
 	}
+	m.logger.Infof("bootstrapping proxy config files: container=%s", m.cfg.ProxyContainerName)
 	return m.docker.writeVolumeFiles(ctx, m.cfg.ProxyHelperImage, m.cfg.HAProxyConfigVolume, files)
 }
 
 func (m *ManagedProxyRuntime) reconcileLocked(ctx context.Context, snapshot *grpcapi.ProxyConfigSnapshot) error {
+	m.logger.Infof("reconciling proxy snapshot: agentId=%s services=%d", m.cfg.AgentID, len(snapshot.GetServices()))
 	if err := m.dataplane.ReplaceFrontend(ctx, m.frontendSection(snapshot)); err != nil {
 		return err
 	}
@@ -240,6 +250,7 @@ func (m *ManagedProxyRuntime) reconcileLocked(ctx context.Context, snapshot *grp
 		if _, ok := desiredBackends[name]; ok {
 			continue
 		}
+		m.logger.Infof("removing stale backend from dataplane: backend=%s", name)
 		if err := m.dataplane.DeleteBackend(ctx, name); err != nil {
 			return err
 		}
@@ -362,6 +373,7 @@ func (m *ManagedProxyRuntime) ensureSelfConnectedLocked(ctx context.Context) err
 		return err
 	}
 	if containerID == "" {
+		m.logger.Infof("agent is not running in docker, skip self attach: agentId=%s", m.cfg.AgentID)
 		m.attachedToNetwork = false
 		m.selfContainerID = ""
 		return nil
@@ -369,6 +381,7 @@ func (m *ManagedProxyRuntime) ensureSelfConnectedLocked(ctx context.Context) err
 	if err := m.docker.ensureContainerConnectedToNetwork(ctx, containerID, m.cfg.ProxyNetworkName); err != nil {
 		return err
 	}
+	m.logger.Infof("agent container attached to proxy network: agentId=%s containerId=%s network=%s", m.cfg.AgentID, containerID, m.cfg.ProxyNetworkName)
 	m.attachedToNetwork = true
 	m.selfContainerID = containerID
 	return nil

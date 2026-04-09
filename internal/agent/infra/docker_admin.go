@@ -147,6 +147,7 @@ func (c *DockerClient) ensureNetwork(ctx context.Context, name string, subnet st
 	}
 	if resp.StatusCode == http.StatusNotFound {
 		resp.Body.Close()
+		c.logger.Infof("creating docker network: name=%s subnet=%s", name, subnet)
 		body, err := json.Marshal(dockerNetworkCreateRequest{
 			Name:           name,
 			CheckDuplicate: true,
@@ -191,6 +192,7 @@ func (c *DockerClient) ensureVolume(ctx context.Context, name string) error {
 	}
 	if resp.StatusCode == http.StatusNotFound {
 		resp.Body.Close()
+		c.logger.Infof("creating docker volume: name=%s", name)
 		body, err := json.Marshal(dockerVolumeCreateRequest{Name: name})
 		if err != nil {
 			return err
@@ -218,6 +220,7 @@ func (c *DockerClient) ensureVolume(ctx context.Context, name string) error {
 }
 
 func (c *DockerClient) recreateManagedContainer(ctx context.Context, spec managedContainerSpec) error {
+	c.logger.Infof("creating managed proxy container: name=%s image=%s ip=%s network=%s", spec.Name, spec.Image, spec.IPAddress, spec.Network)
 	labels := cloneStringMap(spec.Labels)
 	labels[proxyStackSpecLabelKey] = specHash(spec)
 	body, err := json.Marshal(dockerCreateContainerRequest{
@@ -284,12 +287,15 @@ func (c *DockerClient) ensureManagedContainer(ctx context.Context, spec managedC
 		return err
 	}
 	if inspect == nil {
+		c.logger.Infof("managed proxy container missing, creating: name=%s", spec.Name)
 		return c.recreateManagedContainer(ctx, spec)
 	}
 	if inspect.Config.Labels[proxyStackLabelKey] != "true" || inspect.Config.Labels[proxyStackRoleLabelKey] != spec.Labels[proxyStackRoleLabelKey] {
+		c.logger.Infof("managed proxy container name conflict: name=%s role=%s", spec.Name, spec.Labels[proxyStackRoleLabelKey])
 		return fmt.Errorf("proxy stack container name conflict: %s is not managed by edge-pilot", spec.Name)
 	}
 	if !managedContainerMatches(inspect, spec) {
+		c.logger.Infof("managed proxy container drift detected, recreating: name=%s currentImage=%s desiredImage=%s", spec.Name, inspect.Config.Image, spec.Image)
 		if err := c.RemoveContainer(ctx, inspect.ID); err != nil {
 			return err
 		}
@@ -298,6 +304,7 @@ func (c *DockerClient) ensureManagedContainer(ctx context.Context, spec managedC
 	if inspect.State.Running {
 		return nil
 	}
+	c.logger.Infof("managed proxy container stopped, restarting: name=%s containerId=%s", spec.Name, inspect.ID)
 	startReq, err := http.NewRequestWithContext(ctx, http.MethodPost, "http://docker/containers/"+inspect.ID+"/start", nil)
 	if err != nil {
 		return err
@@ -324,6 +331,7 @@ func (c *DockerClient) ensureContainerConnectedToNetwork(ctx context.Context, co
 	if _, ok := inspect.NetworkSettings.Networks[networkName]; ok {
 		return nil
 	}
+	c.logger.Infof("connecting container to proxy network: containerId=%s network=%s", containerID, networkName)
 	body, err := json.Marshal(dockerNetworkConnectRequest{Container: containerID})
 	if err != nil {
 		return err
@@ -348,6 +356,7 @@ func (c *DockerClient) writeVolumeFiles(ctx context.Context, helperImage string,
 	if len(files) == 0 {
 		return nil
 	}
+	c.logger.Infof("writing proxy bootstrap files: volume=%s files=%d", volumeName, len(files))
 	helperName := "ep-volume-init-" + strconvNow()
 	spec := managedContainerSpec{
 		Name:   helperName,
