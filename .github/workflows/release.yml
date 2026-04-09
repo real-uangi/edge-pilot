@@ -27,6 +27,20 @@ jobs:
           go-version-file: go.mod
           cache: true
 
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Enable pnpm
+        run: corepack enable
+
+      - name: Install frontend dependencies
+        run: pnpm --dir web/default install --frozen-lockfile
+
+      - name: Build frontend
+        run: pnpm --dir web/default build
+
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
 

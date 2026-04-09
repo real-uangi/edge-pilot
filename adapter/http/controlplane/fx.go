@@ -13,7 +13,9 @@ var Module = fx.Module(
 	"http-control-plane",
 	fx.Invoke(
 		basehttp.SetGlobalMiddleware,
+		basehttp.ApplyProxyTrust,
 		baseroutes.SetMetricsRoutes,
+		routes.SetAuthRoutes,
 		routes.SetAdminAgentRoutes,
 		routes.SetAdminServiceRoutes,
 		routes.SetAdminReleaseRoutes,

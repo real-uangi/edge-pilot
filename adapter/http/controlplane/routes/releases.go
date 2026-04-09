@@ -1,7 +1,10 @@
 package routes
 
 import (
+	adaptermiddleware "edge-pilot/adapter/http/middleware"
+	adminauthapp "edge-pilot/internal/adminauth/application"
 	releaseapp "edge-pilot/internal/release/application"
+	"edge-pilot/internal/shared/config"
 	"edge-pilot/internal/shared/dto"
 
 	"net/http"
@@ -9,13 +12,26 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 	"github.com/real-uangi/allingo/common/api"
-	"github.com/real-uangi/allingo/common/auth"
 	"github.com/real-uangi/allingo/common/result"
 )
 
-func SetAdminReleaseRoutes(engine *gin.Engine, releases *releaseapp.Service) {
+type releaseAdminActions interface {
+	List() ([]dto.ReleaseOutput, error)
+	Get(id uuid.UUID) (*dto.ReleaseOutput, error)
+	ListTaskSnapshots(releaseID uuid.UUID) ([]dto.TaskSnapshot, error)
+	Start(id uuid.UUID, operator string) (*dto.ReleaseOutput, error)
+	Skip(id uuid.UUID, operator string) (*dto.ReleaseOutput, error)
+	ConfirmSwitch(id uuid.UUID, operator string) (*dto.ReleaseOutput, error)
+	Rollback(id uuid.UUID, operator string) (*dto.ReleaseOutput, error)
+}
+
+func SetAdminReleaseRoutes(engine *gin.Engine, releases *releaseapp.Service, auth *adminauthapp.Service, cfg *config.AdminAuthConfig) {
 	admin := engine.Group("/api/admin")
-	admin.Use(auth.InternalOnlyMiddleware)
+	admin.Use(adaptermiddleware.RequireAdminSession(auth, cfg))
+	registerAdminReleaseRoutes(admin, releases)
+}
+
+func registerAdminReleaseRoutes(admin *gin.RouterGroup, releases releaseAdminActions) {
 	admin.GET("/releases", api.NoArgsFunc(func() ([]dto.ReleaseOutput, error) {
 		return releases.List()
 	}))
@@ -51,7 +67,7 @@ func SetAdminReleaseRoutes(engine *gin.Engine, releases *releaseapp.Service) {
 			c.Render(api.HandleErr(err))
 			return
 		}
-		output, err := releases.Start(id, input.Operator)
+		output, err := releases.Start(id, adaptermiddleware.CurrentAdminUsername(c))
 		if err != nil {
 			c.Render(api.HandleErr(err))
 			return
@@ -69,7 +85,7 @@ func SetAdminReleaseRoutes(engine *gin.Engine, releases *releaseapp.Service) {
 			c.Render(api.HandleErr(err))
 			return
 		}
-		output, err := releases.Skip(id, input.Operator)
+		output, err := releases.Skip(id, adaptermiddleware.CurrentAdminUsername(c))
 		if err != nil {
 			c.Render(api.HandleErr(err))
 			return
@@ -87,7 +103,7 @@ func SetAdminReleaseRoutes(engine *gin.Engine, releases *releaseapp.Service) {
 			c.Render(api.HandleErr(err))
 			return
 		}
-		output, err := releases.ConfirmSwitch(id, input.Operator)
+		output, err := releases.ConfirmSwitch(id, adaptermiddleware.CurrentAdminUsername(c))
 		if err != nil {
 			c.Render(api.HandleErr(err))
 			return
@@ -105,7 +121,7 @@ func SetAdminReleaseRoutes(engine *gin.Engine, releases *releaseapp.Service) {
 			c.Render(api.HandleErr(err))
 			return
 		}
-		output, err := releases.Rollback(id, input.Operator)
+		output, err := releases.Rollback(id, adaptermiddleware.CurrentAdminUsername(c))
 		if err != nil {
 			c.Render(api.HandleErr(err))
 			return

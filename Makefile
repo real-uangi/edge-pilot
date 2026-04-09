@@ -9,7 +9,7 @@ LDFLAGS = \
 	-X edge-pilot/internal/shared/buildinfo.Commit=$(COMMIT) \
 	-X edge-pilot/internal/shared/buildinfo.BuildTime=$(BUILD_TIME)
 
-.PHONY: proto build build-control-plane build-agent
+.PHONY: proto build build-control-plane build-agent web-install web-build
 
 proto:
 	PATH="$(shell go env GOPATH)/bin:$$PATH" protoc \
@@ -23,7 +23,13 @@ proto:
 
 build: build-control-plane build-agent
 
-build-control-plane:
+web-install:
+	cd web/default && CI=1 pnpm install --frozen-lockfile
+
+web-build: web-install
+	cd web/default && pnpm build
+
+build-control-plane: web-build
 	mkdir -p dist
 	go build -ldflags '$(strip $(LDFLAGS))' -o dist/edge-pilot-control ./cmd/control-plane
 

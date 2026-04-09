@@ -4,6 +4,7 @@ import (
 	controlgrpc "edge-pilot/adapter/grpc/controlplane"
 	controlhttp "edge-pilot/adapter/http/controlplane"
 	"edge-pilot/adapter/schedule"
+	"edge-pilot/internal/adminauth"
 	"edge-pilot/internal/agent"
 	"edge-pilot/internal/observability"
 	"edge-pilot/internal/release"
@@ -26,6 +27,7 @@ func RunControlPlane() {
 	app.Current().Option(model.ControlPlaneModule)
 	app.Current().Option(servicecatalog.ControlPlaneModule)
 	app.Current().Option(agent.ControlPlaneModule)
+	app.Current().Option(adminauth.ControlPlaneModule)
 	app.Current().Option(release.ControlPlaneModule)
 	app.Current().Option(observability.ControlPlaneModule)
 	app.Current().Option(controlgrpc.Module)

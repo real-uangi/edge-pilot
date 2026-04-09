@@ -1,20 +1,22 @@
 package routes
 
 import (
+	adaptermiddleware "edge-pilot/adapter/http/middleware"
+	adminauthapp "edge-pilot/internal/adminauth/application"
 	agentapp "edge-pilot/internal/agent/application"
+	"edge-pilot/internal/shared/config"
 	"edge-pilot/internal/shared/dto"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 	"github.com/real-uangi/allingo/common/api"
-	"github.com/real-uangi/allingo/common/auth"
 	"github.com/real-uangi/allingo/common/result"
 )
 
-func SetAdminAgentRoutes(engine *gin.Engine, agents *agentapp.RegistryService) {
+func SetAdminAgentRoutes(engine *gin.Engine, agents *agentapp.RegistryService, auth *adminauthapp.Service, cfg *config.AdminAuthConfig) {
 	admin := engine.Group("/api/admin")
-	admin.Use(auth.InternalOnlyMiddleware)
+	admin.Use(adaptermiddleware.RequireAdminSession(auth, cfg))
 	admin.POST("/agents", func(c *gin.Context) {
 		output, err := agents.CreateAgent()
 		if err != nil {

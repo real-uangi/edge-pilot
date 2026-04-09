@@ -1,0 +1,296 @@
+.page {
+  display: grid;
+  gap: 24px;
+}
+
+.hero {
+  display: grid;
+  gap: 10px;
+  padding: 28px;
+  background: #000000;
+  color: #ffffff;
+  border-radius: 18px;
+}
+
+.eyebrow {
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: rgba(255, 255, 255, 0.72);
+}
+
+.title {
+  margin: 0;
+  font-size: clamp(28px, 4vw, 48px);
+  line-height: 1.1;
+}
+
+.subtitle {
+  margin: 0;
+  max-width: 820px;
+  color: rgba(255, 255, 255, 0.76);
+  line-height: 1.5;
+}
+
+.sectionHeader {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.sectionTitle {
+  margin: 0;
+  font-size: 28px;
+  line-height: 1.15;
+}
+
+.sectionCopy {
+  margin: 0;
+  color: var(--ep-body);
+}
+
+.sectionCard {
+  background: #ffffff;
+  border-radius: var(--ep-radius);
+  box-shadow: 0 4px 16px var(--ep-shadow);
+  padding: 24px;
+  display: grid;
+  gap: 18px;
+}
+
+.cardGrid {
+  display: grid;
+  gap: 16px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.statCard {
+  padding: 20px;
+  background: #ffffff;
+  border-radius: var(--ep-radius);
+  box-shadow: 0 4px 16px var(--ep-shadow);
+  display: grid;
+  gap: 8px;
+}
+
+.metricLabel {
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--ep-body);
+}
+
+.metricValue {
+  font-size: clamp(28px, 4vw, 42px);
+  font-weight: 800;
+  line-height: 1;
+}
+
+.metricMeta {
+  color: var(--ep-body);
+  font-size: 14px;
+}
+
+.buttonRow {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.primaryButton,
+.secondaryButton,
+.dangerButton,
+.ghostButton {
+  border: 0;
+  border-radius: var(--ep-pill);
+  padding: 12px 16px;
+  font-weight: 700;
+}
+
+.primaryButton {
+  background: #000000;
+  color: #ffffff;
+}
+
+.secondaryButton {
+  background: var(--ep-chip);
+  color: #000000;
+}
+
+.dangerButton {
+  background: #000000;
+  color: #ffffff;
+}
+
+.ghostButton {
+  background: #ffffff;
+  color: #000000;
+  box-shadow: inset 0 0 0 1px #000000;
+}
+
+.tableWrap {
+  overflow-x: auto;
+}
+
+.tableLink {
+  font-weight: 700;
+  text-decoration: underline;
+}
+
+.muted {
+  color: var(--ep-body);
+}
+
+.strong {
+  font-weight: 700;
+}
+
+.fieldGrid {
+  display: grid;
+  gap: 16px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.field {
+  display: grid;
+  gap: 8px;
+}
+
+.fieldWide {
+  grid-column: 1 / -1;
+}
+
+.label {
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.hint {
+  font-size: 12px;
+  color: var(--ep-body);
+}
+
+.input,
+.textarea,
+.select {
+  width: 100%;
+  border: 1px solid #000000;
+  border-radius: 8px;
+  padding: 12px 14px;
+  background: #ffffff;
+  color: #000000;
+}
+
+.textarea {
+  min-height: 120px;
+  resize: vertical;
+}
+
+.checkboxRow {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+
+.error {
+  color: #000000;
+  font-weight: 700;
+  background: #f3f3f3;
+  border-radius: 12px;
+  padding: 14px 16px;
+}
+
+.credentialCard {
+  background: #000000;
+  color: #ffffff;
+  border-radius: 16px;
+  padding: 20px;
+  display: grid;
+  gap: 10px;
+}
+
+.credentialValue {
+  word-break: break-all;
+  font-family: "SFMono-Regular", ui-monospace, monospace;
+  font-size: 13px;
+}
+
+.keyValueGrid {
+  display: grid;
+  gap: 16px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.keyValue {
+  display: grid;
+  gap: 4px;
+  padding: 16px;
+  border-radius: 12px;
+  background: #f7f7f7;
+}
+
+.key {
+  font-size: 12px;
+  color: var(--ep-body);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.value {
+  font-size: 16px;
+  font-weight: 700;
+  word-break: break-word;
+}
+
+.statusPill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 12px;
+  border-radius: var(--ep-pill);
+  font-size: 12px;
+  font-weight: 700;
+  background: var(--ep-chip);
+}
+
+.tonedefault {
+  background: var(--ep-chip);
+  color: #000000;
+}
+
+.tonesuccess {
+  background: #f3f3f3;
+  color: #000000;
+}
+
+.tonedanger {
+  background: #e2e2e2;
+  color: #000000;
+}
+
+.tonewarning {
+  background: #efefef;
+  color: #000000;
+}
+
+.tonedark {
+  background: #000000;
+  color: #ffffff;
+}
+
+.split {
+  display: grid;
+  gap: 16px;
+  grid-template-columns: 1.4fr 1fr;
+}
+
+@media (max-width: 980px) {
+  .cardGrid,
+  .fieldGrid,
+  .keyValueGrid,
+  .split {
+    grid-template-columns: 1fr;
+  }
+}

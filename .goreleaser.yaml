@@ -4,6 +4,8 @@ project_name: edge-pilot
 
 before:
   hooks:
+    - pnpm --dir web/default install --frozen-lockfile
+    - pnpm --dir web/default build
     - go test ./...
 
 builds:
