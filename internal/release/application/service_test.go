@@ -80,22 +80,21 @@ func TestCreateFromCIDeduplicatesSameImageRequest(t *testing.T) {
 	enabled := true
 	dockerHealth := true
 	service := &model.Service{
-		ID:                 uuid.New(),
-		ServiceKey:         "svc-a",
-		Name:               "svc-a",
-		AgentID:            "agent-a",
-		ImageRepo:          "repo/app",
-		ContainerPort:      8080,
-		BlueHostPort:       18080,
-		GreenHostPort:      18081,
-		DockerHealthCheck:  &dockerHealth,
-		HTTPHealthPath:     "/health",
-		HTTPExpectedCode:   200,
-		HTTPTimeoutSecond:  5,
-		HAProxyBackend:     "be_api",
-		HAProxyBlueServer:  "srv_blue",
-		HAProxyGreenServer: "srv_green",
-		Enabled:            &enabled,
+		ID:                uuid.New(),
+		ServiceKey:        "svc-a",
+		Name:              "svc-a",
+		AgentID:           "agent-a",
+		ImageRepo:         "repo/app",
+		ContainerPort:     8080,
+		BlueHostPort:      18080,
+		GreenHostPort:     18081,
+		DockerHealthCheck: &dockerHealth,
+		HTTPHealthPath:    "/health",
+		HTTPExpectedCode:  200,
+		HTTPTimeoutSecond: 5,
+		RouteHost:         "svc-a.example.com",
+		RoutePathPrefix:   "/",
+		Enabled:           &enabled,
 	}
 	serviceRepo.ensure()
 	serviceRepo.byID[service.ID] = service
@@ -195,22 +194,21 @@ func TestStartQueuedReleaseDispatchesDeployTask(t *testing.T) {
 	online := true
 	now := time.Now()
 	service := &model.Service{
-		ID:                 uuid.New(),
-		ServiceKey:         "svc-a",
-		Name:               "svc-a",
-		AgentID:            "agent-a",
-		ImageRepo:          "repo/app",
-		ContainerPort:      8080,
-		BlueHostPort:       18080,
-		GreenHostPort:      18081,
-		DockerHealthCheck:  &dockerHealth,
-		HTTPHealthPath:     "/health",
-		HTTPExpectedCode:   200,
-		HTTPTimeoutSecond:  5,
-		HAProxyBackend:     "be_api",
-		HAProxyBlueServer:  "srv_blue",
-		HAProxyGreenServer: "srv_green",
-		Enabled:            &enabled,
+		ID:                uuid.New(),
+		ServiceKey:        "svc-a",
+		Name:              "svc-a",
+		AgentID:           "agent-a",
+		ImageRepo:         "repo/app",
+		ContainerPort:     8080,
+		BlueHostPort:      18080,
+		GreenHostPort:     18081,
+		DockerHealthCheck: &dockerHealth,
+		HTTPHealthPath:    "/health",
+		HTTPExpectedCode:  200,
+		HTTPTimeoutSecond: 5,
+		RouteHost:         "svc-a.example.com",
+		RoutePathPrefix:   "/",
+		Enabled:           &enabled,
 	}
 	serviceRepo.ensure()
 	serviceRepo.byID[service.ID] = service
@@ -765,11 +763,32 @@ func (r *fakeServiceRepo) GetByKey(key string) (*model.Service, error) {
 	return r.byKey[key], nil
 }
 
+func (r *fakeServiceRepo) GetByRoute(agentID string, routeHost string, routePathPrefix string) (*model.Service, error) {
+	r.ensure()
+	for _, item := range r.byID {
+		if item.AgentID == agentID && item.RouteHost == routeHost && item.RoutePathPrefix == routePathPrefix {
+			return item, nil
+		}
+	}
+	return nil, nil
+}
+
 func (r *fakeServiceRepo) List() ([]model.Service, error) {
 	r.ensure()
 	out := make([]model.Service, 0, len(r.byID))
 	for _, item := range r.byID {
 		out = append(out, *item)
+	}
+	return out, nil
+}
+
+func (r *fakeServiceRepo) ListByAgent(agentID string) ([]model.Service, error) {
+	r.ensure()
+	out := make([]model.Service, 0, len(r.byID))
+	for _, item := range r.byID {
+		if item.AgentID == agentID {
+			out = append(out, *item)
+		}
 	}
 	return out, nil
 }

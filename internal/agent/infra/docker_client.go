@@ -20,7 +20,7 @@ type DockerClient struct {
 	httpClient *http.Client
 }
 
-func NewDockerClient(cfg *config.AgentRuntimeConfig) application.DockerRuntime {
+func NewRawDockerClient(cfg *config.AgentRuntimeConfig) *DockerClient {
 	transport := &http.Transport{
 		DialContext: func(ctx context.Context, network string, addr string) (net.Conn, error) {
 			return (&net.Dialer{}).DialContext(ctx, "unix", cfg.DockerSocketPath)
@@ -29,6 +29,10 @@ func NewDockerClient(cfg *config.AgentRuntimeConfig) application.DockerRuntime {
 	return &DockerClient{
 		httpClient: &http.Client{Transport: transport, Timeout: 15 * time.Second},
 	}
+}
+
+func NewDockerClient(cfg *config.AgentRuntimeConfig) application.DockerRuntime {
+	return NewRawDockerClient(cfg)
 }
 
 func (c *DockerClient) DeployContainer(ctx context.Context, task *grpcapi.TaskCommand) (*application.ContainerRuntime, error) {
@@ -210,8 +214,9 @@ type dockerCreateRequest struct {
 }
 
 type dockerHostConfig struct {
-	PortBindings map[string][]dockerPortBinding `json:"PortBindings,omitempty"`
-	Binds        []string                       `json:"Binds,omitempty"`
+	PortBindings  map[string][]dockerPortBinding `json:"PortBindings,omitempty"`
+	Binds         []string                       `json:"Binds,omitempty"`
+	RestartPolicy dockerRestartPolicy            `json:"RestartPolicy,omitempty"`
 }
 
 type dockerPortBinding struct {

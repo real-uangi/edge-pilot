@@ -19,7 +19,9 @@ type DockerRuntime interface {
 	ListManagedContainers(context.Context, string, string) ([]*ManagedContainer, error)
 }
 
-type HAProxyRuntime interface {
+type ProxyRuntime interface {
+	EnsureReady(context.Context) error
+	ApplySnapshot(context.Context, *grpcapi.ProxyConfigSnapshot) error
 	SetServerAddress(context.Context, string, string, string, int) error
 	EnableServer(context.Context, string, string) error
 	DisableServer(context.Context, string, string) error
@@ -34,7 +36,7 @@ type ContainerRuntime struct {
 type Executor struct {
 	cfg       *config.AgentRuntimeConfig
 	docker    DockerRuntime
-	haproxy   HAProxyRuntime
+	proxy     ProxyRuntime
 	httpProbe func(string, string, int, int) error
 }
 
@@ -51,11 +53,11 @@ func (e *TaskExecutionError) Unwrap() error {
 	return e.Err
 }
 
-func NewExecutor(cfg *config.AgentRuntimeConfig, docker DockerRuntime, haproxy HAProxyRuntime) *Executor {
+func NewExecutor(cfg *config.AgentRuntimeConfig, docker DockerRuntime, proxy ProxyRuntime) *Executor {
 	return &Executor{
 		cfg:       cfg,
 		docker:    docker,
-		haproxy:   haproxy,
+		proxy:     proxy,
 		httpProbe: probeHTTP,
 	}
 }
@@ -86,10 +88,13 @@ func (e *Executor) Execute(ctx context.Context, task *grpcapi.TaskCommand, repor
 }
 
 func (e *Executor) CollectStats(ctx context.Context) ([]*grpcapi.BackendStatPoint, error) {
-	return e.haproxy.ShowStats(ctx)
+	return e.proxy.ShowStats(ctx)
 }
 
 func (e *Executor) executeDeploy(ctx context.Context, task *grpcapi.TaskCommand, report func(*grpcapi.TaskUpdate) error) error {
+	if err := e.proxy.EnsureReady(ctx); err != nil {
+		return &TaskExecutionError{Step: "proxy_stack_not_ready", Err: err}
+	}
 	runtime, reused, err := e.ensureDeployContainer(ctx, task)
 	if err != nil {
 		return err
@@ -139,14 +144,17 @@ func (e *Executor) executeDeploy(ctx context.Context, task *grpcapi.TaskCommand,
 }
 
 func (e *Executor) executeTrafficSwitch(ctx context.Context, task *grpcapi.TaskCommand, report func(*grpcapi.TaskUpdate) error) error {
-	if err := e.haproxy.SetServerAddress(ctx, task.GetBackendName(), task.GetServerName(), "127.0.0.1", int(task.GetHostPort())); err != nil {
+	if err := e.proxy.EnsureReady(ctx); err != nil {
+		return &TaskExecutionError{Step: "proxy_stack_not_ready", Err: err}
+	}
+	if err := e.proxy.SetServerAddress(ctx, task.GetBackendName(), task.GetServerName(), "127.0.0.1", int(task.GetHostPort())); err != nil {
 		return err
 	}
-	if err := e.haproxy.EnableServer(ctx, task.GetBackendName(), task.GetServerName()); err != nil {
+	if err := e.proxy.EnableServer(ctx, task.GetBackendName(), task.GetServerName()); err != nil {
 		return err
 	}
 	if task.GetPreviousServer() != "" {
-		if err := e.haproxy.DisableServer(ctx, task.GetBackendName(), task.GetPreviousServer()); err != nil {
+		if err := e.proxy.DisableServer(ctx, task.GetBackendName(), task.GetPreviousServer()); err != nil {
 			return err
 		}
 	}

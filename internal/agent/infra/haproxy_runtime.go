@@ -3,8 +3,6 @@ package infra
 import (
 	"bufio"
 	"context"
-	"edge-pilot/internal/agent/application"
-	"edge-pilot/internal/shared/config"
 	"edge-pilot/internal/shared/grpcapi"
 	"fmt"
 	"net"
@@ -14,12 +12,12 @@ import (
 )
 
 type HAProxyRuntimeClient struct {
-	socketPath string
+	resolveAddress func() string
 }
 
-func NewHAProxyRuntimeClient(cfg *config.AgentRuntimeConfig) application.HAProxyRuntime {
+func newHAProxyRuntimeClient(resolveAddress func() string) *HAProxyRuntimeClient {
 	return &HAProxyRuntimeClient{
-		socketPath: cfg.HAProxyRuntimePath,
+		resolveAddress: resolveAddress,
 	}
 }
 
@@ -68,7 +66,11 @@ func (c *HAProxyRuntimeClient) ShowStats(ctx context.Context) ([]*grpcapi.Backen
 }
 
 func (c *HAProxyRuntimeClient) run(ctx context.Context, command string) (string, error) {
-	conn, err := (&net.Dialer{Timeout: 5 * time.Second}).DialContext(ctx, "unix", c.socketPath)
+	address := strings.TrimSpace(c.resolveAddress())
+	if address == "" {
+		return "", fmt.Errorf("haproxy runtime address is empty")
+	}
+	conn, err := (&net.Dialer{Timeout: 5 * time.Second}).DialContext(ctx, "tcp", address)
 	if err != nil {
 		return "", err
 	}

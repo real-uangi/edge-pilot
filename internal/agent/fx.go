@@ -21,9 +21,12 @@ var RuntimeModule = fx.Module(
 	"agent-runtime",
 	fx.Provide(
 		config.LoadAgentRuntimeConfig,
-		infra.NewDockerClient,
-		infra.NewHAProxyRuntimeClient,
+		infra.NewRawDockerClient,
+		func(client *infra.DockerClient) application.DockerRuntime { return client },
+		infra.NewManagedProxyRuntime,
+		func(runtime *infra.ManagedProxyRuntime) application.ProxyRuntime { return runtime },
 		application.NewExecutor,
 		application.NewRuntimeState,
 	),
+	fx.Invoke(infra.StartManagedProxyRuntime),
 )

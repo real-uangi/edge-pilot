@@ -26,7 +26,7 @@ func TestExecuteDeployReusesHealthyManagedContainer(t *testing.T) {
 			"container-1": "",
 		},
 	}
-	executor := NewExecutor(&config.AgentRuntimeConfig{AgentID: "agent-a", HTTPProbeTimeoutS: 1}, docker, &fakeHAProxyRuntime{})
+	executor := NewExecutor(&config.AgentRuntimeConfig{AgentID: "agent-a", HTTPProbeTimeoutS: 1}, docker, &fakeProxyRuntime{})
 	executor.httpProbe = func(string, string, int, int) error { return nil }
 
 	err := executor.Execute(context.Background(), &grpcapi.TaskCommand{
@@ -65,7 +65,7 @@ func TestExecuteDeployFailsOnManagedContainerConflict(t *testing.T) {
 			},
 		},
 	}
-	executor := NewExecutor(&config.AgentRuntimeConfig{AgentID: "agent-a", HTTPProbeTimeoutS: 1}, docker, &fakeHAProxyRuntime{})
+	executor := NewExecutor(&config.AgentRuntimeConfig{AgentID: "agent-a", HTTPProbeTimeoutS: 1}, docker, &fakeProxyRuntime{})
 
 	err := executor.Execute(context.Background(), &grpcapi.TaskCommand{
 		TaskId:     "task-2",
@@ -125,7 +125,7 @@ func TestExecuteTrafficSwitchCleansOnlyCurrentAgentManagedContainers(t *testing.
 			},
 		},
 	}
-	executor := NewExecutor(&config.AgentRuntimeConfig{AgentID: "agent-a", HTTPProbeTimeoutS: 1}, docker, &fakeHAProxyRuntime{})
+	executor := NewExecutor(&config.AgentRuntimeConfig{AgentID: "agent-a", HTTPProbeTimeoutS: 1}, docker, &fakeProxyRuntime{})
 
 	err := executor.Execute(context.Background(), &grpcapi.TaskCommand{
 		TaskId:          "task-3",
@@ -196,20 +196,28 @@ func (f *fakeDockerRuntime) ListManagedContainers(ctx context.Context, agentID s
 	return out, nil
 }
 
-type fakeHAProxyRuntime struct{}
+type fakeProxyRuntime struct{}
 
-func (f *fakeHAProxyRuntime) SetServerAddress(context.Context, string, string, string, int) error {
+func (f *fakeProxyRuntime) EnsureReady(context.Context) error {
 	return nil
 }
 
-func (f *fakeHAProxyRuntime) EnableServer(context.Context, string, string) error {
+func (f *fakeProxyRuntime) ApplySnapshot(context.Context, *grpcapi.ProxyConfigSnapshot) error {
 	return nil
 }
 
-func (f *fakeHAProxyRuntime) DisableServer(context.Context, string, string) error {
+func (f *fakeProxyRuntime) SetServerAddress(context.Context, string, string, string, int) error {
 	return nil
 }
 
-func (f *fakeHAProxyRuntime) ShowStats(context.Context) ([]*grpcapi.BackendStatPoint, error) {
+func (f *fakeProxyRuntime) EnableServer(context.Context, string, string) error {
+	return nil
+}
+
+func (f *fakeProxyRuntime) DisableServer(context.Context, string, string) error {
+	return nil
+}
+
+func (f *fakeProxyRuntime) ShowStats(context.Context) ([]*grpcapi.BackendStatPoint, error) {
 	return nil, nil
 }

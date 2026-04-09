@@ -67,26 +67,25 @@ const (
 type Service struct {
 	ID uuid.UUID `json:"id" gorm:"type:uuid;primaryKey"`
 	commondb.Model
-	ServiceKey         string                             `json:"serviceKey" gorm:"size:128;uniqueIndex;not null"`
-	Name               string                             `json:"name" gorm:"size:255;not null"`
-	AgentID            string                             `json:"agentId" gorm:"size:128;index;not null"`
-	ImageRepo          string                             `json:"imageRepo" gorm:"size:512;not null"`
-	ContainerPort      int                                `json:"containerPort"`
-	BlueHostPort       int                                `json:"blueHostPort"`
-	GreenHostPort      int                                `json:"greenHostPort"`
-	CurrentLiveSlot    Slot                               `json:"currentLiveSlot"`
-	DockerHealthCheck  *bool                              `json:"dockerHealthCheck" gorm:"not null"`
-	HTTPHealthPath     string                             `json:"httpHealthPath" gorm:"size:255"`
-	HTTPExpectedCode   int                                `json:"httpExpectedCode"`
-	HTTPTimeoutSecond  int                                `json:"httpTimeoutSecond"`
-	HAProxyBackend     string                             `json:"haproxyBackend" gorm:"size:255"`
-	HAProxyBlueServer  string                             `json:"haproxyBlueServer" gorm:"size:255"`
-	HAProxyGreenServer string                             `json:"haproxyGreenServer" gorm:"size:255"`
-	Env                *commondb.JSONB[map[string]string] `json:"env" gorm:"type:jsonb"`
-	Command            *commondb.JSONB[[]string]          `json:"command" gorm:"type:jsonb"`
-	Entrypoint         *commondb.JSONB[[]string]          `json:"entrypoint" gorm:"type:jsonb"`
-	Volumes            *commondb.JSONB[[]VolumeMount]     `json:"volumes" gorm:"type:jsonb"`
-	Enabled            *bool                              `json:"enabled" gorm:"not null"`
+	ServiceKey        string                             `json:"serviceKey" gorm:"size:128;uniqueIndex;not null"`
+	Name              string                             `json:"name" gorm:"size:255;not null"`
+	AgentID           string                             `json:"agentId" gorm:"size:128;index;not null"`
+	ImageRepo         string                             `json:"imageRepo" gorm:"size:512;not null"`
+	ContainerPort     int                                `json:"containerPort"`
+	BlueHostPort      int                                `json:"blueHostPort"`
+	GreenHostPort     int                                `json:"greenHostPort"`
+	CurrentLiveSlot   Slot                               `json:"currentLiveSlot"`
+	DockerHealthCheck *bool                              `json:"dockerHealthCheck" gorm:"not null"`
+	HTTPHealthPath    string                             `json:"httpHealthPath" gorm:"size:255"`
+	HTTPExpectedCode  int                                `json:"httpExpectedCode"`
+	HTTPTimeoutSecond int                                `json:"httpTimeoutSecond"`
+	RouteHost         string                             `json:"routeHost" gorm:"size:255;index;not null"`
+	RoutePathPrefix   string                             `json:"routePathPrefix" gorm:"size:255;index;not null"`
+	Env               *commondb.JSONB[map[string]string] `json:"env" gorm:"type:jsonb"`
+	Command           *commondb.JSONB[[]string]          `json:"command" gorm:"type:jsonb"`
+	Entrypoint        *commondb.JSONB[[]string]          `json:"entrypoint" gorm:"type:jsonb"`
+	Volumes           *commondb.JSONB[[]VolumeMount]     `json:"volumes" gorm:"type:jsonb"`
+	Enabled           *bool                              `json:"enabled" gorm:"not null"`
 }
 
 func (Service) TableName() string {

@@ -657,9 +657,9 @@ func (s *Service) newDeployTask(release *model.Release, spec *dto.ServiceDeploym
 		HTTPHealthPath:    firstNonEmpty(spec.HTTPHealthPath, "/health"),
 		HTTPExpectedCode:  defaultInt(spec.HTTPExpectedCode, 200),
 		HTTPTimeoutSecond: defaultInt(spec.HTTPTimeoutSecond, 5),
-		BackendName:       spec.HAProxyBackend,
-		ServerName:        serverNameForSlot(spec, release.TargetSlot),
-		PreviousServer:    serverNameForSlot(spec, spec.CurrentLiveSlot),
+		BackendName:       servicecatalogapp.BackendName(spec.ID),
+		ServerName:        servicecatalogapp.ServerName(release.TargetSlot),
+		PreviousServer:    servicecatalogapp.ServerName(spec.CurrentLiveSlot),
 		Env:               spec.Env,
 		Command:           spec.Command,
 		Entrypoint:        spec.Entrypoint,
@@ -691,9 +691,9 @@ func (s *Service) newSwitchTask(release *model.Release, spec *dto.ServiceDeploym
 		HTTPHealthPath:    firstNonEmpty(spec.HTTPHealthPath, "/health"),
 		HTTPExpectedCode:  defaultInt(spec.HTTPExpectedCode, 200),
 		HTTPTimeoutSecond: defaultInt(spec.HTTPTimeoutSecond, 5),
-		BackendName:       spec.HAProxyBackend,
-		ServerName:        serverNameForSlot(spec, release.TargetSlot),
-		PreviousServer:    serverNameForSlot(spec, release.PreviousLiveSlot),
+		BackendName:       servicecatalogapp.BackendName(spec.ID),
+		ServerName:        servicecatalogapp.ServerName(release.TargetSlot),
+		PreviousServer:    servicecatalogapp.ServerName(release.PreviousLiveSlot),
 		Env:               spec.Env,
 		Command:           spec.Command,
 		Entrypoint:        spec.Entrypoint,
@@ -722,9 +722,9 @@ func (s *Service) newRollbackTask(release *model.Release, spec *dto.ServiceDeplo
 		CurrentLiveSlot: spec.CurrentLiveSlot,
 		ContainerPort:   spec.ContainerPort,
 		HostPort:        hostPortForSlot(spec, release.PreviousLiveSlot),
-		BackendName:     spec.HAProxyBackend,
-		ServerName:      serverNameForSlot(spec, release.PreviousLiveSlot),
-		PreviousServer:  serverNameForSlot(spec, spec.CurrentLiveSlot),
+		BackendName:     servicecatalogapp.BackendName(spec.ID),
+		ServerName:      servicecatalogapp.ServerName(release.PreviousLiveSlot),
+		PreviousServer:  servicecatalogapp.ServerName(spec.CurrentLiveSlot),
 		Env:             spec.Env,
 		Command:         spec.Command,
 		Entrypoint:      spec.Entrypoint,
@@ -809,16 +809,6 @@ func hostPortForSlot(spec *dto.ServiceDeploymentSpec, slot model.Slot) int {
 		return spec.BlueHostPort
 	}
 	return spec.GreenHostPort
-}
-
-func serverNameForSlot(spec *dto.ServiceDeploymentSpec, slot model.Slot) string {
-	if slot == model.SlotBlue {
-		return spec.HAProxyBlueServer
-	}
-	if slot == model.SlotGreen {
-		return spec.HAProxyGreenServer
-	}
-	return ""
 }
 
 func toModelVolumeMounts(items []dto.VolumeMount) []model.VolumeMount {

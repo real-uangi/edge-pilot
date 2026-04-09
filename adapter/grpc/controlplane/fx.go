@@ -11,6 +11,7 @@ var Module = fx.Module(
 	fx.Provide(
 		NewSessionHub,
 		func(hub *sessionHub) releasedomain.TaskDispatcher { return hub },
+		NewProxyConfigPublisher,
 		NewServer,
 	),
 	fx.Invoke(startGRPCServer),

@@ -49,9 +49,29 @@ func (r *repository) GetByKey(key string) (*model.Service, error) {
 	return &service, nil
 }
 
+func (r *repository) GetByRoute(agentID string, routeHost string, routePathPrefix string) (*model.Service, error) {
+	var service model.Service
+	result := r.conn.Where("agent_id = ? AND route_host = ? AND route_path_prefix = ?", agentID, routeHost, routePathPrefix).First(&service)
+	if result.Error != nil {
+		if result.Error == gorm.ErrRecordNotFound {
+			return nil, nil
+		}
+		return nil, result.Error
+	}
+	return &service, nil
+}
+
 func (r *repository) List() ([]model.Service, error) {
 	var services []model.Service
 	if err := r.conn.Order("created_at desc").Find(&services).Error; err != nil {
+		return nil, err
+	}
+	return services, nil
+}
+
+func (r *repository) ListByAgent(agentID string) ([]model.Service, error) {
+	var services []model.Service
+	if err := r.conn.Where("agent_id = ?", agentID).Order("created_at asc").Find(&services).Error; err != nil {
 		return nil, err
 	}
 	return services, nil

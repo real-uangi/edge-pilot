@@ -11,6 +11,8 @@ type Repository interface {
 	Update(*model.Service) error
 	GetByID(uuid.UUID) (*model.Service, error)
 	GetByKey(string) (*model.Service, error)
+	GetByRoute(string, string, string) (*model.Service, error)
 	List() ([]model.Service, error)
+	ListByAgent(string) ([]model.Service, error)
 	UpdateLiveSlot(uuid.UUID, model.Slot) error
 }

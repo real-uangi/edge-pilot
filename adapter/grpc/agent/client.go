@@ -16,13 +16,15 @@ import (
 type Client struct {
 	cfg      *config.AgentRuntimeConfig
 	executor *agentapp.Executor
+	proxy    agentapp.ProxyRuntime
 	state    *agentapp.RuntimeState
 }
 
-func NewClient(cfg *config.AgentRuntimeConfig, executor *agentapp.Executor, state *agentapp.RuntimeState) *Client {
+func NewClient(cfg *config.AgentRuntimeConfig, executor *agentapp.Executor, proxy agentapp.ProxyRuntime, state *agentapp.RuntimeState) *Client {
 	return &Client{
 		cfg:      cfg,
 		executor: executor,
+		proxy:    proxy,
 		state:    state,
 	}
 }
@@ -87,7 +89,7 @@ func (c *Client) connectOnce(ctx context.Context) error {
 				Token:        c.cfg.AgentToken,
 				Version:      c.cfg.AgentVersion,
 				Hostname:     c.cfg.Hostname,
-				Capabilities: []string{"docker", "haproxy", "http_probe"},
+				Capabilities: []string{"docker", "haproxy_runtime", "haproxy_dataplane", "http_probe"},
 			},
 		},
 	}
@@ -136,6 +138,12 @@ func (c *Client) connectOnce(ctx context.Context) error {
 		if msg.GetTask() != nil {
 			task := msg.GetTask()
 			go c.handleTask(ctx, task, outbound)
+			continue
+		}
+		if msg.GetProxyConfig() != nil {
+			if err := c.proxy.ApplySnapshot(ctx, msg.GetProxyConfig()); err != nil {
+				continue
+			}
 		}
 	}
 }

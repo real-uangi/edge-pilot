@@ -19,7 +19,7 @@ func TestConnectRejectsInvalidToken(t *testing.T) {
 		TokenByID: map[string]string{"agent-a": "valid-token"},
 	}, &fakeAgentRepo{})
 
-	server := NewServer(NewSessionHub(), registry, nil, nil)
+	server := NewServer(NewSessionHub(), registry, nil, nil, nil)
 	stream := &fakeStream{
 		recvMessages: []*grpcapi.AgentMessage{
 			{

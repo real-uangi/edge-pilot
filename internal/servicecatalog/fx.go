@@ -11,6 +11,6 @@ var ControlPlaneModule = fx.Module(
 	"servicecatalog",
 	fx.Provide(
 		infra.NewRepository,
-		application.NewService,
+		application.NewServiceWithPublisher,
 	),
 )

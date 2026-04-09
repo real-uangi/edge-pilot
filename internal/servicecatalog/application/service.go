@@ -4,6 +4,7 @@ import (
 	"edge-pilot/internal/servicecatalog/domain"
 	"edge-pilot/internal/shared/dto"
 	"edge-pilot/internal/shared/model"
+	"strings"
 
 	"github.com/google/uuid"
 	"github.com/real-uangi/allingo/common/business"
@@ -11,11 +12,19 @@ import (
 )
 
 type Service struct {
-	repo domain.Repository
+	repo      domain.Repository
+	publisher domain.ProxyConfigPublisher
 }
 
 func NewService(repo domain.Repository) *Service {
-	return &Service{repo: repo}
+	return NewServiceWithPublisher(repo, nil)
+}
+
+func NewServiceWithPublisher(repo domain.Repository, publisher domain.ProxyConfigPublisher) *Service {
+	return &Service{
+		repo:      repo,
+		publisher: publisher,
+	}
 }
 
 func (s *Service) Create(req dto.UpsertServiceRequest) (*dto.ServiceOutput, error) {
@@ -27,7 +36,13 @@ func (s *Service) Create(req dto.UpsertServiceRequest) (*dto.ServiceOutput, erro
 		return nil, business.NewBadRequest("serviceKey 已存在")
 	}
 	entity := buildServiceEntity(uuid.New(), req)
+	if err := s.ensureRouteAvailable(entity.AgentID, entity.RouteHost, entity.RoutePathPrefix, entity.ID); err != nil {
+		return nil, err
+	}
 	if err := s.repo.Create(entity); err != nil {
+		return nil, err
+	}
+	if err := s.publishAgent(entity.AgentID); err != nil {
 		return nil, err
 	}
 	output := toServiceOutput(entity)
@@ -45,7 +60,18 @@ func (s *Service) Update(id uuid.UUID, req dto.UpsertServiceRequest) (*dto.Servi
 	updated := buildServiceEntity(id, req)
 	updated.CreatedAt = current.CreatedAt
 	updated.CurrentLiveSlot = current.CurrentLiveSlot
+	if err := s.ensureRouteAvailable(updated.AgentID, updated.RouteHost, updated.RoutePathPrefix, updated.ID); err != nil {
+		return nil, err
+	}
 	if err := s.repo.Update(updated); err != nil {
+		return nil, err
+	}
+	if current.AgentID != updated.AgentID {
+		if err := s.publishAgent(current.AgentID); err != nil {
+			return nil, err
+		}
+	}
+	if err := s.publishAgent(updated.AgentID); err != nil {
 		return nil, err
 	}
 	output := toServiceOutput(updated)
@@ -123,80 +149,77 @@ func buildServiceEntity(id uuid.UUID, req dto.UpsertServiceRequest) *model.Servi
 	}
 
 	return &model.Service{
-		ID:                 id,
-		ServiceKey:         req.ServiceKey,
-		Name:               req.Name,
-		AgentID:            req.AgentID,
-		ImageRepo:          req.ImageRepo,
-		ContainerPort:      req.ContainerPort,
-		BlueHostPort:       req.BlueHostPort,
-		GreenHostPort:      req.GreenHostPort,
-		DockerHealthCheck:  dockerHealth,
-		HTTPHealthPath:     req.HTTPHealthPath,
-		HTTPExpectedCode:   expectedCode,
-		HTTPTimeoutSecond:  timeoutSeconds,
-		HAProxyBackend:     req.HAProxyBackend,
-		HAProxyBlueServer:  req.HAProxyBlueServer,
-		HAProxyGreenServer: req.HAProxyGreenServer,
-		Env:                commondb.NewJSONB(req.Env),
-		Command:            commondb.NewJSONB(req.Command),
-		Entrypoint:         commondb.NewJSONB(req.Entrypoint),
-		Volumes:            commondb.NewJSONB(toModelVolumes(req.Volumes)),
-		Enabled:            enabled,
+		ID:                id,
+		ServiceKey:        req.ServiceKey,
+		Name:              req.Name,
+		AgentID:           req.AgentID,
+		ImageRepo:         req.ImageRepo,
+		ContainerPort:     req.ContainerPort,
+		BlueHostPort:      req.BlueHostPort,
+		GreenHostPort:     req.GreenHostPort,
+		DockerHealthCheck: dockerHealth,
+		HTTPHealthPath:    req.HTTPHealthPath,
+		HTTPExpectedCode:  expectedCode,
+		HTTPTimeoutSecond: timeoutSeconds,
+		RouteHost:         NormalizeRouteHost(req.RouteHost),
+		RoutePathPrefix:   NormalizeRoutePathPrefix(req.RoutePathPrefix),
+		Env:               commondb.NewJSONB(req.Env),
+		Command:           commondb.NewJSONB(req.Command),
+		Entrypoint:        commondb.NewJSONB(req.Entrypoint),
+		Volumes:           commondb.NewJSONB(toModelVolumes(req.Volumes)),
+		Enabled:           enabled,
 	}
 }
 
 func toServiceOutput(service *model.Service) dto.ServiceOutput {
 	return dto.ServiceOutput{
-		ID:                 service.ID,
-		Name:               service.Name,
-		ServiceKey:         service.ServiceKey,
-		AgentID:            service.AgentID,
-		ImageRepo:          service.ImageRepo,
-		ContainerPort:      service.ContainerPort,
-		BlueHostPort:       service.BlueHostPort,
-		GreenHostPort:      service.GreenHostPort,
-		CurrentLiveSlot:    service.CurrentLiveSlot,
-		DockerHealthCheck:  service.DockerHealthCheck,
-		HTTPHealthPath:     service.HTTPHealthPath,
-		HTTPExpectedCode:   service.HTTPExpectedCode,
-		HTTPTimeoutSecond:  service.HTTPTimeoutSecond,
-		HAProxyBackend:     service.HAProxyBackend,
-		HAProxyBlueServer:  service.HAProxyBlueServer,
-		HAProxyGreenServer: service.HAProxyGreenServer,
-		Env:                getJSON(service.Env),
-		Command:            getJSON(service.Command),
-		Entrypoint:         getJSON(service.Entrypoint),
-		Volumes:            toDTOVolumes(getJSON(service.Volumes)),
-		Enabled:            service.Enabled,
-		CreatedAt:          service.CreatedAt,
-		UpdatedAt:          service.UpdatedAt,
+		ID:                service.ID,
+		Name:              service.Name,
+		ServiceKey:        service.ServiceKey,
+		AgentID:           service.AgentID,
+		ImageRepo:         service.ImageRepo,
+		ContainerPort:     service.ContainerPort,
+		BlueHostPort:      service.BlueHostPort,
+		GreenHostPort:     service.GreenHostPort,
+		CurrentLiveSlot:   service.CurrentLiveSlot,
+		DockerHealthCheck: service.DockerHealthCheck,
+		HTTPHealthPath:    service.HTTPHealthPath,
+		HTTPExpectedCode:  service.HTTPExpectedCode,
+		HTTPTimeoutSecond: service.HTTPTimeoutSecond,
+		RouteHost:         service.RouteHost,
+		RoutePathPrefix:   service.RoutePathPrefix,
+		Env:               getJSON(service.Env),
+		Command:           getJSON(service.Command),
+		Entrypoint:        getJSON(service.Entrypoint),
+		Volumes:           toDTOVolumes(getJSON(service.Volumes)),
+		Enabled:           service.Enabled,
+		CreatedAt:         service.CreatedAt,
+		UpdatedAt:         service.UpdatedAt,
 	}
 }
 
 func toDeploymentSpec(service *model.Service) dto.ServiceDeploymentSpec {
 	return dto.ServiceDeploymentSpec{
-		ID:                 service.ID,
-		Name:               service.Name,
-		ServiceKey:         service.ServiceKey,
-		AgentID:            service.AgentID,
-		ImageRepo:          service.ImageRepo,
-		ContainerPort:      service.ContainerPort,
-		BlueHostPort:       service.BlueHostPort,
-		GreenHostPort:      service.GreenHostPort,
-		CurrentLiveSlot:    service.CurrentLiveSlot,
-		DockerHealthCheck:  service.DockerHealthCheck != nil && *service.DockerHealthCheck,
-		HTTPHealthPath:     service.HTTPHealthPath,
-		HTTPExpectedCode:   service.HTTPExpectedCode,
-		HTTPTimeoutSecond:  service.HTTPTimeoutSecond,
-		HAProxyBackend:     service.HAProxyBackend,
-		HAProxyBlueServer:  service.HAProxyBlueServer,
-		HAProxyGreenServer: service.HAProxyGreenServer,
-		Env:                getJSON(service.Env),
-		Command:            getJSON(service.Command),
-		Entrypoint:         getJSON(service.Entrypoint),
-		Volumes:            toDTOVolumes(getJSON(service.Volumes)),
-		Enabled:            service.Enabled != nil && *service.Enabled,
+		ID:                service.ID,
+		Name:              service.Name,
+		ServiceKey:        service.ServiceKey,
+		AgentID:           service.AgentID,
+		ImageRepo:         service.ImageRepo,
+		ContainerPort:     service.ContainerPort,
+		BlueHostPort:      service.BlueHostPort,
+		GreenHostPort:     service.GreenHostPort,
+		CurrentLiveSlot:   service.CurrentLiveSlot,
+		DockerHealthCheck: service.DockerHealthCheck != nil && *service.DockerHealthCheck,
+		HTTPHealthPath:    service.HTTPHealthPath,
+		HTTPExpectedCode:  service.HTTPExpectedCode,
+		HTTPTimeoutSecond: service.HTTPTimeoutSecond,
+		RouteHost:         service.RouteHost,
+		RoutePathPrefix:   service.RoutePathPrefix,
+		Env:               getJSON(service.Env),
+		Command:           getJSON(service.Command),
+		Entrypoint:        getJSON(service.Entrypoint),
+		Volumes:           toDTOVolumes(getJSON(service.Volumes)),
+		Enabled:           service.Enabled != nil && *service.Enabled,
 	}
 }
 
@@ -226,6 +249,24 @@ func toDTOVolumes(items []model.VolumeMount) []dto.VolumeMount {
 
 func boolPointer(v bool) *bool {
 	return &v
+}
+
+func (s *Service) ensureRouteAvailable(agentID string, routeHost string, routePathPrefix string, selfID uuid.UUID) error {
+	existing, err := s.repo.GetByRoute(agentID, routeHost, routePathPrefix)
+	if err != nil {
+		return err
+	}
+	if existing != nil && existing.ID != selfID {
+		return business.NewBadRequest("routeHost + routePathPrefix 已存在")
+	}
+	return nil
+}
+
+func (s *Service) publishAgent(agentID string) error {
+	if s.publisher == nil || strings.TrimSpace(agentID) == "" {
+		return nil
+	}
+	return s.publisher.PublishAgent(agentID)
 }
 
 func getJSON[T any](value *commondb.JSONB[T]) T {

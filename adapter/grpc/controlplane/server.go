@@ -5,8 +5,10 @@ import (
 	agentapp "edge-pilot/internal/agent/application"
 	observabilityapp "edge-pilot/internal/observability/application"
 	releaseapp "edge-pilot/internal/release/application"
+	servicecatalogdomain "edge-pilot/internal/servicecatalog/domain"
 	"edge-pilot/internal/shared/grpcapi"
 	"edge-pilot/internal/shared/model"
+	"errors"
 	"fmt"
 	"net"
 	"os"
@@ -22,6 +24,8 @@ type sessionHub struct {
 	mu       sync.RWMutex
 	sessions map[string]*agentSession
 }
+
+var ErrAgentOffline = errors.New("agent offline")
 
 type agentSession struct {
 	mu       sync.Mutex
@@ -66,7 +70,7 @@ func (h *sessionHub) DispatchTask(agentID string, task *model.Task) error {
 	session, ok := h.sessions[agentID]
 	h.mu.RUnlock()
 	if !ok {
-		return fmt.Errorf("agent %s is offline", agentID)
+		return ErrAgentOffline
 	}
 	return session.send(&grpcapi.ControlMessage{
 		Payload: &grpcapi.ControlMessage_Task{
@@ -80,7 +84,7 @@ func (h *sessionHub) ReplayTask(agentID string, task *model.Task) (bool, error) 
 	session, ok := h.sessions[agentID]
 	h.mu.RUnlock()
 	if !ok {
-		return false, fmt.Errorf("agent %s is offline", agentID)
+		return false, ErrAgentOffline
 	}
 	if !session.markReplay(task.ID.String()) {
 		return false, nil
@@ -95,20 +99,42 @@ func (h *sessionHub) ReplayTask(agentID string, task *model.Task) (bool, error) 
 	return true, nil
 }
 
+func (h *sessionHub) DispatchProxyConfig(agentID string, snapshot *grpcapi.ProxyConfigSnapshot) error {
+	h.mu.RLock()
+	session, ok := h.sessions[agentID]
+	h.mu.RUnlock()
+	if !ok {
+		return ErrAgentOffline
+	}
+	return session.send(&grpcapi.ControlMessage{
+		Payload: &grpcapi.ControlMessage_ProxyConfig{
+			ProxyConfig: snapshot,
+		},
+	})
+}
+
 type Server struct {
 	grpcapi.UnimplementedAgentControlServer
 	hub           *sessionHub
 	agents        *agentapp.RegistryService
 	releases      *releaseapp.Service
 	observability *observabilityapp.Service
+	proxyConfigs  servicecatalogdomain.ProxyConfigPublisher
 }
 
-func NewServer(hub *sessionHub, agents *agentapp.RegistryService, releases *releaseapp.Service, observability *observabilityapp.Service) *Server {
+func NewServer(
+	hub *sessionHub,
+	agents *agentapp.RegistryService,
+	releases *releaseapp.Service,
+	observability *observabilityapp.Service,
+	proxyConfigs servicecatalogdomain.ProxyConfigPublisher,
+) *Server {
 	return &Server{
 		hub:           hub,
 		agents:        agents,
 		releases:      releases,
 		observability: observability,
+		proxyConfigs:  proxyConfigs,
 	}
 }
 
@@ -149,6 +175,11 @@ func (s *Server) Connect(stream grpcapi.AgentControl_ConnectServer) error {
 		},
 	}); err != nil {
 		return err
+	}
+	if s.proxyConfigs != nil {
+		if err := s.proxyConfigs.PublishAgent(hello.GetAgentId()); err != nil && !errors.Is(err, ErrAgentOffline) {
+			return err
+		}
 	}
 
 	for {
