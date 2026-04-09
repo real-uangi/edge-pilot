@@ -10,6 +10,7 @@ import (
 )
 
 func RunAgent() {
+	logBuildInfo("agent")
 	app.Current().Option(fx.WithLogger(log.NewFxLogger))
 	app.Current().Option(agent.RuntimeModule)
 	app.Current().Option(agentgrpc.Module)

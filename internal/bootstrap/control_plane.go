@@ -18,6 +18,7 @@ import (
 )
 
 func RunControlPlane() {
+	logBuildInfo("control-plane")
 	app.Current().Option(fx.WithLogger(log.NewFxLogger))
 	app.Current().Option(common.Module)
 	app.Current().Option(db.Module)
