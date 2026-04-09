@@ -202,7 +202,7 @@ func (s *Service) ListTaskSnapshots(releaseID uuid.UUID) ([]dto.TaskSnapshot, er
 }
 
 func (s *Service) HandleTaskUpdate(agentID string, update *grpcapi.TaskUpdate) error {
-	taskID, err := uuid.Parse(update.TaskID)
+	taskID, err := uuid.Parse(update.GetTaskId())
 	if err != nil {
 		return err
 	}
@@ -221,8 +221,8 @@ func (s *Service) HandleTaskUpdate(agentID string, update *grpcapi.TaskUpdate) e
 		return business.ErrNotFound
 	}
 	now := time.Now()
-	switch update.Status {
-	case "running":
+	switch update.GetStatus() {
+	case grpcapi.TaskStatus_TASK_STATUS_RUNNING:
 		task.Status = model.TaskStatusRunning
 		task.StartedAt = &now
 		if err := s.repo.UpdateTask(task); err != nil {
@@ -233,10 +233,10 @@ func (s *Service) HandleTaskUpdate(agentID string, update *grpcapi.TaskUpdate) e
 			TaskID:    task.ID,
 			AgentID:   agentID,
 			Status:    model.TaskStatusRunning,
-			Message:   update.Step,
+			Message:   update.GetStep(),
 			StartedAt: &now,
 		})
-	case "succeeded":
+	case grpcapi.TaskStatus_TASK_STATUS_SUCCEEDED:
 		task.Status = model.TaskStatusSucceeded
 		task.CompletedAt = &now
 		if err := s.repo.UpdateTask(task); err != nil {
@@ -247,16 +247,16 @@ func (s *Service) HandleTaskUpdate(agentID string, update *grpcapi.TaskUpdate) e
 			TaskID:      task.ID,
 			AgentID:     agentID,
 			Status:      model.TaskStatusSucceeded,
-			Message:     update.Step,
+			Message:     update.GetStep(),
 			CompletedAt: &now,
 		}); err != nil {
 			return err
 		}
 		return s.applyTaskSuccess(release, task, update, now)
-	case "failed":
+	case grpcapi.TaskStatus_TASK_STATUS_FAILED:
 		task.Status = model.TaskStatusFailed
 		task.CompletedAt = &now
-		task.LastError = update.ErrorMessage
+		task.LastError = update.GetErrorMessage()
 		release.Status = model.ReleaseStatusFailed
 		release.CompletedAt = &now
 		if err := s.repo.UpdateTask(task); err != nil {
@@ -270,12 +270,12 @@ func (s *Service) HandleTaskUpdate(agentID string, update *grpcapi.TaskUpdate) e
 			TaskID:      task.ID,
 			AgentID:     agentID,
 			Status:      model.TaskStatusFailed,
-			Message:     update.ErrorMessage,
+			Message:     update.GetErrorMessage(),
 			CompletedAt: &now,
 		}); err != nil {
 			return err
 		}
-		return s.repo.CreateAudit(newAudit("release", release.ID.String(), "task_failed", release.TraceID, update.ErrorMessage))
+		return s.repo.CreateAudit(newAudit("release", release.ID.String(), "task_failed", release.TraceID, update.GetErrorMessage()))
 	default:
 		return nil
 	}
@@ -316,10 +316,10 @@ func (s *Service) applyTaskSuccess(release *model.Release, task *model.Task, upd
 			ID:               uuid.New(),
 			ServiceID:        task.ServiceID,
 			ReleaseID:        task.ReleaseID,
-			Slot:             model.Slot(update.Slot),
-			ContainerID:      update.ContainerID,
+			Slot:             model.Slot(update.GetSlot()),
+			ContainerID:      update.GetContainerId(),
 			ImageTag:         release.ImageTag,
-			ListenAddress:    update.ListenAddress,
+			ListenAddress:    update.GetListenAddress(),
 			HostPort:         payload.HostPort,
 			ServerName:       payload.ServerName,
 			Healthy:          &healthy,
@@ -333,7 +333,7 @@ func (s *Service) applyTaskSuccess(release *model.Release, task *model.Task, upd
 		if err := s.repo.UpdateRelease(release); err != nil {
 			return err
 		}
-		return s.repo.CreateAudit(newAudit("release", release.ID.String(), "ready_to_switch", release.TraceID, update.ListenAddress))
+		return s.repo.CreateAudit(newAudit("release", release.ID.String(), "ready_to_switch", release.TraceID, update.GetListenAddress()))
 	case model.TaskTypeSwitchTraffic:
 		release.Status = model.ReleaseStatusCompleted
 		release.CompletedAt = &now
@@ -346,7 +346,7 @@ func (s *Service) applyTaskSuccess(release *model.Release, task *model.Task, upd
 		if err := s.repo.UpdateRelease(release); err != nil {
 			return err
 		}
-		return s.repo.CreateAudit(newAudit("release", release.ID.String(), "traffic_switched", release.TraceID, update.ServerName))
+		return s.repo.CreateAudit(newAudit("release", release.ID.String(), "traffic_switched", release.TraceID, update.GetServerName()))
 	case model.TaskTypeRollback:
 		release.Status = model.ReleaseStatusRolledBack
 		release.CompletedAt = &now
@@ -359,7 +359,7 @@ func (s *Service) applyTaskSuccess(release *model.Release, task *model.Task, upd
 		if err := s.repo.UpdateRelease(release); err != nil {
 			return err
 		}
-		return s.repo.CreateAudit(newAudit("release", release.ID.String(), "rolled_back", release.TraceID, update.ServerName))
+		return s.repo.CreateAudit(newAudit("release", release.ID.String(), "rolled_back", release.TraceID, update.GetServerName()))
 	default:
 		return nil
 	}

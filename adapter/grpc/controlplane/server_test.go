@@ -22,10 +22,11 @@ func TestConnectRejectsInvalidToken(t *testing.T) {
 	stream := &fakeStream{
 		recvMessages: []*grpcapi.AgentMessage{
 			{
-				Kind: "hello",
-				Hello: &grpcapi.HelloMessage{
-					AgentID: "agent-a",
-					Token:   "bad-token",
+				Payload: &grpcapi.AgentMessage_Hello{
+					Hello: &grpcapi.HelloMessage{
+						AgentId: "agent-a",
+						Token:   "bad-token",
+					},
 				},
 			},
 		},

@@ -59,7 +59,6 @@ func (c *Client) connectOnce(ctx context.Context) error {
 		ctx,
 		c.cfg.ControlPlaneAddr,
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
-		grpc.WithDefaultCallOptions(grpc.CallContentSubtype(grpcapi.JSONCodecName)),
 	)
 	if err != nil {
 		return err
@@ -82,13 +81,14 @@ func (c *Client) connectOnce(ctx context.Context) error {
 	}()
 
 	outbound <- &grpcapi.AgentMessage{
-		Kind: "hello",
-		Hello: &grpcapi.HelloMessage{
-			AgentID:      c.cfg.AgentID,
-			Token:        c.cfg.AgentToken,
-			Version:      c.cfg.AgentVersion,
-			Hostname:     c.cfg.Hostname,
-			Capabilities: []string{"docker", "haproxy", "http_probe"},
+		Payload: &grpcapi.AgentMessage_Hello{
+			Hello: &grpcapi.HelloMessage{
+				AgentId:      c.cfg.AgentID,
+				Token:        c.cfg.AgentToken,
+				Version:      c.cfg.AgentVersion,
+				Hostname:     c.cfg.Hostname,
+				Capabilities: []string{"docker", "haproxy", "http_probe"},
+			},
 		},
 	}
 
@@ -104,20 +104,22 @@ func (c *Client) connectOnce(ctx context.Context) error {
 				return
 			case <-heartbeatTicker.C:
 				outbound <- &grpcapi.AgentMessage{
-					Kind: "heartbeat",
-					Heartbeat: &grpcapi.HeartbeatMessage{
-						AgentID:        c.cfg.AgentID,
-						RunningTaskIDs: c.state.RunningTaskIDs(),
+					Payload: &grpcapi.AgentMessage_Heartbeat{
+						Heartbeat: &grpcapi.HeartbeatMessage{
+							AgentId:        c.cfg.AgentID,
+							RunningTaskIds: c.state.RunningTaskIDs(),
+						},
 					},
 				}
 			case <-statsTicker.C:
 				stats, err := c.executor.CollectStats(ctx)
 				if err == nil && len(stats) > 0 {
 					outbound <- &grpcapi.AgentMessage{
-						Kind: "stats",
-						Stats: &grpcapi.StatsReport{
-							AgentID:  c.cfg.AgentID,
-							Services: stats,
+						Payload: &grpcapi.AgentMessage_Stats{
+							Stats: &grpcapi.StatsReport{
+								AgentId:  c.cfg.AgentID,
+								Services: stats,
+							},
 						},
 					}
 				}
@@ -131,31 +133,33 @@ func (c *Client) connectOnce(ctx context.Context) error {
 			close(outbound)
 			return err
 		}
-		if msg.Task != nil {
-			task := msg.Task
+		if msg.GetTask() != nil {
+			task := msg.GetTask()
 			go c.handleTask(ctx, task, outbound)
 		}
 	}
 }
 
 func (c *Client) handleTask(ctx context.Context, task *grpcapi.TaskCommand, outbound chan<- *grpcapi.AgentMessage) {
-	c.state.Start(task.TaskID)
-	defer c.state.Done(task.TaskID)
+	c.state.Start(task.GetTaskId())
+	defer c.state.Done(task.GetTaskId())
 	err := c.executor.Execute(ctx, task, func(update *grpcapi.TaskUpdate) error {
 		outbound <- &grpcapi.AgentMessage{
-			Kind:       "task_update",
-			TaskUpdate: update,
+			Payload: &grpcapi.AgentMessage_TaskUpdate{
+				TaskUpdate: update,
+			},
 		}
 		return nil
 	})
 	if err != nil {
 		outbound <- &grpcapi.AgentMessage{
-			Kind: "task_update",
-			TaskUpdate: &grpcapi.TaskUpdate{
-				TaskID:       task.TaskID,
-				Status:       "failed",
-				Step:         "execution_failed",
-				ErrorMessage: err.Error(),
+			Payload: &grpcapi.AgentMessage_TaskUpdate{
+				TaskUpdate: &grpcapi.TaskUpdate{
+					TaskId:       task.GetTaskId(),
+					Status:       grpcapi.TaskStatus_TASK_STATUS_FAILED,
+					Step:         "execution_failed",
+					ErrorMessage: err.Error(),
+				},
 			},
 		}
 	}

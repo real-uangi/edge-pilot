@@ -62,39 +62,17 @@ func (h *sessionHub) DispatchTask(agentID string, task *model.Task) error {
 		return fmt.Errorf("agent %s is offline", agentID)
 	}
 	payload := getPayload(task)
+	_ = payload
 	session.sendCh <- &grpcapi.ControlMessage{
-		Kind: "task",
-		Task: &grpcapi.TaskCommand{
-			TaskID:            task.ID.String(),
-			ReleaseID:         task.ReleaseID.String(),
-			ServiceID:         payload.ServiceID.String(),
-			ServiceKey:        payload.ServiceKey,
-			AgentID:           task.AgentID,
-			Type:              taskTypeName(task.Type),
-			ImageRepo:         payload.ImageRepo,
-			ImageTag:          payload.ImageTag,
-			CommitSHA:         payload.CommitSHA,
-			TraceID:           payload.TraceID,
-			TargetSlot:        int(payload.TargetSlot),
-			CurrentLiveSlot:   int(payload.CurrentLiveSlot),
-			ContainerPort:     payload.ContainerPort,
-			HostPort:          payload.HostPort,
-			HTTPHealthPath:    payload.HTTPHealthPath,
-			HTTPExpectedCode:  payload.HTTPExpectedCode,
-			HTTPTimeoutSecond: payload.HTTPTimeoutSecond,
-			BackendName:       payload.BackendName,
-			ServerName:        payload.ServerName,
-			PreviousServer:    payload.PreviousServer,
-			Env:               payload.Env,
-			Command:           payload.Command,
-			Entrypoint:        payload.Entrypoint,
-			Volumes:           toGRPCVolumes(payload.Volumes),
+		Payload: &grpcapi.ControlMessage_Task{
+			Task: taskToProto(task),
 		},
 	}
 	return nil
 }
 
 type Server struct {
+	grpcapi.UnimplementedAgentControlServer
 	hub           *sessionHub
 	agents        *agentapp.RegistryService
 	releases      *releaseapp.Service
@@ -115,20 +93,20 @@ func (s *Server) Connect(stream grpcapi.AgentControl_ConnectServer) error {
 	if err != nil {
 		return err
 	}
-	if first.Hello == nil {
+	if first.GetHello() == nil {
 		return status.Error(codes.InvalidArgument, "hello required")
 	}
-	hello := first.Hello
-	if !s.agents.Authenticate(hello.AgentID, hello.Token) {
+	hello := first.GetHello()
+	if !s.agents.Authenticate(hello.GetAgentId(), hello.GetToken()) {
 		return status.Error(codes.Unauthenticated, "invalid token")
 	}
-	if err := s.agents.MarkConnected(hello.AgentID, hello.Hostname, hello.Version, hello.Capabilities); err != nil {
+	if err := s.agents.MarkConnected(hello.GetAgentId(), hello.GetHostname(), hello.GetVersion(), hello.GetCapabilities()); err != nil {
 		return err
 	}
-	session := s.hub.register(hello.AgentID)
+	session := s.hub.register(hello.GetAgentId())
 	defer func() {
-		s.hub.unregister(hello.AgentID)
-		_ = s.agents.MarkDisconnected(hello.AgentID, "stream disconnected")
+		s.hub.unregister(hello.GetAgentId())
+		_ = s.agents.MarkDisconnected(hello.GetAgentId(), "stream disconnected")
 	}()
 
 	sendErrCh := make(chan error, 1)
@@ -142,8 +120,9 @@ func (s *Server) Connect(stream grpcapi.AgentControl_ConnectServer) error {
 	}()
 
 	if err := stream.Send(&grpcapi.ControlMessage{
-		Kind: "ack",
-		Ack:  &grpcapi.AckMessage{Message: "connected"},
+		Payload: &grpcapi.ControlMessage_Ack{
+			Ack: &grpcapi.AckMessage{Message: "connected"},
+		},
 	}); err != nil {
 		return err
 	}
@@ -159,16 +138,16 @@ func (s *Server) Connect(stream grpcapi.AgentControl_ConnectServer) error {
 			return err
 		}
 		switch {
-		case message.Heartbeat != nil:
-			if err := s.agents.Heartbeat(message.Heartbeat.AgentID); err != nil {
+		case message.GetHeartbeat() != nil:
+			if err := s.agents.Heartbeat(message.GetHeartbeat().GetAgentId()); err != nil {
 				return err
 			}
-		case message.TaskUpdate != nil:
-			if err := s.releases.HandleTaskUpdate(hello.AgentID, message.TaskUpdate); err != nil {
+		case message.GetTaskUpdate() != nil:
+			if err := s.releases.HandleTaskUpdate(hello.GetAgentId(), message.GetTaskUpdate()); err != nil {
 				return err
 			}
-		case message.Stats != nil:
-			if err := s.observability.RecordStats(message.Stats); err != nil {
+		case message.GetStats() != nil:
+			if err := s.observability.RecordStats(message.GetStats()); err != nil {
 				return err
 			}
 		}
@@ -216,31 +195,4 @@ func getPayload(task *model.Task) model.TaskPayload {
 		return model.TaskPayload{}
 	}
 	return task.Payload.Get()
-}
-
-func taskTypeName(taskType model.TaskType) string {
-	switch taskType {
-	case model.TaskTypeDeployGreen:
-		return "deploy_green"
-	case model.TaskTypeSwitchTraffic:
-		return "switch_traffic"
-	case model.TaskTypeRollback:
-		return "rollback"
-	case model.TaskTypeCleanupOld:
-		return "cleanup_old"
-	default:
-		return "unknown"
-	}
-}
-
-func toGRPCVolumes(items []model.VolumeMount) []grpcapi.VolumeMount {
-	out := make([]grpcapi.VolumeMount, 0, len(items))
-	for _, item := range items {
-		out = append(out, grpcapi.VolumeMount{
-			Source:   item.Source,
-			Target:   item.Target,
-			ReadOnly: item.ReadOnly,
-		})
-	}
-	return out
 }

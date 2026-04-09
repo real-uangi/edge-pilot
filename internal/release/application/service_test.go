@@ -156,12 +156,12 @@ func TestHandleTaskUpdateMovesReleaseToReadyToSwitch(t *testing.T) {
 	}
 
 	err := releaseService.HandleTaskUpdate("agent-a", &grpcapi.TaskUpdate{
-		TaskID:        taskID.String(),
-		Status:        "succeeded",
+		TaskId:        taskID.String(),
+		Status:        grpcapi.TaskStatus_TASK_STATUS_SUCCEEDED,
 		Step:          "healthy",
-		ContainerID:   "container-1",
+		ContainerId:   "container-1",
 		ListenAddress: "127.0.0.1:18081",
-		Slot:          int(model.SlotGreen),
+		Slot:          grpcapi.Slot_SLOT_GREEN,
 		ServerName:    "srv_green",
 	})
 	if err != nil {

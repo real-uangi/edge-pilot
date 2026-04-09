@@ -38,13 +38,13 @@ func (c *HAProxyRuntimeClient) DisableServer(ctx context.Context, backend string
 	return err
 }
 
-func (c *HAProxyRuntimeClient) ShowStats(ctx context.Context) ([]grpcapi.BackendStatPoint, error) {
+func (c *HAProxyRuntimeClient) ShowStats(ctx context.Context) ([]*grpcapi.BackendStatPoint, error) {
 	output, err := c.run(ctx, "show stat")
 	if err != nil {
 		return nil, err
 	}
 	lines := strings.Split(output, "\n")
-	stats := make([]grpcapi.BackendStatPoint, 0)
+	stats := make([]*grpcapi.BackendStatPoint, 0)
 	for _, line := range lines {
 		if strings.TrimSpace(line) == "" || strings.HasPrefix(line, "#") {
 			continue
@@ -56,7 +56,7 @@ func (c *HAProxyRuntimeClient) ShowStats(ctx context.Context) ([]grpcapi.Backend
 		scur, _ := strconv.ParseInt(parts[4], 10, 64)
 		rate, _ := strconv.ParseInt(parts[33], 10, 64)
 		eresp, _ := strconv.ParseInt(parts[14], 10, 64)
-		stats = append(stats, grpcapi.BackendStatPoint{
+		stats = append(stats, &grpcapi.BackendStatPoint{
 			BackendName:   parts[0],
 			ServerName:    parts[1],
 			Scur:          scur,

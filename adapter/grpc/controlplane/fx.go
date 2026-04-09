@@ -9,10 +9,8 @@ import (
 var Module = fx.Module(
 	"grpc-control-plane",
 	fx.Provide(
-		fx.Annotate(
-			NewSessionHub,
-			fx.As(new(releasedomain.TaskDispatcher)),
-		),
+		NewSessionHub,
+		func(hub *sessionHub) releasedomain.TaskDispatcher { return hub },
 		NewServer,
 	),
 	fx.Invoke(startGRPCServer),

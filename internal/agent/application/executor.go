@@ -18,7 +18,7 @@ type HAProxyRuntime interface {
 	SetServerAddress(context.Context, string, string, string, int) error
 	EnableServer(context.Context, string, string) error
 	DisableServer(context.Context, string, string) error
-	ShowStats(context.Context) ([]grpcapi.BackendStatPoint, error)
+	ShowStats(context.Context) ([]*grpcapi.BackendStatPoint, error)
 }
 
 type ContainerRuntime struct {
@@ -42,30 +42,30 @@ func NewExecutor(cfg *config.AgentRuntimeConfig, docker DockerRuntime, haproxy H
 
 func (e *Executor) Execute(ctx context.Context, task *grpcapi.TaskCommand, report func(*grpcapi.TaskUpdate) error) error {
 	if err := report(&grpcapi.TaskUpdate{
-		TaskID: task.TaskID,
-		Status: "running",
+		TaskId: task.GetTaskId(),
+		Status: grpcapi.TaskStatus_TASK_STATUS_RUNNING,
 		Step:   "accepted",
 	}); err != nil {
 		return err
 	}
 
-	switch task.Type {
-	case "deploy_green":
+	switch task.GetType() {
+	case grpcapi.TaskType_TASK_TYPE_DEPLOY_GREEN:
 		return e.executeDeploy(ctx, task, report)
-	case "switch_traffic", "rollback":
+	case grpcapi.TaskType_TASK_TYPE_SWITCH_TRAFFIC, grpcapi.TaskType_TASK_TYPE_ROLLBACK:
 		return e.executeTrafficSwitch(ctx, task, report)
-	case "cleanup_old":
+	case grpcapi.TaskType_TASK_TYPE_CLEANUP_OLD:
 		return report(&grpcapi.TaskUpdate{
-			TaskID: task.TaskID,
-			Status: "succeeded",
+			TaskId: task.GetTaskId(),
+			Status: grpcapi.TaskStatus_TASK_STATUS_SUCCEEDED,
 			Step:   "noop",
 		})
 	default:
-		return fmt.Errorf("unknown task type: %s", task.Type)
+		return fmt.Errorf("unknown task type: %s", task.GetType())
 	}
 }
 
-func (e *Executor) CollectStats(ctx context.Context) ([]grpcapi.BackendStatPoint, error) {
+func (e *Executor) CollectStats(ctx context.Context) ([]*grpcapi.BackendStatPoint, error) {
 	return e.haproxy.ShowStats(ctx)
 }
 
@@ -75,63 +75,63 @@ func (e *Executor) executeDeploy(ctx context.Context, task *grpcapi.TaskCommand,
 		return err
 	}
 	if err := report(&grpcapi.TaskUpdate{
-		TaskID:        task.TaskID,
-		Status:        "running",
+		TaskId:        task.GetTaskId(),
+		Status:        grpcapi.TaskStatus_TASK_STATUS_RUNNING,
 		Step:          "container_started",
-		ContainerID:   runtime.ContainerID,
+		ContainerId:   runtime.ContainerID,
 		ListenAddress: runtime.ListenAddress,
-		Slot:          task.TargetSlot,
-		ServerName:    task.ServerName,
+		Slot:          task.GetTargetSlot(),
+		ServerName:    task.GetServerName(),
 	}); err != nil {
 		return err
 	}
 
-	if task.HTTPTimeoutSecond <= 0 {
-		task.HTTPTimeoutSecond = e.cfg.HTTPProbeTimeoutS
+	if task.GetHttpTimeoutSecond() <= 0 {
+		task.HttpTimeoutSecond = int32(e.cfg.HTTPProbeTimeoutS)
 	}
 	if err := e.waitForHealth(ctx, task, runtime); err != nil {
 		return err
 	}
 	return report(&grpcapi.TaskUpdate{
-		TaskID:        task.TaskID,
-		Status:        "succeeded",
+		TaskId:        task.GetTaskId(),
+		Status:        grpcapi.TaskStatus_TASK_STATUS_SUCCEEDED,
 		Step:          "healthy",
-		ContainerID:   runtime.ContainerID,
+		ContainerId:   runtime.ContainerID,
 		ListenAddress: runtime.ListenAddress,
-		Slot:          task.TargetSlot,
-		ServerName:    task.ServerName,
+		Slot:          task.GetTargetSlot(),
+		ServerName:    task.GetServerName(),
 	})
 }
 
 func (e *Executor) executeTrafficSwitch(ctx context.Context, task *grpcapi.TaskCommand, report func(*grpcapi.TaskUpdate) error) error {
-	if err := e.haproxy.SetServerAddress(ctx, task.BackendName, task.ServerName, "127.0.0.1", task.HostPort); err != nil {
+	if err := e.haproxy.SetServerAddress(ctx, task.GetBackendName(), task.GetServerName(), "127.0.0.1", int(task.GetHostPort())); err != nil {
 		return err
 	}
-	if err := e.haproxy.EnableServer(ctx, task.BackendName, task.ServerName); err != nil {
+	if err := e.haproxy.EnableServer(ctx, task.GetBackendName(), task.GetServerName()); err != nil {
 		return err
 	}
-	if task.PreviousServer != "" {
-		if err := e.haproxy.DisableServer(ctx, task.BackendName, task.PreviousServer); err != nil {
+	if task.GetPreviousServer() != "" {
+		if err := e.haproxy.DisableServer(ctx, task.GetBackendName(), task.GetPreviousServer()); err != nil {
 			return err
 		}
 	}
 	return report(&grpcapi.TaskUpdate{
-		TaskID:     task.TaskID,
-		Status:     "succeeded",
+		TaskId:     task.GetTaskId(),
+		Status:     grpcapi.TaskStatus_TASK_STATUS_SUCCEEDED,
 		Step:       "traffic_switched",
-		Slot:       task.TargetSlot,
-		ServerName: task.ServerName,
+		Slot:       task.GetTargetSlot(),
+		ServerName: task.GetServerName(),
 	})
 }
 
 func (e *Executor) waitForHealth(ctx context.Context, task *grpcapi.TaskCommand, runtime *ContainerRuntime) error {
-	if task.HTTPHealthPath == "" {
-		task.HTTPHealthPath = "/health"
+	if task.GetHttpHealthPath() == "" {
+		task.HttpHealthPath = "/health"
 	}
-	if task.HTTPExpectedCode == 0 {
-		task.HTTPExpectedCode = http.StatusOK
+	if task.GetHttpExpectedCode() == 0 {
+		task.HttpExpectedCode = http.StatusOK
 	}
-	deadline := time.Now().Add(time.Duration(task.HTTPTimeoutSecond) * time.Second)
+	deadline := time.Now().Add(time.Duration(task.GetHttpTimeoutSecond()) * time.Second)
 	for {
 		select {
 		case <-ctx.Done():
@@ -140,12 +140,12 @@ func (e *Executor) waitForHealth(ctx context.Context, task *grpcapi.TaskCommand,
 		}
 		health, err := e.docker.InspectHealth(ctx, runtime.ContainerID)
 		if err == nil && (health == "" || health == "healthy") {
-			if err := probeHTTP(runtime.ListenAddress, task.HTTPHealthPath, task.HTTPExpectedCode, task.HTTPTimeoutSecond); err == nil {
+			if err := probeHTTP(runtime.ListenAddress, task.GetHttpHealthPath(), int(task.GetHttpExpectedCode()), int(task.GetHttpTimeoutSecond())); err == nil {
 				return nil
 			}
 		}
 		if time.Now().After(deadline) {
-			return fmt.Errorf("health check timeout for task %s", task.TaskID)
+			return fmt.Errorf("health check timeout for task %s", task.GetTaskId())
 		}
 		time.Sleep(time.Second)
 	}

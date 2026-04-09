@@ -1,0 +1,122 @@
+syntax = "proto3";
+
+package edgepilot.grpcapi;
+
+option go_package = "edge-pilot/internal/shared/grpcapi;grpcapi";
+
+service AgentControl {
+  rpc Connect(stream AgentMessage) returns (stream ControlMessage);
+}
+
+enum Slot {
+  SLOT_UNSPECIFIED = 0;
+  SLOT_BLUE = 1;
+  SLOT_GREEN = 2;
+}
+
+enum TaskType {
+  TASK_TYPE_UNSPECIFIED = 0;
+  TASK_TYPE_DEPLOY_GREEN = 1;
+  TASK_TYPE_SWITCH_TRAFFIC = 2;
+  TASK_TYPE_ROLLBACK = 3;
+  TASK_TYPE_CLEANUP_OLD = 4;
+}
+
+enum TaskStatus {
+  TASK_STATUS_UNSPECIFIED = 0;
+  TASK_STATUS_RUNNING = 1;
+  TASK_STATUS_SUCCEEDED = 2;
+  TASK_STATUS_FAILED = 3;
+}
+
+message AgentMessage {
+  oneof payload {
+    HelloMessage hello = 1;
+    HeartbeatMessage heartbeat = 2;
+    TaskUpdate task_update = 3;
+    StatsReport stats = 4;
+  }
+}
+
+message ControlMessage {
+  oneof payload {
+    AckMessage ack = 1;
+    TaskCommand task = 2;
+  }
+}
+
+message HelloMessage {
+  string agent_id = 1;
+  string token = 2;
+  string version = 3;
+  string hostname = 4;
+  repeated string capabilities = 5;
+}
+
+message HeartbeatMessage {
+  string agent_id = 1;
+  repeated string running_task_ids = 2;
+}
+
+message AckMessage {
+  string message = 1;
+}
+
+message VolumeMount {
+  string source = 1;
+  string target = 2;
+  bool read_only = 3;
+}
+
+message TaskCommand {
+  string task_id = 1;
+  string release_id = 2;
+  string service_id = 3;
+  string service_key = 4;
+  string agent_id = 5;
+  TaskType type = 6;
+  string image_repo = 7;
+  string image_tag = 8;
+  string commit_sha = 9;
+  string trace_id = 10;
+  Slot target_slot = 11;
+  Slot current_live_slot = 12;
+  int32 container_port = 13;
+  int32 host_port = 14;
+  string http_health_path = 15;
+  int32 http_expected_code = 16;
+  int32 http_timeout_second = 17;
+  string backend_name = 18;
+  string server_name = 19;
+  string previous_server = 20;
+  map<string, string> env = 21;
+  repeated string command = 22;
+  repeated string entrypoint = 23;
+  repeated VolumeMount volumes = 24;
+}
+
+message TaskUpdate {
+  string task_id = 1;
+  TaskStatus status = 2;
+  string step = 3;
+  string error_message = 4;
+  string container_id = 5;
+  string listen_address = 6;
+  Slot slot = 7;
+  string server_name = 8;
+  map<string, int64> metrics = 9;
+}
+
+message BackendStatPoint {
+  string service_id = 1;
+  string backend_name = 2;
+  string server_name = 3;
+  int64 scur = 4;
+  int64 rate = 5;
+  int64 error_requests = 6;
+}
+
+message StatsReport {
+  string agent_id = 1;
+  repeated BackendStatPoint services = 2;
+}

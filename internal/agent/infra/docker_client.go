@@ -32,27 +32,27 @@ func NewDockerClient(cfg *config.AgentRuntimeConfig) application.DockerRuntime {
 
 func (c *DockerClient) DeployContainer(ctx context.Context, task *grpcapi.TaskCommand) (*application.ContainerRuntime, error) {
 	createReq := dockerCreateRequest{
-		Image:      task.ImageRepo + ":" + task.ImageTag,
-		Env:        flattenEnv(task.Env),
-		Cmd:        task.Command,
-		Entrypoint: task.Entrypoint,
+		Image:      task.GetImageRepo() + ":" + task.GetImageTag(),
+		Env:        flattenEnv(task.GetEnv()),
+		Cmd:        task.GetCommand(),
+		Entrypoint: task.GetEntrypoint(),
 		ExposedPorts: map[string]map[string]string{
-			portKey(task.ContainerPort): {},
+			portKey(int(task.GetContainerPort())): {},
 		},
 		HostConfig: dockerHostConfig{
 			PortBindings: map[string][]dockerPortBinding{
-				portKey(task.ContainerPort): {
-					{HostIP: "0.0.0.0", HostPort: strconv.Itoa(task.HostPort)},
+				portKey(int(task.GetContainerPort())): {
+					{HostIP: "0.0.0.0", HostPort: strconv.Itoa(int(task.GetHostPort()))},
 				},
 			},
-			Binds: flattenVolumes(task.Volumes),
+			Binds: flattenVolumes(task.GetVolumes()),
 		},
 	}
 	body, err := json.Marshal(createReq)
 	if err != nil {
 		return nil, err
 	}
-	name := fmt.Sprintf("%s-%d-%d", task.ServiceKey, task.TargetSlot, time.Now().Unix())
+	name := fmt.Sprintf("%s-%d-%d", task.GetServiceKey(), task.GetTargetSlot(), time.Now().Unix())
 	createURL := "http://docker/containers/create?name=" + url.QueryEscape(name)
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, createURL, bytes.NewReader(body))
 	if err != nil {
@@ -85,7 +85,7 @@ func (c *DockerClient) DeployContainer(ctx context.Context, task *grpcapi.TaskCo
 	}
 	return &application.ContainerRuntime{
 		ContainerID:   createResp.ID,
-		ListenAddress: "127.0.0.1:" + strconv.Itoa(task.HostPort),
+		ListenAddress: "127.0.0.1:" + strconv.Itoa(int(task.GetHostPort())),
 	}, nil
 }
 
@@ -158,14 +158,14 @@ func flattenEnv(m map[string]string) []string {
 	return out
 }
 
-func flattenVolumes(items []grpcapi.VolumeMount) []string {
+func flattenVolumes(items []*grpcapi.VolumeMount) []string {
 	if len(items) == 0 {
 		return nil
 	}
 	out := make([]string, 0, len(items))
 	for _, item := range items {
-		bind := item.Source + ":" + item.Target
-		if item.ReadOnly {
+		bind := item.GetSource() + ":" + item.GetTarget()
+		if item.GetReadOnly() {
 			bind += ":ro"
 		}
 		out = append(out, bind)

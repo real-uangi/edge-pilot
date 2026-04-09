@@ -21,11 +21,10 @@
 
 - 入口与装配：
   - `cmd/control-plane`：control-plane 独立二进制入口，负责 HTTP 管理面、Web、CI 集成、内部 gRPC 服务与持久化装配。
-  - `cmd/agent`：agent 独立二进制入口，负责本机执行器、内部 gRPC 客户端、本地健康检查与指标。
+  - `cmd/agent`：agent 独立二进制入口，负责本机执行器与内部 gRPC 客户端装配。
   - `internal/bootstrap`：两种角色的 `fx` 装配入口。
 - 适配器层：
   - `adapter/http/controlplane`：control-plane HTTP 路由、中间件装配、CI 集成接口、静态站点挂载。
-  - `adapter/http/agent`：agent 本地健康检查与指标接口。
   - `adapter/http/routes`：共享基础路由（如 metrics）。
   - `adapter/grpc/controlplane`：control-plane 内部 gRPC 服务端与 agent 会话管理。
   - `adapter/grpc/agent`：agent 到 control-plane 的长连接客户端。

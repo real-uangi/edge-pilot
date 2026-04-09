@@ -36,20 +36,20 @@ func NewService(
 }
 
 func (s *Service) RecordStats(report *grpcapi.StatsReport) error {
-	stats := make([]model.BackendStatSnapshot, 0, len(report.Services))
-	for _, item := range report.Services {
-		serviceID, err := uuid.Parse(item.ServiceID)
+	stats := make([]model.BackendStatSnapshot, 0, len(report.GetServices()))
+	for _, item := range report.GetServices() {
+		serviceID, err := uuid.Parse(item.GetServiceId())
 		if err != nil {
 			continue
 		}
 		stats = append(stats, model.BackendStatSnapshot{
 			ID:            uuid.New(),
 			ServiceID:     serviceID,
-			BackendName:   item.BackendName,
-			ServerName:    item.ServerName,
-			Scur:          item.Scur,
-			Rate:          item.Rate,
-			ErrorRequests: item.ErrorRequests,
+			BackendName:   item.GetBackendName(),
+			ServerName:    item.GetServerName(),
+			Scur:          item.GetScur(),
+			Rate:          item.GetRate(),
+			ErrorRequests: item.GetErrorRequests(),
 		})
 	}
 	return s.repo.SaveBackendStats(stats)
