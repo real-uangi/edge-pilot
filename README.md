@@ -1,0 +1,172 @@
+# Edge Pilot
+
+Edge Pilot 是一个面向单机 Docker 多服务场景的控制面，用来解决三类问题：
+
+- 多服务发布过程可控
+- 蓝绿发布流量切换自动化
+- API 与运行态观测沉淀
+
+当前仓库采用单仓库双二进制形态：
+
+- `edge-pilot-control`：control-plane，负责管理 API、CI 集成、Web 控制台、发布编排、任务持久化、审计和观测
+- `edge-pilot-agent`：agent，负责连接 control-plane，执行本机 Docker 与 HAProxy 操作，并回报任务进度与运行指标
+
+## 架构概览
+
+- `control-plane` 是唯一持久化中心，连接 PostgreSQL
+- `agent` 不连接数据库，只通过内部 gRPC 双向流连接 `control-plane`
+- CI 回调只负责创建排队中的发布请求，真正开始发布由管理员显式触发
+- `agent` 通过 Docker Socket 与 HAProxy Runtime Socket 复用宿主机现有能力
+
+当前核心链路：
+
+1. CI 调用 `POST /api/integration/ci/releases`
+2. `control-plane` 校验服务配置后创建 `queued` 状态的发布请求
+3. 同一服务允许多个请求排队，但同一时刻只能有一个活动发布
+4. 管理员调用 `POST /api/admin/releases/:id/start` 开始指定请求
+5. `control-plane` 创建首个 `deploy_green` 任务并通过 gRPC 长连接推送给目标 `agent`
+6. `agent` 用固定名称拉起目标槽位容器，做 Docker health + HTTP probe
+7. 健康通过后，发布单进入 `ready_to_switch`
+8. 管理员调用确认切流接口
+9. `agent` 通过 HAProxy Runtime Socket 切换流量
+10. 保留当前 live 槽位和当前 rollback 槽位容器，并清理更旧的受管容器
+
+## 当前发布与恢复语义
+
+### 蓝绿发布
+
+- CI 回调只会创建排队请求，不会直接启动发布
+- 管理员可以对 `queued` 请求执行：
+  - `start`
+  - `skip`
+- `skip` 是终态，不会重新入队
+- 容器固定命名：
+  - `ep-<serviceKey>-blue`
+  - `ep-<serviceKey>-green`
+- 受管容器固定标签：
+  - `ep.managed=true`
+  - `ep.agent_id`
+  - `ep.service_id`
+  - `ep.service_key`
+  - `ep.slot`
+  - `ep.release_id`
+- agent 只管理当前 agent 自己创建的受管容器，不会接管或删除外部容器
+- 若宿主机上存在同名但非受管容器，任务直接失败，不做接管
+
+### 断线恢复
+
+- `agent` 每 `5s` 发送一次 heartbeat
+- `control-plane` 在 heartbeat 时使用 `running_task_ids` 对账
+- 未完成但不在运行中的当前任务会被重放一次
+- 同一 session 内同一任务只会重放一次
+- `15s` 无心跳会把 agent 标记为 offline
+- `10m` 无进展的任务会被标记为 `timed_out`，对应发布单进入失败态
+
+### 旧容器清理
+
+- 当前稳态只保留两类受管容器：
+  - 当前 live 槽位容器
+  - 当前 rollback 槽位容器
+- 切流成功后会 best-effort 清理更旧的受管容器
+- 当前仓库尚未上线，不做历史命名或旧 agent 产物兼容
+
+## 目录结构
+
+- `cmd/control-plane`：control-plane 二进制入口
+- `cmd/agent`：agent 二进制入口
+- `adapter/http/controlplane`：管理 API、CI 集成与静态站点挂载
+- `adapter/grpc/controlplane`：内部 gRPC 服务端与 agent session 管理
+- `adapter/grpc/agent`：agent gRPC 长连接客户端
+- `adapter/schedule`：离线扫描、任务超时扫描等后台调度
+- `internal/servicecatalog`：服务定义、镜像、端口、探活、HAProxy 绑定
+- `internal/release`：发布单、任务、切流、回滚、审计
+- `internal/agent`：agent 注册、心跳、恢复、执行器、Docker/HAProxy 适配
+- `internal/observability`：总览、实例状态和 backend 指标快照
+
+## HTTP 接口
+
+### CI 集成
+
+- `POST /api/integration/ci/releases`
+
+认证方式：
+
+- 若配置了 `CI_SHARED_TOKEN`，请求头必须带 `X-EdgePilot-Token`
+
+### 管理接口
+
+- `POST /api/admin/services`
+- `PUT /api/admin/services/:id`
+- `GET /api/admin/services`
+- `GET /api/admin/services/:id`
+- `GET /api/admin/releases`
+- `GET /api/admin/releases/:id`
+- `POST /api/admin/releases/:id/start`
+- `POST /api/admin/releases/:id/skip`
+- `POST /api/admin/releases/:id/confirm-switch`
+- `POST /api/admin/releases/:id/rollback`
+- `GET /api/admin/overview`
+- `GET /api/admin/services/:id/observability`
+- `GET /metrics`
+
+## 运行配置
+
+### control-plane
+
+关键配置：
+
+- PostgreSQL 连接配置：由 `allingo` 的数据库模块提供
+- `GRPC_PORT`：内部 gRPC 监听端口，默认 `9090`
+- `CI_SHARED_TOKEN`：CI 回调鉴权
+- `AGENT_SHARED_TOKEN`：所有 agent 共用 token
+- `AGENT_TOKENS`：按 agent ID 单独配置 token，格式如 `agent-a=token-a,agent-b=token-b`
+- `WEB_THEME`：Web 主题，默认 `default`
+
+### agent
+
+关键配置：
+
+- `AGENT_ID`：agent 唯一标识，默认 hostname
+- `AGENT_TOKEN`：连接 control-plane 的鉴权 token
+- `CONTROL_PLANE_GRPC_ADDR`：control-plane gRPC 地址，默认 `127.0.0.1:9090`
+- `DOCKER_SOCKET_PATH`：默认 `/var/run/docker.sock`
+- `HAPROXY_RUNTIME_SOCKET`：默认 `/var/run/haproxy/admin.sock`
+- `HTTP_PROBE_TIMEOUT_SECONDS`：默认 `5`
+
+`AGENT_VERSION` 不再通过环境变量读取，而是直接使用编译时注入的 build info。
+
+## 本地构建
+
+```bash
+make proto
+make build VERSION=v0.1.0
+```
+
+产物输出到 `dist/`：
+
+- `dist/edge-pilot-control`
+- `dist/edge-pilot-agent`
+
+启动时会打印编译信息：
+
+- `version`
+- `commit`
+- `build_time`
+
+## 发布产物
+
+GitHub Actions 对 `v*` tag 触发 release：
+
+- 产出 GitHub Release 二进制归档
+- 推送两个 GHCR 镜像：
+  - `ghcr.io/<owner>/edge-pilot-control`
+  - `ghcr.io/<owner>/edge-pilot-agent`
+
+镜像基础镜像当前为 `debian:bookworm-slim`。
+
+## 当前限制
+
+- 当前聚焦 HTTP 服务的蓝绿发布，不支持 worker 与非 HTTP 协议
+- 切流仍然是人工确认，不做灰度权重
+- gRPC 当前未启用 TLS
+- `cleanup_old` 未单独扩展为独立发布步骤，旧容器清理作为 agent 的后处理执行

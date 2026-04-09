@@ -54,7 +54,6 @@ func (r *repository) HasActiveRelease(serviceID uuid.UUID) (bool, error) {
 	var count int64
 	if err := r.conn.Model(&model.Release{}).
 		Where("service_id = ? AND status IN ?", serviceID, []model.ReleaseStatus{
-			model.ReleaseStatusPending,
 			model.ReleaseStatusDispatching,
 			model.ReleaseStatusDeploying,
 			model.ReleaseStatusReadyToSwitch,
@@ -63,6 +62,38 @@ func (r *repository) HasActiveRelease(serviceID uuid.UUID) (bool, error) {
 		return false, err
 	}
 	return count > 0, nil
+}
+
+func (r *repository) FindQueuedOrActiveDuplicate(serviceID uuid.UUID, imageTag string, commitSHA string) (*model.Release, error) {
+	var release model.Release
+	query := r.conn.Where("service_id = ? AND image_tag = ? AND status IN ?", serviceID, imageTag, []model.ReleaseStatus{
+		model.ReleaseStatusQueued,
+		model.ReleaseStatusDispatching,
+		model.ReleaseStatusDeploying,
+		model.ReleaseStatusReadyToSwitch,
+		model.ReleaseStatusSwitched,
+	})
+	if commitSHA != "" {
+		query = query.Where("commit_sha = ?", commitSHA)
+	}
+	result := query.Order("created_at asc").First(&release)
+	if result.Error != nil {
+		if result.Error == gorm.ErrRecordNotFound {
+			return nil, nil
+		}
+		return nil, result.Error
+	}
+	return &release, nil
+}
+
+func (r *repository) CountQueuedBefore(serviceID uuid.UUID, createdAt time.Time, releaseID uuid.UUID) (int, error) {
+	var count int64
+	if err := r.conn.Model(&model.Release{}).
+		Where("service_id = ? AND status = ? AND created_at < ? AND id <> ?", serviceID, model.ReleaseStatusQueued, createdAt, releaseID).
+		Count(&count).Error; err != nil {
+		return 0, err
+	}
+	return int(count), nil
 }
 
 func (r *repository) CreateTask(task *model.Task) error {

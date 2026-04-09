@@ -44,6 +44,73 @@ func (s *Service) CreateFromCI(req dto.CreateReleaseFromCIRequest) (*dto.Release
 	if !spec.Enabled {
 		return nil, business.NewBadRequest("service 已禁用")
 	}
+	duplicate, err := s.repo.FindQueuedOrActiveDuplicate(spec.ID, req.ImageTag, req.CommitSHA)
+	if err != nil {
+		return nil, err
+	}
+	if duplicate != nil {
+		if err := s.repo.CreateAudit(newAudit("release", duplicate.ID.String(), "release_deduplicated", req.TraceID, duplicate.ID.String())); err != nil {
+			return nil, err
+		}
+		output, err := s.enrichReleaseOutput(duplicate)
+		if err != nil {
+			return nil, err
+		}
+		return &output, nil
+	}
+	release := &model.Release{
+		ID:               uuid.New(),
+		ServiceID:        spec.ID,
+		AgentID:          spec.AgentID,
+		ImageRepo:        firstNonEmpty(req.ImageRepo, spec.ImageRepo),
+		ImageTag:         req.ImageTag,
+		CommitSHA:        req.CommitSHA,
+		TriggeredBy:      req.TriggeredBy,
+		TraceID:          req.TraceID,
+		Status:           model.ReleaseStatusQueued,
+		TargetSlot:       nextSlot(spec.CurrentLiveSlot),
+		PreviousLiveSlot: spec.CurrentLiveSlot,
+		SwitchConfirmed:  boolPointer(false),
+	}
+
+	if err := s.repo.CreateRelease(release); err != nil {
+		return nil, err
+	}
+	if err := s.repo.CreateAudit(newAudit("release", release.ID.String(), "release_requested", req.TraceID, "release queued")); err != nil {
+		return nil, err
+	}
+	output, err := s.enrichReleaseOutput(release)
+	if err != nil {
+		return nil, err
+	}
+	return &output, nil
+}
+
+func (s *Service) Start(id uuid.UUID, operator string) (*dto.ReleaseOutput, error) {
+	release, err := s.repo.GetRelease(id)
+	if err != nil {
+		return nil, err
+	}
+	if release == nil {
+		return nil, business.ErrNotFound
+	}
+	if !release.Status.IsQueued() {
+		return nil, business.NewErrorWithCode("release is not queued", 409)
+	}
+	active, err := s.repo.HasActiveRelease(release.ServiceID)
+	if err != nil {
+		return nil, err
+	}
+	if active {
+		return nil, business.NewErrorWithCode("service has active release", 409)
+	}
+	spec, err := s.services.GetSpecByID(release.ServiceID)
+	if err != nil {
+		return nil, err
+	}
+	if !spec.Enabled {
+		return nil, business.NewBadRequest("service 已禁用")
+	}
 	online, err := s.agentRegistry.IsOnline(spec.AgentID)
 	if err != nil {
 		return nil, err
@@ -51,43 +118,60 @@ func (s *Service) CreateFromCI(req dto.CreateReleaseFromCIRequest) (*dto.Release
 	if !online {
 		return nil, business.NewErrorWithCode("agent not online", 409)
 	}
-	active, err := s.repo.HasActiveRelease(spec.ID)
-	if err != nil {
-		return nil, err
-	}
-	if active {
-		return nil, business.NewErrorWithCode("service has active release", 409)
-	}
-
-	release := &model.Release{
-		ID:               uuid.New(),
-		ServiceID:        spec.ID,
-		AgentID:          spec.AgentID,
-		ImageTag:         req.ImageTag,
-		CommitSHA:        req.CommitSHA,
-		TriggeredBy:      req.TriggeredBy,
-		TraceID:          req.TraceID,
-		Status:           model.ReleaseStatusDispatching,
-		TargetSlot:       nextSlot(spec.CurrentLiveSlot),
-		PreviousLiveSlot: spec.CurrentLiveSlot,
-		SwitchConfirmed:  boolPointer(false),
-	}
-	task := s.newDeployTask(release, spec, req)
+	release.AgentID = spec.AgentID
+	release.PreviousLiveSlot = spec.CurrentLiveSlot
+	release.TargetSlot = nextSlot(spec.CurrentLiveSlot)
+	task := s.newDeployTask(release, spec, dto.CreateReleaseFromCIRequest{
+		ImageRepo: release.ImageRepo,
+		ImageTag:  release.ImageTag,
+		CommitSHA: release.CommitSHA,
+		TraceID:   release.TraceID,
+	})
 	release.CurrentTaskID = &task.ID
-
-	if err := s.repo.CreateRelease(release); err != nil {
-		return nil, err
-	}
+	release.Status = model.ReleaseStatusDispatching
 	if err := s.repo.CreateTask(task); err != nil {
 		return nil, err
 	}
-	if err := s.repo.CreateAudit(newAudit("release", release.ID.String(), "created", req.TraceID, "release created")); err != nil {
+	if err := s.repo.UpdateRelease(release); err != nil {
+		return nil, err
+	}
+	if err := s.repo.CreateAudit(newAudit("release", release.ID.String(), "release_started", release.TraceID, operator)); err != nil {
 		return nil, err
 	}
 	if err := s.dispatch(task); err != nil {
 		return nil, err
 	}
-	output := toReleaseOutput(release)
+	output, err := s.enrichReleaseOutput(release)
+	if err != nil {
+		return nil, err
+	}
+	return &output, nil
+}
+
+func (s *Service) Skip(id uuid.UUID, operator string) (*dto.ReleaseOutput, error) {
+	release, err := s.repo.GetRelease(id)
+	if err != nil {
+		return nil, err
+	}
+	if release == nil {
+		return nil, business.ErrNotFound
+	}
+	if !release.Status.IsQueued() {
+		return nil, business.NewErrorWithCode("release is not queued", 409)
+	}
+	now := time.Now()
+	release.Status = model.ReleaseStatusSkipped
+	release.CompletedAt = &now
+	if err := s.repo.UpdateRelease(release); err != nil {
+		return nil, err
+	}
+	if err := s.repo.CreateAudit(newAudit("release", release.ID.String(), "release_skipped", release.TraceID, operator)); err != nil {
+		return nil, err
+	}
+	output, err := s.enrichReleaseOutput(release)
+	if err != nil {
+		return nil, err
+	}
 	return &output, nil
 }
 
@@ -133,6 +217,9 @@ func (s *Service) Rollback(id uuid.UUID, operator string) (*dto.ReleaseOutput, e
 	if release == nil {
 		return nil, business.ErrNotFound
 	}
+	if release.Status == model.ReleaseStatusQueued || release.Status == model.ReleaseStatusSkipped {
+		return nil, business.NewErrorWithCode("release has not started", 409)
+	}
 	if release.PreviousLiveSlot == 0 {
 		return nil, business.NewErrorWithCode("release has no rollback target", 409)
 	}
@@ -154,7 +241,10 @@ func (s *Service) Rollback(id uuid.UUID, operator string) (*dto.ReleaseOutput, e
 	if err := s.dispatch(task); err != nil {
 		return nil, err
 	}
-	output := toReleaseOutput(release)
+	output, err := s.enrichReleaseOutput(release)
+	if err != nil {
+		return nil, err
+	}
 	return &output, nil
 }
 
@@ -166,7 +256,10 @@ func (s *Service) Get(id uuid.UUID) (*dto.ReleaseOutput, error) {
 	if release == nil {
 		return nil, business.ErrNotFound
 	}
-	output := toReleaseOutput(release)
+	output, err := s.enrichReleaseOutput(release)
+	if err != nil {
+		return nil, err
+	}
 	return &output, nil
 }
 
@@ -177,7 +270,11 @@ func (s *Service) List() ([]dto.ReleaseOutput, error) {
 	}
 	output := make([]dto.ReleaseOutput, 0, len(releases))
 	for i := range releases {
-		output = append(output, toReleaseOutput(&releases[i]))
+		item, err := s.enrichReleaseOutput(&releases[i])
+		if err != nil {
+			return nil, err
+		}
+		output = append(output, item)
 	}
 	return output, nil
 }
@@ -649,6 +746,7 @@ func toReleaseOutput(release *model.Release) dto.ReleaseOutput {
 		ID:               release.ID,
 		ServiceID:        release.ServiceID,
 		AgentID:          release.AgentID,
+		ImageRepo:        release.ImageRepo,
 		ImageTag:         release.ImageTag,
 		CommitSHA:        release.CommitSHA,
 		TriggeredBy:      release.TriggeredBy,
@@ -658,10 +756,24 @@ func toReleaseOutput(release *model.Release) dto.ReleaseOutput {
 		PreviousLiveSlot: release.PreviousLiveSlot,
 		CurrentTaskID:    release.CurrentTaskID,
 		SwitchConfirmed:  release.SwitchConfirmed,
+		IsActive:         release.Status.IsActive(),
 		CreatedAt:        release.CreatedAt,
 		UpdatedAt:        release.UpdatedAt,
 		CompletedAt:      release.CompletedAt,
 	}
+}
+
+func (s *Service) enrichReleaseOutput(release *model.Release) (dto.ReleaseOutput, error) {
+	output := toReleaseOutput(release)
+	if !release.Status.IsQueued() {
+		return output, nil
+	}
+	count, err := s.repo.CountQueuedBefore(release.ServiceID, release.CreatedAt, release.ID)
+	if err != nil {
+		return dto.ReleaseOutput{}, err
+	}
+	output.QueuePosition = count + 1
+	return output, nil
 }
 
 func newAudit(aggregateType string, aggregateID string, eventType string, traceID string, message string) *model.AuditLog {

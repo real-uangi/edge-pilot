@@ -13,6 +13,8 @@ type Repository interface {
 	GetRelease(uuid.UUID) (*model.Release, error)
 	ListReleases(int) ([]model.Release, error)
 	HasActiveRelease(uuid.UUID) (bool, error)
+	FindQueuedOrActiveDuplicate(uuid.UUID, string, string) (*model.Release, error)
+	CountQueuedBefore(uuid.UUID, time.Time, uuid.UUID) (int, error)
 	CreateTask(*model.Task) error
 	UpdateTask(*model.Task) error
 	GetTask(uuid.UUID) (*model.Task, error)

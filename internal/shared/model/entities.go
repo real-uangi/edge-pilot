@@ -17,7 +17,7 @@ const (
 type ReleaseStatus int
 
 const (
-	ReleaseStatusPending ReleaseStatus = iota + 1
+	ReleaseStatusQueued ReleaseStatus = iota + 1
 	ReleaseStatusDispatching
 	ReleaseStatusDeploying
 	ReleaseStatusReadyToSwitch
@@ -25,7 +25,24 @@ const (
 	ReleaseStatusCompleted
 	ReleaseStatusFailed
 	ReleaseStatusRolledBack
+	ReleaseStatusSkipped
 )
+
+func (s ReleaseStatus) IsActive() bool {
+	switch s {
+	case ReleaseStatusDispatching,
+		ReleaseStatusDeploying,
+		ReleaseStatusReadyToSwitch,
+		ReleaseStatusSwitched:
+		return true
+	default:
+		return false
+	}
+}
+
+func (s ReleaseStatus) IsQueued() bool {
+	return s == ReleaseStatusQueued
+}
 
 type TaskType int
 
@@ -87,6 +104,7 @@ type Release struct {
 	commondb.Model
 	ServiceID        uuid.UUID     `json:"serviceId" gorm:"type:uuid;index;not null"`
 	AgentID          string        `json:"agentId" gorm:"size:128;index;not null"`
+	ImageRepo        string        `json:"imageRepo" gorm:"size:512;not null"`
 	ImageTag         string        `json:"imageTag" gorm:"size:255;not null"`
 	CommitSHA        string        `json:"commitSha" gorm:"size:128"`
 	TriggeredBy      string        `json:"triggeredBy" gorm:"size:255"`

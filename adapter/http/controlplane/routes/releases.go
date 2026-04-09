@@ -40,6 +40,42 @@ func SetAdminReleaseRoutes(engine *gin.Engine, releases *releaseapp.Service) {
 			"tasks":   tasks,
 		}))
 	})
+	admin.POST("/releases/:id/start", func(c *gin.Context) {
+		id, err := uuid.Parse(c.Param("id"))
+		if err != nil {
+			c.Render(api.HandleErr(err))
+			return
+		}
+		var input dto.StartReleaseRequest
+		if err := c.BindJSON(&input); err != nil && err.Error() != "EOF" {
+			c.Render(api.HandleErr(err))
+			return
+		}
+		output, err := releases.Start(id, input.Operator)
+		if err != nil {
+			c.Render(api.HandleErr(err))
+			return
+		}
+		c.Render(http.StatusOK, result.Ok(output))
+	})
+	admin.POST("/releases/:id/skip", func(c *gin.Context) {
+		id, err := uuid.Parse(c.Param("id"))
+		if err != nil {
+			c.Render(api.HandleErr(err))
+			return
+		}
+		var input dto.SkipReleaseRequest
+		if err := c.BindJSON(&input); err != nil && err.Error() != "EOF" {
+			c.Render(api.HandleErr(err))
+			return
+		}
+		output, err := releases.Skip(id, input.Operator)
+		if err != nil {
+			c.Render(api.HandleErr(err))
+			return
+		}
+		c.Render(http.StatusOK, result.Ok(output))
+	})
 	admin.POST("/releases/:id/confirm-switch", func(c *gin.Context) {
 		id, err := uuid.Parse(c.Param("id"))
 		if err != nil {

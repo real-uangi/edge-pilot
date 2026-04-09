@@ -20,6 +20,7 @@ type ReleaseOutput struct {
 	ID               uuid.UUID           `json:"id"`
 	ServiceID        uuid.UUID           `json:"serviceId"`
 	AgentID          string              `json:"agentId"`
+	ImageRepo        string              `json:"imageRepo"`
 	ImageTag         string              `json:"imageTag"`
 	CommitSHA        string              `json:"commitSha"`
 	TriggeredBy      string              `json:"triggeredBy"`
@@ -29,9 +30,19 @@ type ReleaseOutput struct {
 	PreviousLiveSlot model.Slot          `json:"previousLiveSlot"`
 	CurrentTaskID    *uuid.UUID          `json:"currentTaskId"`
 	SwitchConfirmed  *bool               `json:"switchConfirmed"`
+	IsActive         bool                `json:"isActive"`
+	QueuePosition    int                 `json:"queuePosition"`
 	CreatedAt        time.Time           `json:"createdAt"`
 	UpdatedAt        time.Time           `json:"updatedAt"`
 	CompletedAt      *time.Time          `json:"completedAt"`
+}
+
+type StartReleaseRequest struct {
+	Operator string `json:"operator"`
+}
+
+type SkipReleaseRequest struct {
+	Operator string `json:"operator"`
 }
 
 type ConfirmSwitchRequest struct {

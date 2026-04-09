@@ -9,6 +9,7 @@ import (
 	"edge-pilot/internal/shared/dto"
 	"edge-pilot/internal/shared/grpcapi"
 	"edge-pilot/internal/shared/model"
+	"sort"
 	"testing"
 	"time"
 
@@ -16,7 +17,7 @@ import (
 	commondb "github.com/real-uangi/allingo/common/db"
 )
 
-func TestCreateFromCIRejectsOfflineAgent(t *testing.T) {
+func TestCreateFromCICreatesQueuedReleaseWithoutDispatch(t *testing.T) {
 	serviceRepo := &fakeServiceRepo{}
 	agentRepo := &fakeAgentRepo{}
 	releaseRepo := newFakeReleaseRepo()
@@ -44,16 +45,142 @@ func TestCreateFromCIRejectsOfflineAgent(t *testing.T) {
 	serviceRepo.byID[service.ID] = service
 	serviceRepo.byKey[service.ServiceKey] = service
 
-	_, err := releaseService.CreateFromCI(dto.CreateReleaseFromCIRequest{
+	output, err := releaseService.CreateFromCI(dto.CreateReleaseFromCIRequest{
 		ServiceKey: "svc-a",
 		ImageTag:   "v1.0.0",
+		CommitSHA:  "commit-1",
 	})
-	if err == nil {
-		t.Fatalf("expected error when agent is offline")
+	if err != nil {
+		t.Fatalf("CreateFromCI() error = %v", err)
+	}
+	if output.Status != model.ReleaseStatusQueued {
+		t.Fatalf("expected queued release, got %v", output.Status)
+	}
+	if output.QueuePosition != 1 {
+		t.Fatalf("expected queue position 1, got %d", output.QueuePosition)
+	}
+	if len(dispatcher.tasks) != 0 {
+		t.Fatalf("expected no dispatched task, got %d", len(dispatcher.tasks))
+	}
+	if len(releaseRepo.tasks) != 0 {
+		t.Fatalf("expected no persisted task, got %d", len(releaseRepo.tasks))
 	}
 }
 
-func TestCreateFromCIDispatchesDeployTask(t *testing.T) {
+func TestCreateFromCIDeduplicatesSameImageRequest(t *testing.T) {
+	serviceRepo := &fakeServiceRepo{}
+	agentRepo := &fakeAgentRepo{}
+	releaseRepo := newFakeReleaseRepo()
+	dispatcher := &fakeDispatcher{}
+
+	serviceCatalog := servicecatalogapp.NewService(serviceRepo)
+	registry := agentapp.NewRegistryService(&config.AgentAuthConfig{SharedToken: "token"}, agentRepo)
+	releaseService := NewService(releaseRepo, dispatcher, serviceCatalog, registry)
+
+	enabled := true
+	dockerHealth := true
+	service := &model.Service{
+		ID:                 uuid.New(),
+		ServiceKey:         "svc-a",
+		Name:               "svc-a",
+		AgentID:            "agent-a",
+		ImageRepo:          "repo/app",
+		ContainerPort:      8080,
+		BlueHostPort:       18080,
+		GreenHostPort:      18081,
+		DockerHealthCheck:  &dockerHealth,
+		HTTPHealthPath:     "/health",
+		HTTPExpectedCode:   200,
+		HTTPTimeoutSecond:  5,
+		HAProxyBackend:     "be_api",
+		HAProxyBlueServer:  "srv_blue",
+		HAProxyGreenServer: "srv_green",
+		Enabled:            &enabled,
+	}
+	serviceRepo.ensure()
+	serviceRepo.byID[service.ID] = service
+	serviceRepo.byKey[service.ServiceKey] = service
+
+	first, err := releaseService.CreateFromCI(dto.CreateReleaseFromCIRequest{
+		ServiceKey: "svc-a",
+		ImageTag:   "v1.0.0",
+		CommitSHA:  "commit-1",
+		TraceID:    "trace-1",
+	})
+	if err != nil {
+		t.Fatalf("CreateFromCI() error = %v", err)
+	}
+	second, err := releaseService.CreateFromCI(dto.CreateReleaseFromCIRequest{
+		ServiceKey: "svc-a",
+		ImageTag:   "v1.0.0",
+		CommitSHA:  "commit-1",
+		TraceID:    "trace-2",
+	})
+	if err != nil {
+		t.Fatalf("CreateFromCI() duplicate error = %v", err)
+	}
+	if first.ID != second.ID {
+		t.Fatalf("expected duplicate callback to reuse release %s, got %s", first.ID, second.ID)
+	}
+	if len(releaseRepo.releases) != 1 {
+		t.Fatalf("expected one release after dedupe, got %d", len(releaseRepo.releases))
+	}
+	if len(dispatcher.tasks) != 0 {
+		t.Fatalf("expected no dispatched tasks on dedupe path, got %d", len(dispatcher.tasks))
+	}
+}
+
+func TestCreateFromCIAllowsMultipleQueuedRequestsForDifferentImages(t *testing.T) {
+	serviceRepo := &fakeServiceRepo{}
+	agentRepo := &fakeAgentRepo{}
+	releaseRepo := newFakeReleaseRepo()
+	dispatcher := &fakeDispatcher{}
+
+	serviceCatalog := servicecatalogapp.NewService(serviceRepo)
+	registry := agentapp.NewRegistryService(&config.AgentAuthConfig{SharedToken: "token"}, agentRepo)
+	releaseService := NewService(releaseRepo, dispatcher, serviceCatalog, registry)
+
+	enabled := true
+	dockerHealth := true
+	service := &model.Service{
+		ID:                uuid.New(),
+		ServiceKey:        "svc-a",
+		Name:              "svc-a",
+		AgentID:           "agent-a",
+		ImageRepo:         "repo/app",
+		ContainerPort:     8080,
+		BlueHostPort:      18080,
+		GreenHostPort:     18081,
+		DockerHealthCheck: &dockerHealth,
+		Enabled:           &enabled,
+	}
+	serviceRepo.ensure()
+	serviceRepo.byID[service.ID] = service
+	serviceRepo.byKey[service.ServiceKey] = service
+
+	first, err := releaseService.CreateFromCI(dto.CreateReleaseFromCIRequest{
+		ServiceKey: "svc-a",
+		ImageTag:   "v1.0.0",
+	})
+	if err != nil {
+		t.Fatalf("CreateFromCI() first error = %v", err)
+	}
+	second, err := releaseService.CreateFromCI(dto.CreateReleaseFromCIRequest{
+		ServiceKey: "svc-a",
+		ImageTag:   "v1.1.0",
+	})
+	if err != nil {
+		t.Fatalf("CreateFromCI() second error = %v", err)
+	}
+	if first.ID == second.ID {
+		t.Fatalf("expected different queued releases for different images")
+	}
+	if len(releaseRepo.releases) != 2 {
+		t.Fatalf("expected two queued releases, got %d", len(releaseRepo.releases))
+	}
+}
+
+func TestStartQueuedReleaseDispatchesDeployTask(t *testing.T) {
 	serviceRepo := &fakeServiceRepo{}
 	agentRepo := &fakeAgentRepo{nodes: map[string]*model.AgentNode{}}
 	releaseRepo := newFakeReleaseRepo()
@@ -94,22 +221,316 @@ func TestCreateFromCIDispatchesDeployTask(t *testing.T) {
 		LastHeartbeatAt: &now,
 	}
 
-	output, err := releaseService.CreateFromCI(dto.CreateReleaseFromCIRequest{
+	queued, err := releaseService.CreateFromCI(dto.CreateReleaseFromCIRequest{
 		ServiceKey: "svc-a",
+		ImageRepo:  "repo/override",
 		ImageTag:   "v1.0.0",
 		TraceID:    "trace-1",
 	})
 	if err != nil {
 		t.Fatalf("CreateFromCI() error = %v", err)
 	}
-	if output.Status != model.ReleaseStatusDispatching {
-		t.Fatalf("unexpected release status: %v", output.Status)
+
+	started, err := releaseService.Start(queued.ID, "admin")
+	if err != nil {
+		t.Fatalf("Start() error = %v", err)
+	}
+	if started.Status != model.ReleaseStatusDispatching {
+		t.Fatalf("expected dispatching release, got %v", started.Status)
+	}
+	if started.IsActive != true {
+		t.Fatalf("expected active release after start")
+	}
+	if started.QueuePosition != 0 {
+		t.Fatalf("expected queue position reset after start, got %d", started.QueuePosition)
 	}
 	if len(dispatcher.tasks) != 1 {
 		t.Fatalf("expected one dispatched task, got %d", len(dispatcher.tasks))
 	}
-	if dispatcher.tasks[0].Type != model.TaskTypeDeployGreen {
-		t.Fatalf("expected deploy task, got %v", dispatcher.tasks[0].Type)
+	payload := dispatcher.tasks[0].Payload.Get()
+	if payload.ImageRepo != "repo/override" {
+		t.Fatalf("expected queued image repo to be preserved, got %s", payload.ImageRepo)
+	}
+}
+
+func TestStartQueuedReleaseRecalculatesTargetSlotFromCurrentLiveSlot(t *testing.T) {
+	serviceRepo := &fakeServiceRepo{}
+	agentRepo := &fakeAgentRepo{nodes: map[string]*model.AgentNode{}}
+	releaseRepo := newFakeReleaseRepo()
+	dispatcher := &fakeDispatcher{}
+
+	serviceCatalog := servicecatalogapp.NewService(serviceRepo)
+	registry := agentapp.NewRegistryService(&config.AgentAuthConfig{SharedToken: "token"}, agentRepo)
+	releaseService := NewService(releaseRepo, dispatcher, serviceCatalog, registry)
+
+	enabled := true
+	dockerHealth := true
+	online := true
+	now := time.Now()
+	service := &model.Service{
+		ID:                uuid.New(),
+		ServiceKey:        "svc-a",
+		Name:              "svc-a",
+		AgentID:           "agent-a",
+		ImageRepo:         "repo/app",
+		ContainerPort:     8080,
+		BlueHostPort:      18080,
+		GreenHostPort:     18081,
+		CurrentLiveSlot:   model.SlotBlue,
+		DockerHealthCheck: &dockerHealth,
+		Enabled:           &enabled,
+	}
+	serviceRepo.ensure()
+	serviceRepo.byID[service.ID] = service
+	serviceRepo.byKey[service.ServiceKey] = service
+	agentRepo.nodes["agent-a"] = &model.AgentNode{
+		ID:              "agent-a",
+		Online:          &online,
+		LastHeartbeatAt: &now,
+	}
+
+	queued, err := releaseService.CreateFromCI(dto.CreateReleaseFromCIRequest{
+		ServiceKey: "svc-a",
+		ImageTag:   "v1.0.0",
+	})
+	if err != nil {
+		t.Fatalf("CreateFromCI() error = %v", err)
+	}
+
+	service.CurrentLiveSlot = model.SlotGreen
+
+	started, err := releaseService.Start(queued.ID, "admin")
+	if err != nil {
+		t.Fatalf("Start() error = %v", err)
+	}
+	if started.PreviousLiveSlot != model.SlotGreen {
+		t.Fatalf("expected previous live slot to refresh to green, got %v", started.PreviousLiveSlot)
+	}
+	if started.TargetSlot != model.SlotBlue {
+		t.Fatalf("expected target slot to refresh to blue, got %v", started.TargetSlot)
+	}
+}
+
+func TestStartQueuedReleaseRejectsWhenAnotherReleaseIsActive(t *testing.T) {
+	serviceRepo := &fakeServiceRepo{}
+	agentRepo := &fakeAgentRepo{nodes: map[string]*model.AgentNode{}}
+	releaseRepo := newFakeReleaseRepo()
+	dispatcher := &fakeDispatcher{}
+
+	serviceCatalog := servicecatalogapp.NewService(serviceRepo)
+	registry := agentapp.NewRegistryService(&config.AgentAuthConfig{SharedToken: "token"}, agentRepo)
+	releaseService := NewService(releaseRepo, dispatcher, serviceCatalog, registry)
+
+	enabled := true
+	dockerHealth := true
+	service := &model.Service{
+		ID:                uuid.New(),
+		ServiceKey:        "svc-a",
+		Name:              "svc-a",
+		AgentID:           "agent-a",
+		ImageRepo:         "repo/app",
+		ContainerPort:     8080,
+		BlueHostPort:      18080,
+		GreenHostPort:     18081,
+		DockerHealthCheck: &dockerHealth,
+		Enabled:           &enabled,
+	}
+	serviceRepo.ensure()
+	serviceRepo.byID[service.ID] = service
+	serviceRepo.byKey[service.ServiceKey] = service
+
+	activeRelease := &model.Release{
+		ID:        uuid.New(),
+		ServiceID: service.ID,
+		AgentID:   "agent-a",
+		ImageRepo: "repo/app",
+		ImageTag:  "v1.0.0",
+		Status:    model.ReleaseStatusDeploying,
+	}
+	queuedRelease := &model.Release{
+		ID:        uuid.New(),
+		ServiceID: service.ID,
+		AgentID:   "agent-a",
+		ImageRepo: "repo/app",
+		ImageTag:  "v1.1.0",
+		Status:    model.ReleaseStatusQueued,
+	}
+	if err := releaseRepo.CreateRelease(activeRelease); err != nil {
+		t.Fatalf("CreateRelease() active error = %v", err)
+	}
+	if err := releaseRepo.CreateRelease(queuedRelease); err != nil {
+		t.Fatalf("CreateRelease() queued error = %v", err)
+	}
+
+	if _, err := releaseService.Start(queuedRelease.ID, "admin"); err == nil {
+		t.Fatalf("expected start to fail when another release is active")
+	}
+}
+
+func TestStartQueuedReleaseRejectsOfflineAgentAndKeepsQueued(t *testing.T) {
+	serviceRepo := &fakeServiceRepo{}
+	agentRepo := &fakeAgentRepo{}
+	releaseRepo := newFakeReleaseRepo()
+	dispatcher := &fakeDispatcher{}
+
+	serviceCatalog := servicecatalogapp.NewService(serviceRepo)
+	registry := agentapp.NewRegistryService(&config.AgentAuthConfig{SharedToken: "token"}, agentRepo)
+	releaseService := NewService(releaseRepo, dispatcher, serviceCatalog, registry)
+
+	enabled := true
+	dockerHealth := true
+	service := &model.Service{
+		ID:                uuid.New(),
+		ServiceKey:        "svc-a",
+		Name:              "svc-a",
+		AgentID:           "agent-a",
+		ImageRepo:         "repo/app",
+		ContainerPort:     8080,
+		BlueHostPort:      18080,
+		GreenHostPort:     18081,
+		DockerHealthCheck: &dockerHealth,
+		Enabled:           &enabled,
+	}
+	serviceRepo.ensure()
+	serviceRepo.byID[service.ID] = service
+	serviceRepo.byKey[service.ServiceKey] = service
+
+	queued, err := releaseService.CreateFromCI(dto.CreateReleaseFromCIRequest{
+		ServiceKey: "svc-a",
+		ImageTag:   "v1.0.0",
+	})
+	if err != nil {
+		t.Fatalf("CreateFromCI() error = %v", err)
+	}
+	if _, err := releaseService.Start(queued.ID, "admin"); err == nil {
+		t.Fatalf("expected start to fail when agent is offline")
+	}
+	stored := releaseRepo.releases[queued.ID]
+	if stored == nil || stored.Status != model.ReleaseStatusQueued {
+		t.Fatalf("expected queued release to remain queued")
+	}
+	if len(dispatcher.tasks) != 0 {
+		t.Fatalf("expected no dispatched task on offline agent")
+	}
+}
+
+func TestSkipQueuedReleaseMarksSkipped(t *testing.T) {
+	serviceRepo := &fakeServiceRepo{}
+	agentRepo := &fakeAgentRepo{}
+	releaseRepo := newFakeReleaseRepo()
+	dispatcher := &fakeDispatcher{}
+
+	serviceCatalog := servicecatalogapp.NewService(serviceRepo)
+	registry := agentapp.NewRegistryService(&config.AgentAuthConfig{SharedToken: "token"}, agentRepo)
+	releaseService := NewService(releaseRepo, dispatcher, serviceCatalog, registry)
+
+	enabled := true
+	dockerHealth := true
+	service := &model.Service{
+		ID:                uuid.New(),
+		ServiceKey:        "svc-a",
+		Name:              "svc-a",
+		AgentID:           "agent-a",
+		ImageRepo:         "repo/app",
+		ContainerPort:     8080,
+		BlueHostPort:      18080,
+		GreenHostPort:     18081,
+		DockerHealthCheck: &dockerHealth,
+		Enabled:           &enabled,
+	}
+	serviceRepo.ensure()
+	serviceRepo.byID[service.ID] = service
+	serviceRepo.byKey[service.ServiceKey] = service
+
+	queued, err := releaseService.CreateFromCI(dto.CreateReleaseFromCIRequest{
+		ServiceKey: "svc-a",
+		ImageTag:   "v1.0.0",
+	})
+	if err != nil {
+		t.Fatalf("CreateFromCI() error = %v", err)
+	}
+	skipped, err := releaseService.Skip(queued.ID, "admin")
+	if err != nil {
+		t.Fatalf("Skip() error = %v", err)
+	}
+	if skipped.Status != model.ReleaseStatusSkipped {
+		t.Fatalf("expected skipped release, got %v", skipped.Status)
+	}
+	if skipped.CompletedAt == nil {
+		t.Fatalf("expected skipped release completed time")
+	}
+	if _, err := releaseService.Start(queued.ID, "admin"); err == nil {
+		t.Fatalf("expected skipped release to reject start")
+	}
+}
+
+func TestListIncludesQueuePositionAndActiveFlag(t *testing.T) {
+	serviceRepo := &fakeServiceRepo{}
+	agentRepo := &fakeAgentRepo{}
+	releaseRepo := newFakeReleaseRepo()
+	dispatcher := &fakeDispatcher{}
+
+	serviceCatalog := servicecatalogapp.NewService(serviceRepo)
+	registry := agentapp.NewRegistryService(&config.AgentAuthConfig{SharedToken: "token"}, agentRepo)
+	releaseService := NewService(releaseRepo, dispatcher, serviceCatalog, registry)
+
+	serviceID := uuid.New()
+	now := time.Now()
+	releaseA := &model.Release{
+		ID:        uuid.New(),
+		ServiceID: serviceID,
+		AgentID:   "agent-a",
+		ImageRepo: "repo/app",
+		ImageTag:  "v1.0.0",
+		Status:    model.ReleaseStatusQueued,
+	}
+	releaseA.CreatedAt = now.Add(-2 * time.Minute)
+	releaseB := &model.Release{
+		ID:        uuid.New(),
+		ServiceID: serviceID,
+		AgentID:   "agent-a",
+		ImageRepo: "repo/app",
+		ImageTag:  "v1.1.0",
+		Status:    model.ReleaseStatusQueued,
+	}
+	releaseB.CreatedAt = now.Add(-1 * time.Minute)
+	activeRelease := &model.Release{
+		ID:        uuid.New(),
+		ServiceID: serviceID,
+		AgentID:   "agent-a",
+		ImageRepo: "repo/app",
+		ImageTag:  "v1.2.0",
+		Status:    model.ReleaseStatusDeploying,
+	}
+	activeRelease.CreatedAt = now
+	for _, release := range []*model.Release{releaseA, releaseB, activeRelease} {
+		if err := releaseRepo.CreateRelease(release); err != nil {
+			t.Fatalf("CreateRelease() error = %v", err)
+		}
+	}
+
+	items, err := releaseService.List()
+	if err != nil {
+		t.Fatalf("List() error = %v", err)
+	}
+	byID := make(map[uuid.UUID]dto.ReleaseOutput, len(items))
+	for _, item := range items {
+		byID[item.ID] = item
+	}
+	if byID[releaseA.ID].QueuePosition != 1 {
+		t.Fatalf("expected first queued position 1, got %d", byID[releaseA.ID].QueuePosition)
+	}
+	if byID[releaseB.ID].QueuePosition != 2 {
+		t.Fatalf("expected second queued position 2, got %d", byID[releaseB.ID].QueuePosition)
+	}
+	if byID[activeRelease.ID].QueuePosition != 0 {
+		t.Fatalf("expected active release queue position 0, got %d", byID[activeRelease.ID].QueuePosition)
+	}
+	if !byID[activeRelease.ID].IsActive {
+		t.Fatalf("expected active release flag to be true")
+	}
+	if byID[releaseA.ID].IsActive {
+		t.Fatalf("expected queued release not to be active")
 	}
 }
 
@@ -443,12 +864,21 @@ func newFakeReleaseRepo() *fakeReleaseRepo {
 
 func (r *fakeReleaseRepo) CreateRelease(release *model.Release) error {
 	copyRelease := *release
+	now := time.Now()
+	if copyRelease.CreatedAt.IsZero() {
+		copyRelease.CreatedAt = now
+	}
+	copyRelease.UpdatedAt = copyRelease.CreatedAt
 	r.releases[release.ID] = &copyRelease
 	return nil
 }
 
 func (r *fakeReleaseRepo) UpdateRelease(release *model.Release) error {
 	copyRelease := *release
+	if copyRelease.CreatedAt.IsZero() {
+		copyRelease.CreatedAt = time.Now()
+	}
+	copyRelease.UpdatedAt = time.Now()
 	r.releases[release.ID] = &copyRelease
 	return nil
 }
@@ -466,29 +896,81 @@ func (r *fakeReleaseRepo) ListReleases(limit int) ([]model.Release, error) {
 	for _, item := range r.releases {
 		out = append(out, *item)
 	}
+	sort.Slice(out, func(i, j int) bool {
+		return out[i].CreatedAt.After(out[j].CreatedAt)
+	})
+	if limit > 0 && len(out) > limit {
+		out = out[:limit]
+	}
 	return out, nil
 }
 
 func (r *fakeReleaseRepo) HasActiveRelease(serviceID uuid.UUID) (bool, error) {
 	for _, item := range r.releases {
-		if item.ServiceID == serviceID && item.Status != model.ReleaseStatusCompleted && item.Status != model.ReleaseStatusFailed && item.Status != model.ReleaseStatusRolledBack {
+		if item.ServiceID == serviceID && item.Status.IsActive() {
 			return true, nil
 		}
 	}
 	return false, nil
 }
 
+func (r *fakeReleaseRepo) FindQueuedOrActiveDuplicate(serviceID uuid.UUID, imageTag string, commitSHA string) (*model.Release, error) {
+	var matched []*model.Release
+	for _, item := range r.releases {
+		if item.ServiceID != serviceID || item.ImageTag != imageTag {
+			continue
+		}
+		if !(item.Status.IsQueued() || item.Status.IsActive()) {
+			continue
+		}
+		if commitSHA != "" && item.CommitSHA != commitSHA {
+			continue
+		}
+		copyRelease := *item
+		matched = append(matched, &copyRelease)
+	}
+	if len(matched) == 0 {
+		return nil, nil
+	}
+	sort.Slice(matched, func(i, j int) bool {
+		return matched[i].CreatedAt.Before(matched[j].CreatedAt)
+	})
+	return matched[0], nil
+}
+
+func (r *fakeReleaseRepo) CountQueuedBefore(serviceID uuid.UUID, createdAt time.Time, releaseID uuid.UUID) (int, error) {
+	count := 0
+	for _, item := range r.releases {
+		if item.ID == releaseID || item.ServiceID != serviceID || item.Status != model.ReleaseStatusQueued {
+			continue
+		}
+		if item.CreatedAt.Before(createdAt) {
+			count++
+		}
+	}
+	return count, nil
+}
+
 func (r *fakeReleaseRepo) CreateTask(task *model.Task) error {
 	copyTask := *task
+	now := time.Now()
+	if copyTask.CreatedAt.IsZero() {
+		copyTask.CreatedAt = now
+	}
+	copyTask.UpdatedAt = copyTask.CreatedAt
 	r.tasks[task.ID] = &copyTask
-	r.taskUpdatedAt[task.ID] = time.Now()
+	r.taskUpdatedAt[task.ID] = copyTask.UpdatedAt
 	return nil
 }
 
 func (r *fakeReleaseRepo) UpdateTask(task *model.Task) error {
 	copyTask := *task
+	if copyTask.CreatedAt.IsZero() {
+		copyTask.CreatedAt = time.Now()
+	}
+	copyTask.UpdatedAt = time.Now()
 	r.tasks[task.ID] = &copyTask
-	r.taskUpdatedAt[task.ID] = time.Now()
+	r.taskUpdatedAt[task.ID] = copyTask.UpdatedAt
 	return nil
 }
 
