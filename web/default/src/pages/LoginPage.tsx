@@ -24,8 +24,8 @@ export function LoginPage() {
       <section className={styles.panel}>
         <div className={styles.copy}>
           <span className={styles.eyebrow}>Edge Pilot</span>
-          <h1 className={styles.title}>Sign In To The Control Plane</h1>
-          <p className={styles.subtitle}>管理操作、发布动作和运行态视图都通过这一张入口页收口。</p>
+          <h1 className={styles.title}>登录管理面板</h1>
+          <p className={styles.subtitle}>服务编排、节点控制、发布操作和运行态视图都从这里进入。</p>
         </div>
         <form
           className={styles.form}
@@ -35,11 +35,11 @@ export function LoginPage() {
           }}
         >
           <label className={styles.field}>
-            <span>Username</span>
+            <span>用户名</span>
             <input value={username} onChange={(event) => setUsername(event.target.value)} />
           </label>
           <label className={styles.field}>
-            <span>Password</span>
+            <span>密码</span>
             <input
               type="password"
               value={password}
@@ -50,7 +50,7 @@ export function LoginPage() {
             <div className={styles.error}>{getErrorMessage(loginMutation.error)}</div>
           ) : null}
           <button className={styles.submit} disabled={loginMutation.isPending} type="submit">
-            {loginMutation.isPending ? "Signing In" : "Sign In"}
+            {loginMutation.isPending ? "登录中" : "登录"}
           </button>
         </form>
       </section>

@@ -7,12 +7,12 @@
 }
 
 .panel {
-  width: min(980px, 100%);
+  width: min(900px, 100%);
   display: grid;
   grid-template-columns: 1.1fr 0.9fr;
-  gap: 24px;
+  gap: 18px;
   background: #ffffff;
-  border-radius: 24px;
+  border-radius: 20px;
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
   overflow: hidden;
 }
@@ -20,10 +20,10 @@
 .copy {
   background: #000000;
   color: #ffffff;
-  padding: 40px;
+  padding: 34px;
   display: grid;
   align-content: center;
-  gap: 12px;
+  gap: 10px;
 }
 
 .eyebrow {
@@ -35,43 +35,45 @@
 
 .title {
   margin: 0;
-  font-size: clamp(34px, 5vw, 56px);
+  font-size: clamp(30px, 4.4vw, 46px);
   line-height: 1.05;
 }
 
 .subtitle {
   margin: 0;
   color: rgba(255, 255, 255, 0.72);
-  line-height: 1.6;
+  line-height: 1.5;
+  font-size: 14px;
 }
 
 .form {
-  padding: 40px;
+  padding: 34px;
   display: grid;
   align-content: center;
-  gap: 16px;
+  gap: 14px;
 }
 
 .field {
   display: grid;
-  gap: 8px;
-  font-size: 14px;
+  gap: 6px;
+  font-size: 13px;
   font-weight: 700;
 }
 
 .field input {
   border: 1px solid #000000;
   border-radius: 8px;
-  padding: 14px 16px;
+  padding: 12px 14px;
 }
 
 .submit {
   border: 0;
   border-radius: 999px;
-  padding: 14px 18px;
+  padding: 12px 16px;
   background: #000000;
   color: #ffffff;
   font-weight: 700;
+  font-size: 14px;
 }
 
 .error {

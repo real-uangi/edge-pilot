@@ -15,15 +15,15 @@ export function ServicesPage() {
     <div className={styles.page}>
       <section className={styles.sectionHeader}>
         <div>
-          <h1 className={styles.sectionTitle}>Services</h1>
+          <h1 className={styles.sectionTitle}>服务</h1>
           <p className={styles.sectionCopy}>管理路由、探活、镜像仓库和容器暴露端口。</p>
         </div>
         <div className={styles.buttonRow}>
           <button className={styles.secondaryButton} onClick={() => servicesQuery.refetch()} type="button">
-            Refresh
+            刷新
           </button>
           <Link className={styles.primaryButton} to="/services/new">
-            New Service
+            新建服务
           </Link>
         </div>
       </section>
@@ -33,13 +33,13 @@ export function ServicesPage() {
           <table>
             <thead>
               <tr>
-                <th>Name</th>
-                <th>Key</th>
-                <th>Agent</th>
-                <th>Route</th>
-                <th>Live Slot</th>
-                <th>Enabled</th>
-                <th>Updated</th>
+                <th>名称</th>
+                <th>标识</th>
+                <th>节点</th>
+                <th>路由</th>
+                <th>当前槽位</th>
+                <th>启用</th>
+                <th>更新时间</th>
               </tr>
             </thead>
             <tbody>
@@ -56,7 +56,7 @@ export function ServicesPage() {
                   <td>{slotLabel(service.currentLiveSlot)}</td>
                   <td>
                     <StatusPill
-                      label={service.enabled ? "Enabled" : "Disabled"}
+                      label={service.enabled ? "启用" : "停用"}
                       tone={service.enabled ? "success" : "danger"}
                     />
                   </td>

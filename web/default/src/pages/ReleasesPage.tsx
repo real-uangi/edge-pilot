@@ -1,7 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
 import { api } from "../lib/api";
-import { formatDateTime, releaseStatusLabel, slotLabel } from "../lib/format";
+import { formatDateTime, releaseStatusLabel, releaseStatusTone, slotLabel } from "../lib/format";
 import { StatusPill } from "../components/StatusPill";
 import styles from "../styles/admin.module.css";
 
@@ -15,11 +15,11 @@ export function ReleasesPage() {
     <div className={styles.page}>
       <section className={styles.sectionHeader}>
         <div>
-          <h1 className={styles.sectionTitle}>Releases</h1>
+          <h1 className={styles.sectionTitle}>发布</h1>
           <p className={styles.sectionCopy}>查看排队、部署和切流状态，深入操作放在详情页。</p>
         </div>
         <button className={styles.secondaryButton} onClick={() => releasesQuery.refetch()} type="button">
-          Refresh
+          刷新
         </button>
       </section>
       <section className={styles.sectionCard}>
@@ -27,13 +27,13 @@ export function ReleasesPage() {
           <table>
             <thead>
               <tr>
-                <th>Release</th>
-                <th>Status</th>
-                <th>Image</th>
-                <th>Agent</th>
-                <th>Target Slot</th>
-                <th>Queue</th>
-                <th>Created</th>
+                <th>发布单</th>
+                <th>状态</th>
+                <th>镜像</th>
+                <th>节点</th>
+                <th>目标槽位</th>
+                <th>队列</th>
+                <th>创建时间</th>
               </tr>
             </thead>
             <tbody>
@@ -47,7 +47,7 @@ export function ReleasesPage() {
                   <td>
                     <StatusPill
                       label={releaseStatusLabel(release.status)}
-                      tone={release.isActive ? "warning" : release.status === 6 ? "success" : release.status === 7 ? "danger" : "default"}
+                      tone={releaseStatusTone(release.status, release.isActive)}
                     />
                   </td>
                   <td>{release.imageRepo + ":" + release.imageTag}</td>

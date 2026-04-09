@@ -69,12 +69,12 @@ export function ServiceEditorPage() {
     <div className={styles.page}>
       <section className={styles.sectionHeader}>
         <div>
-          <h1 className={styles.sectionTitle}>{isEdit ? "Service Detail" : "New Service"}</h1>
+          <h1 className={styles.sectionTitle}>{isEdit ? "服务详情" : "新建服务"}</h1>
           <p className={styles.sectionCopy}>录入发布必需项，并把复杂结构保持在受控文本块里。</p>
         </div>
         {isEdit && serviceQuery.data ? (
           <StatusPill
-            label={serviceQuery.data.enabled ? "Enabled" : "Disabled"}
+            label={serviceQuery.data.enabled ? "启用" : "停用"}
             tone={serviceQuery.data.enabled ? "success" : "danger"}
           />
         ) : null}
@@ -89,17 +89,17 @@ export function ServiceEditorPage() {
         >
           <div className={styles.fieldGrid}>
             <label className={styles.field}>
-              <span className={styles.label}>Name</span>
+              <span className={styles.label}>名称</span>
               <input className={styles.input} {...form.register("name")} />
             </label>
             <label className={styles.field}>
-              <span className={styles.label}>Service Key</span>
+              <span className={styles.label}>服务标识</span>
               <input className={styles.input} {...form.register("serviceKey")} />
             </label>
             <label className={styles.field}>
-              <span className={styles.label}>Agent</span>
+              <span className={styles.label}>节点</span>
               <select className={styles.select} {...form.register("agentId")}>
-                <option value="">Select agent</option>
+                <option value="">选择节点</option>
                 {agentsQuery.data?.map((agent) => (
                   <option key={agent.id} value={agent.id}>
                     {agent.id}
@@ -108,70 +108,70 @@ export function ServiceEditorPage() {
               </select>
             </label>
             <label className={styles.field}>
-              <span className={styles.label}>Image Repo</span>
+              <span className={styles.label}>镜像仓库</span>
               <input className={styles.input} {...form.register("imageRepo")} />
             </label>
             <label className={styles.field}>
-              <span className={styles.label}>Container Port</span>
+              <span className={styles.label}>容器端口</span>
               <input className={styles.input} type="number" {...form.register("containerPort")} />
             </label>
             <label className={styles.field}>
-              <span className={styles.label}>Route Host</span>
+              <span className={styles.label}>路由 Host</span>
               <input className={styles.input} {...form.register("routeHost")} />
             </label>
             <label className={styles.field}>
-              <span className={styles.label}>Route Prefix</span>
+              <span className={styles.label}>路由前缀</span>
               <input className={styles.input} {...form.register("routePathPrefix")} />
             </label>
             <label className={styles.field}>
-              <span className={styles.label}>HTTP Health Path</span>
+              <span className={styles.label}>HTTP 探活路径</span>
               <input className={styles.input} {...form.register("httpHealthPath")} />
             </label>
             <label className={styles.field}>
-              <span className={styles.label}>Expected Code</span>
+              <span className={styles.label}>预期状态码</span>
               <input className={styles.input} type="number" {...form.register("httpExpectedCode")} />
             </label>
             <label className={styles.field}>
-              <span className={styles.label}>Timeout Seconds</span>
+              <span className={styles.label}>超时秒数</span>
               <input className={styles.input} type="number" {...form.register("httpTimeoutSecond")} />
             </label>
             <label className={styles.field}>
               <span className={styles.checkboxRow}>
                 <input type="checkbox" {...form.register("dockerHealthCheck")} />
-                <span className={styles.label}>Docker Health Check</span>
+                <span className={styles.label}>启用 Docker 探活</span>
               </span>
             </label>
             <label className={styles.field}>
               <span className={styles.checkboxRow}>
                 <input type="checkbox" {...form.register("enabled")} />
-                <span className={styles.label}>Enabled</span>
+                <span className={styles.label}>启用服务</span>
               </span>
             </label>
 
             <label className={`${styles.field} ${styles.fieldWide}`}>
-              <span className={styles.label}>Environment</span>
+              <span className={styles.label}>环境变量</span>
               <textarea className={styles.textarea} {...form.register("envText")} />
-              <span className={styles.hint}>One line per entry: `KEY=value`</span>
+              <span className={styles.hint}>每行一个：`KEY=value`</span>
             </label>
             <label className={styles.field}>
-              <span className={styles.label}>Command</span>
+              <span className={styles.label}>命令</span>
               <textarea className={styles.textarea} {...form.register("commandText")} />
-              <span className={styles.hint}>One argument per line</span>
+              <span className={styles.hint}>每行一个参数</span>
             </label>
             <label className={styles.field}>
-              <span className={styles.label}>Entrypoint</span>
+              <span className={styles.label}>入口命令</span>
               <textarea className={styles.textarea} {...form.register("entrypointText")} />
-              <span className={styles.hint}>One argument per line</span>
+              <span className={styles.hint}>每行一个参数</span>
             </label>
             <label className={styles.field}>
-              <span className={styles.label}>Volumes</span>
+              <span className={styles.label}>挂载卷</span>
               <textarea className={styles.textarea} {...form.register("volumesText")} />
-              <span className={styles.hint}>Format: `/src:/dst[:ro]`</span>
+              <span className={styles.hint}>格式：`/src:/dst[:ro]`</span>
             </label>
             <label className={styles.field}>
-              <span className={styles.label}>Published Ports</span>
+              <span className={styles.label}>暴露端口</span>
               <textarea className={styles.textarea} {...form.register("publishedPortsText")} />
-              <span className={styles.hint}>Format: `host:container`</span>
+              <span className={styles.hint}>格式：`host:container`</span>
             </label>
           </div>
 
@@ -179,10 +179,10 @@ export function ServiceEditorPage() {
 
           <div className={styles.buttonRow} style={{ marginTop: 24 }}>
             <button className={styles.primaryButton} disabled={saveMutation.isPending} type="submit">
-              {saveMutation.isPending ? "Saving" : isEdit ? "Update Service" : "Create Service"}
+              {saveMutation.isPending ? "保存中" : isEdit ? "更新服务" : "创建服务"}
             </button>
             <button className={styles.secondaryButton} onClick={() => navigate("/services")} type="button">
-              Back
+              返回
             </button>
           </div>
         </form>
@@ -193,21 +193,21 @@ export function ServiceEditorPage() {
           <section className={styles.sectionCard}>
             <div className={styles.sectionHeader}>
               <div>
-                <h2 className={styles.sectionTitle}>Runtime Summary</h2>
+                <h2 className={styles.sectionTitle}>运行摘要</h2>
                 <p className={styles.sectionCopy}>已落库的运行实例与流量状态。</p>
               </div>
             </div>
             <div className={styles.keyValueGrid}>
               <div className={styles.keyValue}>
-                <span className={styles.key}>Live Slot</span>
+                <span className={styles.key}>当前槽位</span>
                 <span className={styles.value}>{slotLabel(serviceQuery.data.currentLiveSlot)}</span>
               </div>
               <div className={styles.keyValue}>
-                <span className={styles.key}>Docker Health</span>
+                <span className={styles.key}>Docker 探活</span>
                 <span className={styles.value}>{boolLabel(serviceQuery.data.dockerHealthCheck)}</span>
               </div>
               <div className={styles.keyValue}>
-                <span className={styles.key}>Updated</span>
+                <span className={styles.key}>更新时间</span>
                 <span className={styles.value}>{formatDateTime(serviceQuery.data.updatedAt)}</span>
               </div>
             </div>
@@ -216,7 +216,7 @@ export function ServiceEditorPage() {
           <section className={styles.sectionCard}>
             <div className={styles.sectionHeader}>
               <div>
-                <h2 className={styles.sectionTitle}>Observability</h2>
+                <h2 className={styles.sectionTitle}>运行观测</h2>
                 <p className={styles.sectionCopy}>这里轮询运行实例和 backend snapshot。</p>
               </div>
             </div>
@@ -224,12 +224,12 @@ export function ServiceEditorPage() {
               <table>
                 <thead>
                   <tr>
-                    <th>Server</th>
-                    <th>Slot</th>
-                    <th>Image</th>
-                    <th>Healthy</th>
-                    <th>Traffic</th>
-                    <th>Updated</th>
+                    <th>服务端点</th>
+                    <th>槽位</th>
+                    <th>镜像</th>
+                    <th>健康</th>
+                    <th>接流</th>
+                    <th>更新时间</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -250,12 +250,12 @@ export function ServiceEditorPage() {
               <table>
                 <thead>
                   <tr>
-                    <th>Backend</th>
-                    <th>Server</th>
+                    <th>后端</th>
+                    <th>服务端点</th>
                     <th>SCur</th>
                     <th>Rate</th>
-                    <th>Error Requests</th>
-                    <th>Created</th>
+                    <th>错误请求</th>
+                    <th>采集时间</th>
                   </tr>
                 </thead>
                 <tbody>

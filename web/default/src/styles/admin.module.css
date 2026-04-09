@@ -1,15 +1,15 @@
 .page {
   display: grid;
-  gap: 24px;
+  gap: 18px;
 }
 
 .hero {
   display: grid;
-  gap: 10px;
-  padding: 28px;
+  gap: 8px;
+  padding: 22px;
   background: #000000;
   color: #ffffff;
-  border-radius: 18px;
+  border-radius: 16px;
 }
 
 .eyebrow {
@@ -21,15 +21,16 @@
 
 .title {
   margin: 0;
-  font-size: clamp(28px, 4vw, 48px);
-  line-height: 1.1;
+  font-size: clamp(24px, 3vw, 38px);
+  line-height: 1.08;
 }
 
 .subtitle {
   margin: 0;
   max-width: 820px;
   color: rgba(255, 255, 255, 0.76);
-  line-height: 1.5;
+  line-height: 1.45;
+  font-size: 14px;
 }
 
 .sectionHeader {
@@ -42,37 +43,38 @@
 
 .sectionTitle {
   margin: 0;
-  font-size: 28px;
-  line-height: 1.15;
+  font-size: 22px;
+  line-height: 1.12;
 }
 
 .sectionCopy {
   margin: 0;
   color: var(--ep-body);
+  font-size: 13px;
 }
 
 .sectionCard {
   background: #ffffff;
   border-radius: var(--ep-radius);
   box-shadow: 0 4px 16px var(--ep-shadow);
-  padding: 24px;
+  padding: 18px;
   display: grid;
-  gap: 18px;
+  gap: 14px;
 }
 
 .cardGrid {
   display: grid;
-  gap: 16px;
+  gap: 12px;
   grid-template-columns: repeat(4, minmax(0, 1fr));
 }
 
 .statCard {
-  padding: 20px;
+  padding: 16px;
   background: #ffffff;
   border-radius: var(--ep-radius);
   box-shadow: 0 4px 16px var(--ep-shadow);
   display: grid;
-  gap: 8px;
+  gap: 6px;
 }
 
 .metricLabel {
@@ -83,14 +85,14 @@
 }
 
 .metricValue {
-  font-size: clamp(28px, 4vw, 42px);
+  font-size: clamp(24px, 3vw, 34px);
   font-weight: 800;
   line-height: 1;
 }
 
 .metricMeta {
   color: var(--ep-body);
-  font-size: 14px;
+  font-size: 12px;
 }
 
 .buttonRow {
@@ -103,31 +105,37 @@
 .secondaryButton,
 .dangerButton,
 .ghostButton {
-  border: 0;
+  border: 1px solid transparent;
   border-radius: var(--ep-pill);
-  padding: 12px 16px;
+  padding: 9px 13px;
   font-weight: 700;
+  font-size: 13px;
+  line-height: 1.1;
 }
 
 .primaryButton {
   background: #000000;
   color: #ffffff;
+  border-color: #000000;
 }
 
 .secondaryButton {
   background: var(--ep-chip);
   color: #000000;
+  border-color: rgba(0, 0, 0, 0.08);
 }
 
 .dangerButton {
-  background: #000000;
-  color: #ffffff;
+  background: #ffffff;
+  color: #000000;
+  border-color: #000000;
+  border-width: 2px;
 }
 
 .ghostButton {
   background: #ffffff;
   color: #000000;
-  box-shadow: inset 0 0 0 1px #000000;
+  border-color: #000000;
 }
 
 .tableWrap {
@@ -137,6 +145,7 @@
 .tableLink {
   font-weight: 700;
   text-decoration: underline;
+  font-size: 13px;
 }
 
 .muted {
@@ -149,13 +158,13 @@
 
 .fieldGrid {
   display: grid;
-  gap: 16px;
+  gap: 12px;
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
 .field {
   display: grid;
-  gap: 8px;
+  gap: 6px;
 }
 
 .fieldWide {
@@ -163,12 +172,12 @@
 }
 
 .label {
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 700;
 }
 
 .hint {
-  font-size: 12px;
+  font-size: 11px;
   color: var(--ep-body);
 }
 
@@ -178,13 +187,14 @@
   width: 100%;
   border: 1px solid #000000;
   border-radius: 8px;
-  padding: 12px 14px;
+  padding: 10px 12px;
   background: #ffffff;
   color: #000000;
+  font-size: 13px;
 }
 
 .textarea {
-  min-height: 120px;
+  min-height: 100px;
   resize: vertical;
 }
 
@@ -199,16 +209,17 @@
   font-weight: 700;
   background: #f3f3f3;
   border-radius: 12px;
-  padding: 14px 16px;
+  padding: 12px 14px;
+  font-size: 13px;
 }
 
 .credentialCard {
   background: #000000;
   color: #ffffff;
   border-radius: 16px;
-  padding: 20px;
+  padding: 16px;
   display: grid;
-  gap: 10px;
+  gap: 8px;
 }
 
 .credentialValue {
@@ -219,14 +230,14 @@
 
 .keyValueGrid {
   display: grid;
-  gap: 16px;
+  gap: 12px;
   grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
 .keyValue {
   display: grid;
   gap: 4px;
-  padding: 16px;
+  padding: 13px;
   border-radius: 12px;
   background: #f7f7f7;
 }
@@ -239,7 +250,7 @@
 }
 
 .value {
-  font-size: 16px;
+  font-size: 14px;
   font-weight: 700;
   word-break: break-word;
 }
@@ -247,42 +258,79 @@
 .statusPill {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  padding: 8px 12px;
+  gap: 7px;
+  padding: 6px 10px;
   border-radius: var(--ep-pill);
-  font-size: 12px;
+  border: 1px solid rgba(0, 0, 0, 0.12);
+  font-size: 11px;
   font-weight: 700;
-  background: var(--ep-chip);
+  line-height: 1;
+  letter-spacing: 0.02em;
+}
+
+.statusDot {
+  width: 7px;
+  height: 7px;
+  border-radius: 999px;
+  flex: 0 0 auto;
 }
 
 .tonedefault {
-  background: var(--ep-chip);
+  background: #ffffff;
   color: #000000;
 }
 
 .tonesuccess {
-  background: #f3f3f3;
-  color: #000000;
+  background: #000000;
+  color: #ffffff;
+  border-color: #000000;
 }
 
 .tonedanger {
-  background: #e2e2e2;
+  background: #ffffff;
   color: #000000;
+  border-color: #000000;
+  border-width: 2px;
 }
 
 .tonewarning {
   background: #efefef;
   color: #000000;
+  border-style: dashed;
+  border-color: #000000;
 }
 
 .tonedark {
   background: #000000;
   color: #ffffff;
+  border-color: #000000;
+}
+
+.dotdefault {
+  background: transparent;
+  border: 1.5px solid #000000;
+}
+
+.dotsuccess {
+  background: #ffffff;
+}
+
+.dotdanger {
+  background: #000000;
+  border-radius: 2px;
+}
+
+.dotwarning {
+  background: #000000;
+}
+
+.dotdark {
+  background: #ffffff;
 }
 
 .split {
   display: grid;
-  gap: 16px;
+  gap: 12px;
   grid-template-columns: 1.4fr 1fr;
 }
 

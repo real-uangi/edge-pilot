@@ -9,5 +9,10 @@ export function StatusPill({
   label: string;
   tone?: Tone;
 }) {
-  return <span className={`${styles.statusPill} ${styles[`tone${tone}`]}`}>{label}</span>;
+  return (
+    <span className={`${styles.statusPill} ${styles[`tone${tone}`]}`}>
+      <span className={`${styles.statusDot} ${styles[`dot${tone}`]}`} />
+      <span>{label}</span>
+    </span>
+  );
 }

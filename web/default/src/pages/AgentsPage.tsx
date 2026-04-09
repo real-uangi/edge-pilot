@@ -34,15 +34,15 @@ export function AgentsPage() {
     <div className={styles.page}>
       <section className={styles.sectionHeader}>
         <div>
-          <h1 className={styles.sectionTitle}>Agents</h1>
+          <h1 className={styles.sectionTitle}>节点</h1>
           <p className={styles.sectionCopy}>管理注册节点、在线态和一次性 token 派发。</p>
         </div>
         <div className={styles.buttonRow}>
           <button className={styles.secondaryButton} onClick={() => agentsQuery.refetch()} type="button">
-            Refresh
+            刷新
           </button>
           <button className={styles.primaryButton} disabled={createMutation.isPending} onClick={() => createMutation.mutate()} type="button">
-            {createMutation.isPending ? "Creating" : "Create Agent"}
+            {createMutation.isPending ? "创建中" : "新增节点"}
           </button>
         </div>
       </section>
@@ -51,13 +51,13 @@ export function AgentsPage() {
 
       {credential ? (
         <section className={styles.credentialCard}>
-          <span className={styles.eyebrow}>Issued Credential</span>
+          <span className={styles.eyebrow}>新签发凭据</span>
           <div>
             <strong>ID</strong>
             <div className={styles.credentialValue}>{credential.id}</div>
           </div>
           <div>
-            <strong>Token</strong>
+            <strong>令牌</strong>
             <div className={styles.credentialValue}>{credential.token}</div>
           </div>
         </section>
@@ -68,12 +68,12 @@ export function AgentsPage() {
           <table>
             <thead>
               <tr>
-                <th>Agent</th>
-                <th>Hostname</th>
-                <th>Version</th>
-                <th>Online</th>
-                <th>Enabled</th>
-                <th>Heartbeat</th>
+                <th>节点</th>
+                <th>主机名</th>
+                <th>版本</th>
+                <th>在线</th>
+                <th>启用</th>
+                <th>最近心跳</th>
               </tr>
             </thead>
             <tbody>
@@ -88,11 +88,11 @@ export function AgentsPage() {
                   <td>{agent.version || "—"}</td>
                   <td>
                     <StatusPill
-                      label={boolLabel(agent.online, "Online", "Offline")}
+                      label={boolLabel(agent.online, "在线", "离线")}
                       tone={agent.online ? "success" : "danger"}
                     />
                   </td>
-                  <td>{boolLabel(agent.enabled, "Enabled", "Disabled")}</td>
+                  <td>{boolLabel(agent.enabled, "启用", "停用")}</td>
                   <td>{formatDateTime(agent.lastHeartbeatAt)}</td>
                 </tr>
               ))}

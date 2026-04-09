@@ -3,10 +3,10 @@ import { NavLink } from "react-router-dom";
 import styles from "./AppShell.module.css";
 
 const navItems = [
-  { to: "/", label: "Overview", end: true },
-  { to: "/services", label: "Services" },
-  { to: "/agents", label: "Agents" },
-  { to: "/releases", label: "Releases" },
+  { to: "/", label: "总览", end: true },
+  { to: "/services", label: "服务" },
+  { to: "/agents", label: "节点" },
+  { to: "/releases", label: "发布" },
 ];
 
 interface AppShellProps extends PropsWithChildren {
@@ -22,7 +22,7 @@ export function AppShell({ username, loggingOut, onLogout, children }: AppShellP
         <div className={styles.headerInner}>
           <div className={styles.brandBlock}>
             <span className={styles.brand}>Edge Pilot</span>
-            <span className={styles.meta}>Control Plane</span>
+            <span className={styles.meta}>管理面板</span>
           </div>
           <nav className={styles.nav}>
             {navItems.map((item) => (
@@ -39,7 +39,7 @@ export function AppShell({ username, loggingOut, onLogout, children }: AppShellP
           <div className={styles.actions}>
             <div className={styles.user}>{username}</div>
             <button className={styles.logout} disabled={loggingOut} onClick={onLogout} type="button">
-              {loggingOut ? "Signing Out" : "Sign Out"}
+              {loggingOut ? "退出中" : "退出登录"}
             </button>
           </div>
         </div>

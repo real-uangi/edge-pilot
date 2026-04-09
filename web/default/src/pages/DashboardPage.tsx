@@ -1,7 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
 import { api } from "../lib/api";
-import { boolLabel, formatDateTime, releaseStatusLabel } from "../lib/format";
+import { boolLabel, formatDateTime, releaseStatusLabel, releaseStatusTone } from "../lib/format";
 import { StatusPill } from "../components/StatusPill";
 import styles from "../styles/admin.module.css";
 
@@ -13,10 +13,10 @@ export function DashboardPage() {
   });
 
   if (overviewQuery.isPending) {
-    return <div className={styles.page}>Loading overview…</div>;
+    return <div className={styles.page}>正在加载总览…</div>;
   }
   if (!overviewQuery.data) {
-    return <div className={styles.page}>Overview unavailable.</div>;
+    return <div className={styles.page}>总览暂不可用。</div>;
   }
 
   const { agents, services, recentReleases, activeInstances } = overviewQuery.data;
@@ -27,31 +27,31 @@ export function DashboardPage() {
   return (
     <div className={styles.page}>
       <section className={styles.hero}>
-        <span className={styles.eyebrow}>Overview</span>
-        <h1 className={styles.title}>Operate One Box Like A Real Control Plane</h1>
+        <span className={styles.eyebrow}>总览</span>
+        <h1 className={styles.title}>把单机服务运行成一套可控的发布面板</h1>
         <p className={styles.subtitle}>
-          这里集中看服务编排、Agent 存活、发布流转和运行态实例，不把平台策略写回页面，只给动作和状态。
+          这里集中看服务配置、节点存活、发布流转和运行态实例，信息更紧凑，动作更直接。
         </p>
       </section>
 
       <section className={styles.cardGrid}>
         <article className={styles.statCard}>
-          <span className={styles.metricLabel}>Active Instances</span>
+          <span className={styles.metricLabel}>运行实例</span>
           <span className={styles.metricValue}>{activeInstances}</span>
           <span className={styles.metricMeta}>当前运行中的受管实例</span>
         </article>
         <article className={styles.statCard}>
-          <span className={styles.metricLabel}>Online Agents</span>
+          <span className={styles.metricLabel}>在线节点</span>
           <span className={styles.metricValue}>{onlineAgents}</span>
-          <span className={styles.metricMeta}>{agents.length} agents in registry</span>
+          <span className={styles.metricMeta}>注册总数 {agents.length}</span>
         </article>
         <article className={styles.statCard}>
-          <span className={styles.metricLabel}>Enabled Services</span>
+          <span className={styles.metricLabel}>启用服务</span>
           <span className={styles.metricValue}>{enabledServices}</span>
-          <span className={styles.metricMeta}>{services.length} services tracked</span>
+          <span className={styles.metricMeta}>服务总数 {services.length}</span>
         </article>
         <article className={styles.statCard}>
-          <span className={styles.metricLabel}>Active Releases</span>
+          <span className={styles.metricLabel}>活动发布</span>
           <span className={styles.metricValue}>{activeReleases}</span>
           <span className={styles.metricMeta}>最近发布中的活动单</span>
         </article>
@@ -60,22 +60,22 @@ export function DashboardPage() {
       <section className={styles.sectionCard}>
         <div className={styles.sectionHeader}>
           <div>
-            <h2 className={styles.sectionTitle}>Services</h2>
-            <p className={styles.sectionCopy}>优先看路由、归属 Agent 和启用状态。</p>
+            <h2 className={styles.sectionTitle}>服务</h2>
+            <p className={styles.sectionCopy}>优先看路由、归属节点和启用状态。</p>
           </div>
           <Link className={styles.primaryButton} to="/services">
-            Open Services
+            查看服务
           </Link>
         </div>
         <div className={styles.tableWrap}>
           <table>
             <thead>
               <tr>
-                <th>Name</th>
-                <th>Route</th>
-                <th>Agent</th>
-                <th>Enabled</th>
-                <th>Updated</th>
+                <th>名称</th>
+                <th>路由</th>
+                <th>节点</th>
+                <th>启用</th>
+                <th>更新时间</th>
               </tr>
             </thead>
             <tbody>
@@ -88,7 +88,7 @@ export function DashboardPage() {
                   </td>
                   <td>{service.routeHost + service.routePathPrefix}</td>
                   <td>{service.agentId}</td>
-                  <td>{boolLabel(service.enabled, "Enabled", "Disabled")}</td>
+                  <td>{boolLabel(service.enabled, "启用", "停用")}</td>
                   <td>{formatDateTime(service.updatedAt)}</td>
                 </tr>
               ))}
@@ -101,11 +101,11 @@ export function DashboardPage() {
         <div className={styles.sectionCard}>
           <div className={styles.sectionHeader}>
             <div>
-              <h2 className={styles.sectionTitle}>Agents</h2>
+              <h2 className={styles.sectionTitle}>节点</h2>
               <p className={styles.sectionCopy}>轮询在线态和最近心跳。</p>
             </div>
             <Link className={styles.secondaryButton} to="/agents">
-              Open Agents
+              查看节点
             </Link>
           </div>
           <div className={styles.tableWrap}>
@@ -113,9 +113,9 @@ export function DashboardPage() {
               <thead>
                 <tr>
                   <th>ID</th>
-                  <th>Online</th>
-                  <th>Enabled</th>
-                  <th>Heartbeat</th>
+                  <th>在线</th>
+                  <th>启用</th>
+                  <th>最近心跳</th>
                 </tr>
               </thead>
               <tbody>
@@ -128,11 +128,11 @@ export function DashboardPage() {
                     </td>
                     <td>
                       <StatusPill
-                        label={boolLabel(agent.online, "Online", "Offline")}
+                        label={boolLabel(agent.online, "在线", "离线")}
                         tone={agent.online ? "success" : "danger"}
                       />
                     </td>
-                    <td>{boolLabel(agent.enabled, "Enabled", "Disabled")}</td>
+                    <td>{boolLabel(agent.enabled, "启用", "停用")}</td>
                     <td>{formatDateTime(agent.lastHeartbeatAt)}</td>
                   </tr>
                 ))}
@@ -144,21 +144,21 @@ export function DashboardPage() {
         <div className={styles.sectionCard}>
           <div className={styles.sectionHeader}>
             <div>
-              <h2 className={styles.sectionTitle}>Recent Releases</h2>
+              <h2 className={styles.sectionTitle}>最近发布</h2>
               <p className={styles.sectionCopy}>排队、部署、切流和回滚都在这里看。</p>
             </div>
             <Link className={styles.secondaryButton} to="/releases">
-              Open Releases
+              查看发布
             </Link>
           </div>
           <div className={styles.tableWrap}>
             <table>
               <thead>
                 <tr>
-                  <th>Release</th>
-                  <th>Status</th>
-                  <th>Image</th>
-                  <th>Created</th>
+                  <th>发布单</th>
+                  <th>状态</th>
+                  <th>镜像</th>
+                  <th>创建时间</th>
                 </tr>
               </thead>
               <tbody>
@@ -169,7 +169,12 @@ export function DashboardPage() {
                         {release.id.slice(0, 8)}
                       </Link>
                     </td>
-                    <td>{releaseStatusLabel(release.status)}</td>
+                    <td>
+                      <StatusPill
+                        label={releaseStatusLabel(release.status)}
+                        tone={releaseStatusTone(release.status, release.isActive)}
+                      />
+                    </td>
                     <td>{release.imageRepo + ":" + release.imageTag}</td>
                     <td>{formatDateTime(release.createdAt)}</td>
                   </tr>
