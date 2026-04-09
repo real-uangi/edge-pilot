@@ -1,0 +1,5 @@
+FROM debian:bookworm-slim
+
+COPY edge-pilot-control /usr/local/bin/edge-pilot-control
+
+ENTRYPOINT ["/usr/local/bin/edge-pilot-control"]

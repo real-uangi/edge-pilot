@@ -1,0 +1,92 @@
+version: 2
+
+project_name: edge-pilot
+
+before:
+  hooks:
+    - go test ./...
+
+builds:
+  - id: control-plane
+    main: ./cmd/control-plane
+    binary: edge-pilot-control
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+    goarch:
+      - amd64
+      - arm64
+    ldflags:
+      - -s
+      - -w
+      - -X edge-pilot/internal/shared/buildinfo.Version={{ .Version }}
+      - -X edge-pilot/internal/shared/buildinfo.Commit={{ .Commit }}
+      - -X edge-pilot/internal/shared/buildinfo.BuildTime={{ .Date }}
+  - id: agent
+    main: ./cmd/agent
+    binary: edge-pilot-agent
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+    goarch:
+      - amd64
+      - arm64
+    ldflags:
+      - -s
+      - -w
+      - -X edge-pilot/internal/shared/buildinfo.Version={{ .Version }}
+      - -X edge-pilot/internal/shared/buildinfo.Commit={{ .Commit }}
+      - -X edge-pilot/internal/shared/buildinfo.BuildTime={{ .Date }}
+
+archives:
+  - id: control-plane-binaries
+    ids:
+      - control-plane
+    formats:
+      - tar.gz
+    name_template: "{{ .ProjectName }}_control-plane_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+  - id: agent-binaries
+    ids:
+      - agent
+    formats:
+      - tar.gz
+    name_template: "{{ .ProjectName }}_agent_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+
+checksum:
+  name_template: checksums.txt
+
+release:
+  github:
+    owner: "{{ .Env.GITHUB_REPOSITORY_OWNER }}"
+    name: "{{ .Env.GITHUB_REPOSITORY_NAME }}"
+
+changelog:
+  use: github
+
+dockers_v2:
+  - id: control-plane-image
+    ids:
+      - control-plane
+    dockerfile: Dockerfile.control-plane
+    images:
+      - "ghcr.io/{{ .Env.GITHUB_REPOSITORY_OWNER }}/edge-pilot-control"
+    tags:
+      - "{{ .Version }}"
+      - latest
+    platforms:
+      - linux/amd64
+      - linux/arm64
+  - id: agent-image
+    ids:
+      - agent
+    dockerfile: Dockerfile.agent
+    images:
+      - "ghcr.io/{{ .Env.GITHUB_REPOSITORY_OWNER }}/edge-pilot-agent"
+    tags:
+      - "{{ .Version }}"
+      - latest
+    platforms:
+      - linux/amd64
+      - linux/arm64

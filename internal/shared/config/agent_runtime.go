@@ -1,6 +1,7 @@
 package config
 
 import (
+	"edge-pilot/internal/shared/buildinfo"
 	"os"
 	"strings"
 )
@@ -22,7 +23,7 @@ func LoadAgentRuntimeConfig() *AgentRuntimeConfig {
 		AgentID:            defaultString(os.Getenv("AGENT_ID"), hostname),
 		AgentToken:         os.Getenv("AGENT_TOKEN"),
 		ControlPlaneAddr:   defaultString(os.Getenv("CONTROL_PLANE_GRPC_ADDR"), "127.0.0.1:9090"),
-		AgentVersion:       defaultString(os.Getenv("AGENT_VERSION"), "dev"),
+		AgentVersion:       defaultString(os.Getenv("AGENT_VERSION"), buildinfo.Version),
 		Hostname:           hostname,
 		DockerSocketPath:   defaultString(os.Getenv("DOCKER_SOCKET_PATH"), "/var/run/docker.sock"),
 		HAProxyRuntimePath: defaultString(os.Getenv("HAPROXY_RUNTIME_SOCKET"), "/var/run/haproxy/admin.sock"),
