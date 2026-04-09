@@ -9,6 +9,7 @@ import (
 
 type AgentOverview struct {
 	ID              string     `json:"id"`
+	Enabled         *bool      `json:"enabled"`
 	Hostname        string     `json:"hostname"`
 	Version         string     `json:"version"`
 	Online          *bool      `json:"online"`

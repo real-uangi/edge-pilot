@@ -2,8 +2,12 @@ package config
 
 import (
 	"edge-pilot/internal/shared/buildinfo"
+	"fmt"
 	"os"
 	"strings"
+
+	"github.com/google/uuid"
+	"github.com/real-uangi/allingo/common/log"
 )
 
 type AgentRuntimeConfig struct {
@@ -28,11 +32,11 @@ type AgentRuntimeConfig struct {
 	ProxySelfHealIntervalS int
 }
 
-func LoadAgentRuntimeConfig() *AgentRuntimeConfig {
+func LoadAgentRuntimeConfig() (*AgentRuntimeConfig, error) {
 	hostname, _ := os.Hostname()
 	cfg := &AgentRuntimeConfig{
-		AgentID:                defaultString(os.Getenv("AGENT_ID"), hostname),
-		AgentToken:             os.Getenv("AGENT_TOKEN"),
+		AgentID:                strings.TrimSpace(os.Getenv("AGENT_ID")),
+		AgentToken:             strings.TrimSpace(os.Getenv("AGENT_TOKEN")),
 		ControlPlaneAddr:       defaultString(os.Getenv("CONTROL_PLANE_GRPC_ADDR"), "127.0.0.1:9090"),
 		AgentVersion:           buildinfo.Version,
 		Hostname:               hostname,
@@ -43,7 +47,7 @@ func LoadAgentRuntimeConfig() *AgentRuntimeConfig {
 		HAProxyImage:           defaultString(os.Getenv("HAPROXY_IMAGE"), "haproxytech/haproxy-debian:s6-3.4"),
 		ProxyHelperImage:       defaultString(os.Getenv("PROXY_HELPER_IMAGE"), "busybox:1.36.1"),
 		ProxyContainerName:     defaultString(os.Getenv("HAPROXY_CONTAINER_NAME"), "edge-pilot-haproxy"),
-		ProxyIPAddress:         defaultString(os.Getenv("HAPROXY_IP"), "172.29.0.10"),
+		ProxyIPAddress:         defaultString(os.Getenv("HAPROXY_IP"), "172.29.0.233"),
 		HAProxyConfigVolume:    defaultString(os.Getenv("HAPROXY_CONFIG_VOLUME"), "ep_haproxy_cfg"),
 		HAProxyRuntimePort:     defaultInt(os.Getenv("HAPROXY_RUNTIME_PORT"), 19999),
 		DataPlaneAPIPort:       defaultInt(os.Getenv("DATAPLANEAPI_PORT"), 5555),
@@ -51,7 +55,23 @@ func LoadAgentRuntimeConfig() *AgentRuntimeConfig {
 		DataPlaneAPIPassword:   defaultString(os.Getenv("HAPROXY_DATAPLANE_PASSWORD"), "edge-pilot-internal"),
 		ProxySelfHealIntervalS: defaultInt(os.Getenv("PROXY_SELF_HEAL_INTERVAL_SECONDS"), 10),
 	}
-	return cfg
+	logger := log.NewStdLogger("agent.config")
+	if cfg.AgentID == "" {
+		err := fmt.Errorf("AGENT_ID is required; create agent credentials in control-plane and set AGENT_ID to the issued UUID")
+		logger.Errorf(err, "invalid agent runtime config")
+		return nil, err
+	}
+	if _, err := uuid.Parse(cfg.AgentID); err != nil {
+		err = fmt.Errorf("AGENT_ID must be a UUID issued by control-plane: %w", err)
+		logger.Errorf(err, "invalid agent runtime config")
+		return nil, err
+	}
+	if cfg.AgentToken == "" {
+		err := fmt.Errorf("AGENT_TOKEN is required; create or reset agent credentials in control-plane and set AGENT_TOKEN to the issued token")
+		logger.Errorf(err, "invalid agent runtime config")
+		return nil, err
+	}
+	return cfg, nil
 }
 
 func defaultString(v string, fallback string) string {

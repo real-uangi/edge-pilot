@@ -55,6 +55,7 @@
 - 持久化与基础设施：
   - PostgreSQL 仅由 control-plane 持有，用于服务配置、发布单、任务、审计、agent 节点状态与观测快照固化。
   - agent 不连接数据库，只连接 control-plane 内部 gRPC 通道。
+  - agent 必须使用 control-plane 预先签发的 UUID `AGENT_ID` 与独立随机 `AGENT_TOKEN` 建连，不允许共享 token 或首次自动注册。
   - agent 仅依赖 Docker Socket，并负责自举共享 `haproxy(s6, 内含 dataplaneapi) + epNet` 代理栈。
   - Runtime API 只做运行态切流/摘挂与 stats，Data Plane API 负责 frontend、route、backend、blue/green server 结构管理。
 - HTTP API相关：

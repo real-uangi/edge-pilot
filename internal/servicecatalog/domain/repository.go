@@ -1,6 +1,7 @@
 package domain
 
 import (
+	"edge-pilot/internal/shared/dto"
 	"edge-pilot/internal/shared/model"
 
 	"github.com/google/uuid"
@@ -15,4 +16,8 @@ type Repository interface {
 	List() ([]model.Service, error)
 	ListByAgent(string) ([]model.Service, error)
 	UpdateLiveSlot(uuid.UUID, model.Slot) error
+}
+
+type AgentLookup interface {
+	GetAgent(string) (*dto.AgentOutput, error)
 }

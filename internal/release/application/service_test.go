@@ -24,7 +24,7 @@ func TestCreateFromCICreatesQueuedReleaseWithoutDispatch(t *testing.T) {
 	dispatcher := &fakeDispatcher{}
 
 	serviceCatalog := servicecatalogapp.NewService(serviceRepo)
-	registry := agentapp.NewRegistryService(&config.AgentAuthConfig{SharedToken: "token"}, agentRepo)
+	registry := agentapp.NewRegistryService(config.LoadAgentAuthConfig(), agentRepo)
 	releaseService := NewService(releaseRepo, dispatcher, serviceCatalog, registry)
 
 	enabled := true
@@ -72,7 +72,7 @@ func TestCreateFromCIDeduplicatesSameImageRequest(t *testing.T) {
 	dispatcher := &fakeDispatcher{}
 
 	serviceCatalog := servicecatalogapp.NewService(serviceRepo)
-	registry := agentapp.NewRegistryService(&config.AgentAuthConfig{SharedToken: "token"}, agentRepo)
+	registry := agentapp.NewRegistryService(config.LoadAgentAuthConfig(), agentRepo)
 	releaseService := NewService(releaseRepo, dispatcher, serviceCatalog, registry)
 
 	enabled := true
@@ -132,7 +132,7 @@ func TestCreateFromCIAllowsMultipleQueuedRequestsForDifferentImages(t *testing.T
 	dispatcher := &fakeDispatcher{}
 
 	serviceCatalog := servicecatalogapp.NewService(serviceRepo)
-	registry := agentapp.NewRegistryService(&config.AgentAuthConfig{SharedToken: "token"}, agentRepo)
+	registry := agentapp.NewRegistryService(config.LoadAgentAuthConfig(), agentRepo)
 	releaseService := NewService(releaseRepo, dispatcher, serviceCatalog, registry)
 
 	enabled := true
@@ -180,7 +180,7 @@ func TestStartQueuedReleaseDispatchesDeployTask(t *testing.T) {
 	dispatcher := &fakeDispatcher{}
 
 	serviceCatalog := servicecatalogapp.NewService(serviceRepo)
-	registry := agentapp.NewRegistryService(&config.AgentAuthConfig{SharedToken: "token"}, agentRepo)
+	registry := agentapp.NewRegistryService(config.LoadAgentAuthConfig(), agentRepo)
 	releaseService := NewService(releaseRepo, dispatcher, serviceCatalog, registry)
 
 	enabled := true
@@ -207,6 +207,7 @@ func TestStartQueuedReleaseDispatchesDeployTask(t *testing.T) {
 	serviceRepo.byKey[service.ServiceKey] = service
 	agentRepo.nodes["agent-a"] = &model.AgentNode{
 		ID:              "agent-a",
+		Enabled:         &enabled,
 		Online:          &online,
 		LastHeartbeatAt: &now,
 	}
@@ -250,7 +251,7 @@ func TestStartQueuedReleaseRecalculatesTargetSlotFromCurrentLiveSlot(t *testing.
 	dispatcher := &fakeDispatcher{}
 
 	serviceCatalog := servicecatalogapp.NewService(serviceRepo)
-	registry := agentapp.NewRegistryService(&config.AgentAuthConfig{SharedToken: "token"}, agentRepo)
+	registry := agentapp.NewRegistryService(config.LoadAgentAuthConfig(), agentRepo)
 	releaseService := NewService(releaseRepo, dispatcher, serviceCatalog, registry)
 
 	enabled := true
@@ -273,6 +274,7 @@ func TestStartQueuedReleaseRecalculatesTargetSlotFromCurrentLiveSlot(t *testing.
 	serviceRepo.byKey[service.ServiceKey] = service
 	agentRepo.nodes["agent-a"] = &model.AgentNode{
 		ID:              "agent-a",
+		Enabled:         &enabled,
 		Online:          &online,
 		LastHeartbeatAt: &now,
 	}
@@ -306,7 +308,7 @@ func TestStartQueuedReleaseRejectsWhenAnotherReleaseIsActive(t *testing.T) {
 	dispatcher := &fakeDispatcher{}
 
 	serviceCatalog := servicecatalogapp.NewService(serviceRepo)
-	registry := agentapp.NewRegistryService(&config.AgentAuthConfig{SharedToken: "token"}, agentRepo)
+	registry := agentapp.NewRegistryService(config.LoadAgentAuthConfig(), agentRepo)
 	releaseService := NewService(releaseRepo, dispatcher, serviceCatalog, registry)
 
 	enabled := true
@@ -360,7 +362,7 @@ func TestStartQueuedReleaseRejectsOfflineAgentAndKeepsQueued(t *testing.T) {
 	dispatcher := &fakeDispatcher{}
 
 	serviceCatalog := servicecatalogapp.NewService(serviceRepo)
-	registry := agentapp.NewRegistryService(&config.AgentAuthConfig{SharedToken: "token"}, agentRepo)
+	registry := agentapp.NewRegistryService(config.LoadAgentAuthConfig(), agentRepo)
 	releaseService := NewService(releaseRepo, dispatcher, serviceCatalog, registry)
 
 	enabled := true
@@ -405,7 +407,7 @@ func TestSkipQueuedReleaseMarksSkipped(t *testing.T) {
 	dispatcher := &fakeDispatcher{}
 
 	serviceCatalog := servicecatalogapp.NewService(serviceRepo)
-	registry := agentapp.NewRegistryService(&config.AgentAuthConfig{SharedToken: "token"}, agentRepo)
+	registry := agentapp.NewRegistryService(config.LoadAgentAuthConfig(), agentRepo)
 	releaseService := NewService(releaseRepo, dispatcher, serviceCatalog, registry)
 
 	enabled := true
@@ -453,7 +455,7 @@ func TestListIncludesQueuePositionAndActiveFlag(t *testing.T) {
 	dispatcher := &fakeDispatcher{}
 
 	serviceCatalog := servicecatalogapp.NewService(serviceRepo)
-	registry := agentapp.NewRegistryService(&config.AgentAuthConfig{SharedToken: "token"}, agentRepo)
+	registry := agentapp.NewRegistryService(config.LoadAgentAuthConfig(), agentRepo)
 	releaseService := NewService(releaseRepo, dispatcher, serviceCatalog, registry)
 
 	serviceID := uuid.New()
@@ -523,7 +525,7 @@ func TestHandleTaskUpdateMovesReleaseToReadyToSwitch(t *testing.T) {
 	dispatcher := &fakeDispatcher{}
 
 	serviceCatalog := servicecatalogapp.NewService(serviceRepo)
-	registry := agentapp.NewRegistryService(&config.AgentAuthConfig{SharedToken: "token"}, agentRepo)
+	registry := agentapp.NewRegistryService(config.LoadAgentAuthConfig(), agentRepo)
 	releaseService := NewService(releaseRepo, dispatcher, serviceCatalog, registry)
 
 	releaseID := uuid.New()
@@ -585,7 +587,7 @@ func TestRecoverAgentTasksReplaysOnlyMissingTasks(t *testing.T) {
 	dispatcher := &fakeDispatcher{}
 
 	serviceCatalog := servicecatalogapp.NewService(serviceRepo)
-	registry := agentapp.NewRegistryService(&config.AgentAuthConfig{SharedToken: "token"}, agentRepo)
+	registry := agentapp.NewRegistryService(config.LoadAgentAuthConfig(), agentRepo)
 	releaseService := NewService(releaseRepo, dispatcher, serviceCatalog, registry)
 
 	releaseID := uuid.New()
@@ -628,7 +630,7 @@ func TestRecoverAgentTasksMarksRunningWhenHeartbeatReportsTask(t *testing.T) {
 	dispatcher := &fakeDispatcher{}
 
 	serviceCatalog := servicecatalogapp.NewService(serviceRepo)
-	registry := agentapp.NewRegistryService(&config.AgentAuthConfig{SharedToken: "token"}, agentRepo)
+	registry := agentapp.NewRegistryService(config.LoadAgentAuthConfig(), agentRepo)
 	releaseService := NewService(releaseRepo, dispatcher, serviceCatalog, registry)
 
 	releaseID := uuid.New()
@@ -671,7 +673,7 @@ func TestFailStaleTasksMarksReleaseFailed(t *testing.T) {
 	dispatcher := &fakeDispatcher{}
 
 	serviceCatalog := servicecatalogapp.NewService(serviceRepo)
-	registry := agentapp.NewRegistryService(&config.AgentAuthConfig{SharedToken: "token"}, agentRepo)
+	registry := agentapp.NewRegistryService(config.LoadAgentAuthConfig(), agentRepo)
 	releaseService := NewService(releaseRepo, dispatcher, serviceCatalog, registry)
 
 	releaseID := uuid.New()
@@ -816,6 +818,16 @@ func (r *fakeAgentRepo) List() ([]model.AgentNode, error) {
 	out := make([]model.AgentNode, 0, len(r.nodes))
 	for _, item := range r.nodes {
 		out = append(out, *item)
+	}
+	return out, nil
+}
+
+func (r *fakeAgentRepo) ListEnabled() ([]model.AgentNode, error) {
+	out := make([]model.AgentNode, 0, len(r.nodes))
+	for _, item := range r.nodes {
+		if item != nil && item.Enabled != nil && *item.Enabled {
+			out = append(out, *item)
+		}
 	}
 	return out, nil
 }

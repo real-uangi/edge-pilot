@@ -12,12 +12,15 @@ import (
 func TestCreateRejectsDuplicateRouteOnSameAgent(t *testing.T) {
 	repo := newFakeServiceCatalogRepo()
 	publisher := &fakeProxyPublisher{}
-	svc := NewServiceWithPublisher(repo, publisher)
+	agents := &fakeAgentLookup{agents: map[string]*dto.AgentOutput{
+		"11111111-1111-1111-1111-111111111111": {ID: "11111111-1111-1111-1111-111111111111", Enabled: boolPointer(true)},
+	}}
+	svc := NewServiceWithPublisher(repo, publisher, agents)
 
 	first, err := svc.Create(dto.UpsertServiceRequest{
 		Name:            "svc-a",
 		ServiceKey:      "svc-a",
-		AgentID:         "agent-a",
+		AgentID:         "11111111-1111-1111-1111-111111111111",
 		ImageRepo:       "repo/app",
 		ContainerPort:   8080,
 		RouteHost:       "Example.COM",
@@ -29,14 +32,14 @@ func TestCreateRejectsDuplicateRouteOnSameAgent(t *testing.T) {
 	if first.RouteHost != "example.com" || first.RoutePathPrefix != "/api" {
 		t.Fatalf("expected normalized route, got host=%q path=%q", first.RouteHost, first.RoutePathPrefix)
 	}
-	if len(publisher.published) != 1 || publisher.published[0] != "agent-a" {
-		t.Fatalf("expected publish for agent-a, got %#v", publisher.published)
+	if len(publisher.published) != 1 || publisher.published[0] != "11111111-1111-1111-1111-111111111111" {
+		t.Fatalf("expected publish for issued agent UUID, got %#v", publisher.published)
 	}
 
 	_, err = svc.Create(dto.UpsertServiceRequest{
 		Name:            "svc-b",
 		ServiceKey:      "svc-b",
-		AgentID:         "agent-a",
+		AgentID:         "11111111-1111-1111-1111-111111111111",
 		ImageRepo:       "repo/app",
 		ContainerPort:   8080,
 		RouteHost:       "example.com",
@@ -85,12 +88,15 @@ func TestBuildProxyServiceConfigsSortsLongestPathFirst(t *testing.T) {
 
 func TestCreateRejectsDuplicatePublishedPortOnSameAgent(t *testing.T) {
 	repo := newFakeServiceCatalogRepo()
-	svc := NewServiceWithPublisher(repo, nil)
+	agents := &fakeAgentLookup{agents: map[string]*dto.AgentOutput{
+		"11111111-1111-1111-1111-111111111111": {ID: "11111111-1111-1111-1111-111111111111", Enabled: boolPointer(true)},
+	}}
+	svc := NewServiceWithPublisher(repo, nil, agents)
 
 	if _, err := svc.Create(dto.UpsertServiceRequest{
 		Name:          "svc-a",
 		ServiceKey:    "svc-a",
-		AgentID:       "agent-a",
+		AgentID:       "11111111-1111-1111-1111-111111111111",
 		ImageRepo:     "repo/app",
 		ContainerPort: 8080,
 		RouteHost:     "a.example.com",
@@ -104,7 +110,7 @@ func TestCreateRejectsDuplicatePublishedPortOnSameAgent(t *testing.T) {
 	if _, err := svc.Create(dto.UpsertServiceRequest{
 		Name:          "svc-b",
 		ServiceKey:    "svc-b",
-		AgentID:       "agent-a",
+		AgentID:       "11111111-1111-1111-1111-111111111111",
 		ImageRepo:     "repo/app",
 		ContainerPort: 8080,
 		RouteHost:     "b.example.com",
@@ -113,6 +119,46 @@ func TestCreateRejectsDuplicatePublishedPortOnSameAgent(t *testing.T) {
 		},
 	}); err == nil {
 		t.Fatalf("expected duplicate published host port validation error")
+	}
+}
+
+func TestCreateRejectsUnknownOrDisabledAgent(t *testing.T) {
+	repo := newFakeServiceCatalogRepo()
+	svc := NewServiceWithPublisher(repo, nil, &fakeAgentLookup{agents: map[string]*dto.AgentOutput{
+		"22222222-2222-2222-2222-222222222222": {ID: "22222222-2222-2222-2222-222222222222", Enabled: boolPointer(false)},
+	}})
+
+	if _, err := svc.Create(dto.UpsertServiceRequest{
+		Name:          "svc-a",
+		ServiceKey:    "svc-a",
+		AgentID:       "not-a-uuid",
+		ImageRepo:     "repo/app",
+		ContainerPort: 8080,
+		RouteHost:     "a.example.com",
+	}); err == nil {
+		t.Fatalf("expected invalid uuid agentId to be rejected")
+	}
+
+	if _, err := svc.Create(dto.UpsertServiceRequest{
+		Name:          "svc-b",
+		ServiceKey:    "svc-b",
+		AgentID:       "33333333-3333-3333-3333-333333333333",
+		ImageRepo:     "repo/app",
+		ContainerPort: 8080,
+		RouteHost:     "b.example.com",
+	}); err == nil {
+		t.Fatalf("expected unknown agent to be rejected")
+	}
+
+	if _, err := svc.Create(dto.UpsertServiceRequest{
+		Name:          "svc-c",
+		ServiceKey:    "svc-c",
+		AgentID:       "22222222-2222-2222-2222-222222222222",
+		ImageRepo:     "repo/app",
+		ContainerPort: 8080,
+		RouteHost:     "c.example.com",
+	}); err == nil {
+		t.Fatalf("expected disabled agent to be rejected")
 	}
 }
 
@@ -193,5 +239,14 @@ func (p *fakeProxyPublisher) PublishAgent(agentID string) error {
 	return nil
 }
 
+type fakeAgentLookup struct {
+	agents map[string]*dto.AgentOutput
+}
+
+func (f *fakeAgentLookup) GetAgent(id string) (*dto.AgentOutput, error) {
+	return f.agents[id], nil
+}
+
 var _ domain.Repository = (*fakeServiceCatalogRepo)(nil)
 var _ domain.ProxyConfigPublisher = (*fakeProxyPublisher)(nil)
+var _ domain.AgentLookup = (*fakeAgentLookup)(nil)

@@ -15,9 +15,21 @@ import (
 )
 
 func TestConnectRejectsInvalidToken(t *testing.T) {
-	registry := edgeagent.NewRegistryService(&config.AgentAuthConfig{
-		TokenByID: map[string]string{"agent-a": "valid-token"},
-	}, &fakeAgentRepo{})
+	auth := config.LoadAgentAuthConfig()
+	_, hash, err := auth.GenerateToken()
+	if err != nil {
+		t.Fatalf("GenerateToken() error = %v", err)
+	}
+	enabled := true
+	registry := edgeagent.NewRegistryService(auth, &fakeAgentRepo{
+		nodes: map[string]*model.AgentNode{
+			"11111111-1111-1111-1111-111111111111": {
+				ID:        "11111111-1111-1111-1111-111111111111",
+				TokenHash: hash,
+				Enabled:   &enabled,
+			},
+		},
+	})
 
 	server := NewServer(NewSessionHub(), registry, nil, nil, nil)
 	stream := &fakeStream{
@@ -25,7 +37,7 @@ func TestConnectRejectsInvalidToken(t *testing.T) {
 			{
 				Payload: &grpcapi.AgentMessage_Hello{
 					Hello: &grpcapi.HelloMessage{
-						AgentId: "agent-a",
+						AgentId: "11111111-1111-1111-1111-111111111111",
 						Token:   "bad-token",
 					},
 				},
@@ -33,7 +45,7 @@ func TestConnectRejectsInvalidToken(t *testing.T) {
 		},
 	}
 
-	err := server.Connect(stream)
+	err = server.Connect(stream)
 	if err == nil {
 		t.Fatalf("expected auth error")
 	}
@@ -65,12 +77,22 @@ func (s *fakeStream) Recv() (*grpcapi.AgentMessage, error) {
 	return msg, nil
 }
 
-type fakeAgentRepo struct{}
+type fakeAgentRepo struct {
+	nodes map[string]*model.AgentNode
+}
 
-func (r *fakeAgentRepo) Save(*model.AgentNode) error          { return nil }
-func (r *fakeAgentRepo) Get(string) (*model.AgentNode, error) { return nil, nil }
-func (r *fakeAgentRepo) List() ([]model.AgentNode, error)     { return nil, nil }
-func (r *fakeAgentRepo) MarkOffline(string, string) error     { return nil }
+func (r *fakeAgentRepo) Save(*model.AgentNode) error { return nil }
+func (r *fakeAgentRepo) Get(id string) (*model.AgentNode, error) {
+	if r.nodes == nil {
+		return nil, nil
+	}
+	return r.nodes[id], nil
+}
+func (r *fakeAgentRepo) List() ([]model.AgentNode, error) { return nil, nil }
+func (r *fakeAgentRepo) ListEnabled() ([]model.AgentNode, error) {
+	return nil, nil
+}
+func (r *fakeAgentRepo) MarkOffline(string, string) error { return nil }
 func (r *fakeAgentRepo) MarkOfflineStale(time.Time) ([]string, error) {
 	return nil, nil
 }

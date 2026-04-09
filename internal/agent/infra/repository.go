@@ -41,6 +41,14 @@ func (r *repository) List() ([]model.AgentNode, error) {
 	return nodes, nil
 }
 
+func (r *repository) ListEnabled() ([]model.AgentNode, error) {
+	var nodes []model.AgentNode
+	if err := r.conn.Where("enabled = ?", true).Order("created_at desc").Find(&nodes).Error; err != nil {
+		return nil, err
+	}
+	return nodes, nil
+}
+
 func (r *repository) MarkOffline(id string, lastError string) error {
 	offline := false
 	return r.conn.Model(&model.AgentNode{}).Where("id = ?", id).Updates(map[string]any{

@@ -15,16 +15,18 @@ import (
 type Service struct {
 	repo      domain.Repository
 	publisher domain.ProxyConfigPublisher
+	agents    domain.AgentLookup
 }
 
 func NewService(repo domain.Repository) *Service {
-	return NewServiceWithPublisher(repo, nil)
+	return NewServiceWithPublisher(repo, nil, nil)
 }
 
-func NewServiceWithPublisher(repo domain.Repository, publisher domain.ProxyConfigPublisher) *Service {
+func NewServiceWithPublisher(repo domain.Repository, publisher domain.ProxyConfigPublisher, agents domain.AgentLookup) *Service {
 	return &Service{
 		repo:      repo,
 		publisher: publisher,
+		agents:    agents,
 	}
 }
 
@@ -38,6 +40,9 @@ func (s *Service) Create(req dto.UpsertServiceRequest) (*dto.ServiceOutput, erro
 	}
 	entity := buildServiceEntity(uuid.New(), req)
 	if err := validatePublishedPorts(entity.PublishedPorts.Get()); err != nil {
+		return nil, err
+	}
+	if err := s.ensureAgentAssignable(entity.AgentID); err != nil {
 		return nil, err
 	}
 	if err := s.ensureRouteAvailable(entity.AgentID, entity.RouteHost, entity.RoutePathPrefix, entity.ID); err != nil {
@@ -68,6 +73,9 @@ func (s *Service) Update(id uuid.UUID, req dto.UpsertServiceRequest) (*dto.Servi
 	updated.CreatedAt = current.CreatedAt
 	updated.CurrentLiveSlot = current.CurrentLiveSlot
 	if err := validatePublishedPorts(updated.PublishedPorts.Get()); err != nil {
+		return nil, err
+	}
+	if err := s.ensureAgentAssignable(updated.AgentID); err != nil {
 		return nil, err
 	}
 	if err := s.ensureRouteAvailable(updated.AgentID, updated.RouteHost, updated.RoutePathPrefix, updated.ID); err != nil {
@@ -181,6 +189,29 @@ func buildServiceEntity(id uuid.UUID, req dto.UpsertServiceRequest) *model.Servi
 		PublishedPorts:    commondb.NewJSONB(toModelPublishedPorts(req.PublishedPorts)),
 		Enabled:           enabled,
 	}
+}
+
+func (s *Service) ensureAgentAssignable(agentID string) error {
+	if _, err := uuid.Parse(agentID); err != nil {
+		return business.NewBadRequest("agentId 必须是 UUID")
+	}
+	if s.agents == nil {
+		return nil
+	}
+	agent, err := s.agents.GetAgent(agentID)
+	if err != nil {
+		if err == business.ErrNotFound {
+			return business.NewBadRequest("agentId 不存在或已禁用")
+		}
+		return err
+	}
+	if agent == nil {
+		return business.NewBadRequest("agentId 不存在或已禁用")
+	}
+	if agent.Enabled == nil || !*agent.Enabled {
+		return business.NewBadRequest("agentId 不存在或已禁用")
+	}
+	return nil
 }
 
 func toServiceOutput(service *model.Service) dto.ServiceOutput {

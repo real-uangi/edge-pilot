@@ -125,7 +125,7 @@ Content-Type: application/json
   "data": {
     "id": "7e2a6cf0-f0d7-49d1-90d8-9cb6f52e2d2f",
     "serviceId": "4d1fbb68-91f5-4d40-847e-3d3db2df5f7e",
-    "agentId": "edge-node-a",
+    "agentId": "11111111-1111-1111-1111-111111111111",
     "imageRepo": "ghcr.io/laopixu/edge-api",
     "imageTag": "v1.3.2",
     "commitSha": "8b5a2f7c2d0b6d7e8a9f0123456789abcdef1234",

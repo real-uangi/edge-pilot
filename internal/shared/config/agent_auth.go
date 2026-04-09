@@ -1,44 +1,37 @@
 package config
 
 import (
-	"os"
-	"strings"
+	"crypto/rand"
+	"crypto/sha256"
+	"crypto/subtle"
+	"encoding/base64"
+	"encoding/hex"
 )
 
-type AgentAuthConfig struct {
-	SharedToken string
-	TokenByID   map[string]string
-}
+type AgentAuthConfig struct{}
 
 func LoadAgentAuthConfig() *AgentAuthConfig {
-	cfg := &AgentAuthConfig{
-		SharedToken: os.Getenv("AGENT_SHARED_TOKEN"),
-		TokenByID:   make(map[string]string),
-	}
-	raw := os.Getenv("AGENT_TOKENS")
-	for _, pair := range strings.Split(raw, ",") {
-		pair = strings.TrimSpace(pair)
-		if pair == "" {
-			continue
-		}
-		parts := strings.SplitN(pair, "=", 2)
-		if len(parts) != 2 {
-			continue
-		}
-		cfg.TokenByID[strings.TrimSpace(parts[0])] = strings.TrimSpace(parts[1])
-	}
-	return cfg
+	return &AgentAuthConfig{}
 }
 
-func (c *AgentAuthConfig) Validate(agentID string, token string) bool {
-	if agentID == "" || token == "" {
+func (c *AgentAuthConfig) GenerateToken() (string, string, error) {
+	raw := make([]byte, 32)
+	if _, err := rand.Read(raw); err != nil {
+		return "", "", err
+	}
+	token := base64.RawURLEncoding.EncodeToString(raw)
+	return token, c.HashToken(token), nil
+}
+
+func (c *AgentAuthConfig) HashToken(token string) string {
+	sum := sha256.Sum256([]byte(token))
+	return hex.EncodeToString(sum[:])
+}
+
+func (c *AgentAuthConfig) ValidateHash(expectedHash string, token string) bool {
+	if expectedHash == "" || token == "" {
 		return false
 	}
-	if expected, ok := c.TokenByID[agentID]; ok {
-		return expected == token
-	}
-	if c.SharedToken == "" {
-		return false
-	}
-	return c.SharedToken == token
+	actual := c.HashToken(token)
+	return subtle.ConstantTimeCompare([]byte(expectedHash), []byte(actual)) == 1
 }

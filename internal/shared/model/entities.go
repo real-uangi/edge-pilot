@@ -185,11 +185,14 @@ func (TaskAttempt) TableName() string {
 type AgentNode struct {
 	ID string `json:"id" gorm:"size:128;primaryKey"`
 	commondb.Model
+	TokenHash       string                    `json:"tokenHash" gorm:"size:128;not null"`
+	Enabled         *bool                     `json:"enabled" gorm:"not null"`
 	Hostname        string                    `json:"hostname" gorm:"size:255"`
 	Version         string                    `json:"version" gorm:"size:128"`
 	Online          *bool                     `json:"online" gorm:"not null"`
 	LastConnectedAt *time.Time                `json:"lastConnectedAt" gorm:"type:timestamptz"`
 	LastHeartbeatAt *time.Time                `json:"lastHeartbeatAt" gorm:"type:timestamptz"`
+	TokenRotatedAt  *time.Time                `json:"tokenRotatedAt" gorm:"type:timestamptz"`
 	LastError       string                    `json:"lastError" gorm:"type:text"`
 	Capabilities    *commondb.JSONB[[]string] `json:"capabilities" gorm:"type:jsonb"`
 }

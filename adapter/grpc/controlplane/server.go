@@ -14,6 +14,7 @@ import (
 	"os"
 	"sync"
 
+	"github.com/real-uangi/allingo/common/log"
 	"go.uber.org/fx"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
@@ -120,6 +121,7 @@ type Server struct {
 	releases      *releaseapp.Service
 	observability *observabilityapp.Service
 	proxyConfigs  servicecatalogdomain.ProxyConfigPublisher
+	logger        *log.StdLogger
 }
 
 func NewServer(
@@ -135,10 +137,20 @@ func NewServer(
 		releases:      releases,
 		observability: observability,
 		proxyConfigs:  proxyConfigs,
+		logger:        log.NewStdLogger("grpc.control-plane"),
 	}
 }
 
-func (s *Server) Connect(stream grpcapi.AgentControl_ConnectServer) error {
+func (s *Server) Connect(stream grpcapi.AgentControl_ConnectServer) (err error) {
+	agentID := "unknown"
+	defer func() {
+		if err == nil {
+			s.logger.Infof("agent grpc connected: agentId=%s", agentID)
+			return
+		}
+		s.logger.Errorf(err, "agent grpc connection failed: agentId=%s", agentID)
+	}()
+
 	first, err := stream.Recv()
 	if err != nil {
 		return err
@@ -147,8 +159,9 @@ func (s *Server) Connect(stream grpcapi.AgentControl_ConnectServer) error {
 		return status.Error(codes.InvalidArgument, "hello required")
 	}
 	hello := first.GetHello()
-	if !s.agents.Authenticate(hello.GetAgentId(), hello.GetToken()) {
-		return status.Error(codes.Unauthenticated, "invalid token")
+	agentID = hello.GetAgentId()
+	if err := s.agents.Authenticate(hello.GetAgentId(), hello.GetToken()); err != nil {
+		return status.Error(codes.Unauthenticated, "invalid agent credentials")
 	}
 	if err := s.agents.MarkConnected(hello.GetAgentId(), hello.GetHostname(), hello.GetVersion(), hello.GetCapabilities()); err != nil {
 		return err
@@ -224,14 +237,19 @@ func startGRPCServer(lc fx.Lifecycle, server *Server) {
 		OnStart: func(ctx context.Context) error {
 			lis, err := net.Listen("tcp", ":"+port)
 			if err != nil {
+				server.logger.Errorf(err, "failed to start grpc listener: port=%s", port)
 				return err
 			}
+			server.logger.Infof("grpc control-plane listening: addr=%s", lis.Addr().String())
 			go func() {
-				_ = grpcServer.Serve(lis)
+				if err := grpcServer.Serve(lis); err != nil {
+					server.logger.Errorf(err, "grpc server stopped with error")
+				}
 			}()
 			return nil
 		},
 		OnStop: func(ctx context.Context) error {
+			server.logger.Infof("stopping grpc control-plane server")
 			done := make(chan struct{})
 			go func() {
 				grpcServer.GracefulStop()

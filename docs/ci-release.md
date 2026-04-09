@@ -125,7 +125,7 @@ Dockerfile：
 - 当前 `main` 已通过本地或 CI 测试
 - `go test ./...` 通过
 - `README`、`AGENTS.md`、相关部署文档已同步
-- `CI_SHARED_TOKEN`、`AGENT_SHARED_TOKEN` 或 `AGENT_TOKENS` 的部署侧配置已就绪
+- `CI_SHARED_TOKEN` 与每个 agent 的独立 `AGENT_ID` / `AGENT_TOKEN` 部署侧配置已就绪
 - control-plane 与 agent 使用的镜像引用策略已明确
 
 ## 推荐发布步骤

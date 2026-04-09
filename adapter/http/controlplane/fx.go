@@ -14,6 +14,7 @@ var Module = fx.Module(
 	fx.Invoke(
 		basehttp.SetGlobalMiddleware,
 		baseroutes.SetMetricsRoutes,
+		routes.SetAdminAgentRoutes,
 		routes.SetAdminServiceRoutes,
 		routes.SetAdminReleaseRoutes,
 		routes.SetObservabilityRoutes,
