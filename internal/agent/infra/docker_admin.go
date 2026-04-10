@@ -31,6 +31,7 @@ type managedContainerSpec struct {
 	Cmd           []string
 	Entrypoint    []string
 	Binds         []string
+	Tmpfs         map[string]string
 	PortBinds     map[string][]dockerPortBinding
 	Exposed       map[string]map[string]string
 	Network       string
@@ -254,6 +255,24 @@ func (c *DockerClient) ensureVolume(ctx context.Context, name string) error {
 	return nil
 }
 
+func (c *DockerClient) recreateVolume(ctx context.Context, name string) error {
+	c.logger.Infof("recreating docker volume: name=%s", name)
+	req, err := http.NewRequestWithContext(ctx, http.MethodDelete, "http://docker/volumes/"+url.PathEscape(name), nil)
+	if err != nil {
+		return err
+	}
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusNotFound && resp.StatusCode != http.StatusNoContent && resp.StatusCode >= 300 {
+		body, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("docker remove volume failed: %s %s", resp.Status, strings.TrimSpace(string(body)))
+	}
+	return c.ensureVolume(ctx, name)
+}
+
 func (c *DockerClient) recreateManagedContainer(ctx context.Context, spec managedContainerSpec) error {
 	c.logger.Infof(
 		"creating managed proxy container: name=%s image=%s ip=%s network=%s restartPolicy=%s maxRetries=%d",
@@ -279,6 +298,7 @@ func (c *DockerClient) recreateManagedContainer(ctx context.Context, spec manage
 		HostConfig: dockerHostConfig{
 			PortBindings:  spec.PortBinds,
 			Binds:         spec.Binds,
+			Tmpfs:         spec.Tmpfs,
 			RestartPolicy: spec.RestartPolicy,
 		},
 		NetworkingConfig: dockerNetworkingConfig{
@@ -503,6 +523,7 @@ func specHash(spec managedContainerSpec) string {
 	parts = append(parts, sortedStrings(spec.Cmd)...)
 	parts = append(parts, sortedStrings(spec.Entrypoint)...)
 	parts = append(parts, sortedStrings(spec.Binds)...)
+	parts = append(parts, mapPairsString(spec.Tmpfs)...)
 	parts = append(parts, spec.RestartPolicy.Name)
 	parts = append(parts, fmt.Sprintf("%d", spec.RestartPolicy.MaximumRetryCount))
 	parts = append(parts, mapPairs(spec.PortBinds)...)

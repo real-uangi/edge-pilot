@@ -181,15 +181,25 @@ func (m *ManagedProxyRuntime) ensureProxyStackLocked(ctx context.Context) (bool,
 	if err := m.ensureReservedProxyIPLocked(ctx); err != nil {
 		return false, err
 	}
-	if err := m.docker.ensureVolume(ctx, m.cfg.HAProxyConfigVolume); err != nil {
-		return false, err
-	}
 
 	proxyInspect, err := m.docker.inspectManagedContainer(ctx, m.cfg.ProxyContainerName)
 	if err != nil {
 		return false, err
 	}
-	if proxyInspect == nil || !proxyInspect.State.Running {
+	if proxyInspect == nil {
+		if err := m.docker.recreateVolume(ctx, m.cfg.HAProxyConfigVolume); err != nil {
+			return false, err
+		}
+		if err := m.bootstrapBaseFiles(ctx); err != nil {
+			return false, err
+		}
+		changed = true
+	} else {
+		if err := m.docker.ensureVolume(ctx, m.cfg.HAProxyConfigVolume); err != nil {
+			return false, err
+		}
+	}
+	if proxyInspect != nil && !proxyInspect.State.Running {
 		if err := m.bootstrapBaseFiles(ctx); err != nil {
 			return false, err
 		}
@@ -411,6 +421,9 @@ func (m *ManagedProxyRuntime) proxySpec() managedContainerSpec {
 		Binds: []string{
 			m.cfg.HAProxyConfigVolume + ":/usr/local/etc/haproxy",
 		},
+		Tmpfs: map[string]string{
+			"/run": "exec,mode=755,size=16m",
+		},
 		Exposed: map[string]map[string]string{
 			portKey(servicecatalogapp.SharedFrontendBindPort): {},
 			portKey(m.cfg.HAProxyRuntimePort):                 {},
@@ -555,6 +568,8 @@ func (m *ManagedProxyRuntime) dataPlaneConfig() string {
 haproxy:
   config_file: /usr/local/etc/haproxy/haproxy.cfg
   haproxy_bin: /usr/local/sbin/haproxy
+  master_worker_mode: true
+  master_runtime: /var/run/haproxy-master.sock
   reload:
     reload_strategy: s6
     reload_delay: 1

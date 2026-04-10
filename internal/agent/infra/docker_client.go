@@ -321,6 +321,7 @@ type dockerCreateRequest struct {
 type dockerHostConfig struct {
 	PortBindings  map[string][]dockerPortBinding `json:"PortBindings,omitempty"`
 	Binds         []string                       `json:"Binds,omitempty"`
+	Tmpfs         map[string]string              `json:"Tmpfs,omitempty"`
 	RestartPolicy dockerRestartPolicy            `json:"RestartPolicy,omitempty"`
 }
 
