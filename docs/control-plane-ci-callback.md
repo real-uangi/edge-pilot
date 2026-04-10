@@ -61,7 +61,7 @@ Content-Type: application/json
 
 当前请求体定义对应：
 
-- [CreateReleaseFromCIRequest](/Users/laopixu/GolandProjects/edge-pilot/internal/shared/dto/release.go)
+- [CreateReleaseFromCIRequest](/internal/shared/dto/release.go)
 
 字段说明：
 
