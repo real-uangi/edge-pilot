@@ -5,7 +5,9 @@ RUN groupadd --system --gid 10001 edgepilot \
 
 WORKDIR /var/lib/edge-pilot
 
-COPY --chown=edgepilot:edgepilot edge-pilot-control /usr/local/bin/edge-pilot-control
+ARG TARGETPLATFORM
+
+COPY --chown=edgepilot:edgepilot ${TARGETPLATFORM}/edge-pilot-control /usr/local/bin/edge-pilot-control
 
 USER edgepilot:edgepilot
 
