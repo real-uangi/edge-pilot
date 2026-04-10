@@ -1,5 +1,12 @@
 FROM debian:bookworm-slim
 
-COPY edge-pilot-control /usr/local/bin/edge-pilot-control
+RUN groupadd --system --gid 10001 edgepilot \
+    && useradd --system --uid 10001 --gid edgepilot --home-dir /var/lib/edge-pilot --create-home --shell /usr/sbin/nologin edgepilot
+
+COPY --chown=edgepilot:edgepilot edge-pilot-control /usr/local/bin/edge-pilot-control
+
+WORKDIR /var/lib/edge-pilot
+
+USER edgepilot:edgepilot
 
 ENTRYPOINT ["/usr/local/bin/edge-pilot-control"]

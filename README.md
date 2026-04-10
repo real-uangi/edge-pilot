@@ -209,6 +209,10 @@ GitHub Actions 对 `v*` tag 触发 release：
 
 镜像基础镜像当前为 `debian:bookworm-slim`。
 
+Docker 部署和 Linux 用户授权说明见：[docs/docker-deploy.md](docs/docker-deploy.md)
+
+Control-Plane CI 回调触发说明见：[docs/control-plane-ci-callback.md](docs/control-plane-ci-callback.md)
+
 ## 当前限制
 
 - 当前聚焦 HTTP 服务的蓝绿发布，不支持 worker 与非 HTTP 协议
