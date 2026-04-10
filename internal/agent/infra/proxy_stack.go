@@ -529,7 +529,9 @@ func snapshotHash(snapshot *grpcapi.ProxyConfigSnapshot) string {
 func (m *ManagedProxyRuntime) baseHAProxyConfig() string {
 	return fmt.Sprintf(`global
   log stdout format raw local0
-  master-worker
+  nosplice
+  user root
+  group root
   stats socket ipv4@0.0.0.0:%d level admin expose-fd listeners
 
 userlist dataplaneapi
@@ -576,6 +578,9 @@ haproxy:
 log_targets:
   - log_to: stdout
     log_level: info
+    log_types:
+      - app
+      - access
 `, m.cfg.DataPlaneAPIPort)
 }
 

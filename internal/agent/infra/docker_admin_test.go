@@ -86,4 +86,28 @@ func TestDataPlaneConfigEnablesMasterRuntime(t *testing.T) {
 	if !strings.Contains(configText, "master_runtime: /var/run/haproxy-master.sock") {
 		t.Fatal("expected dataplane config to configure haproxy master runtime socket")
 	}
+	if !strings.Contains(configText, "log_types:") || !strings.Contains(configText, "- access") {
+		t.Fatal("expected dataplane config to configure access loggers")
+	}
+}
+
+func TestBaseHAProxyConfigAvoidsKnownStartupWarnings(t *testing.T) {
+	runtime := &ManagedProxyRuntime{
+		cfg: &config.AgentRuntimeConfig{
+			HAProxyRuntimePort:   19999,
+			DataPlaneAPIUsername: "admin",
+			DataPlaneAPIPassword: "secret",
+		},
+	}
+
+	configText := runtime.baseHAProxyConfig()
+	if strings.Contains(configText, "master-worker") {
+		t.Fatal("expected haproxy bootstrap config to avoid deprecated master-worker directive")
+	}
+	if !strings.Contains(configText, "nosplice") {
+		t.Fatal("expected haproxy bootstrap config to disable splice warnings")
+	}
+	if !strings.Contains(configText, "user root") || !strings.Contains(configText, "group root") {
+		t.Fatal("expected haproxy bootstrap config to make root execution explicit")
+	}
 }
