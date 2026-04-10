@@ -3,9 +3,9 @@ FROM debian:bookworm-slim
 RUN groupadd --system --gid 10001 edgepilot \
     && useradd --system --uid 10001 --gid edgepilot --home-dir /var/lib/edge-pilot --create-home --shell /usr/sbin/nologin edgepilot
 
-COPY --chown=edgepilot:edgepilot edge-pilot-control /usr/local/bin/edge-pilot-control
-
 WORKDIR /var/lib/edge-pilot
+
+COPY --chown=edgepilot:edgepilot edge-pilot-control /usr/local/bin/edge-pilot-control
 
 USER edgepilot:edgepilot
 
