@@ -3,6 +3,8 @@ package infra
 import (
 	"edge-pilot/internal/shared/config"
 	"edge-pilot/internal/shared/grpcapi"
+	"encoding/base64"
+	"encoding/json"
 	"testing"
 )
 
@@ -29,5 +31,40 @@ func TestBuildWorkloadCreateRequestUsesLimitedRestartPolicy(t *testing.T) {
 	}
 	if _, ok := req.NetworkingConfig.EndpointsConfig["epNet"]; !ok {
 		t.Fatal("expected workload to attach to proxy network")
+	}
+}
+
+func TestBuildRegistryAuthHeader(t *testing.T) {
+	header, ok, err := buildRegistryAuthHeader(taskRegistryAuth{
+		host:     "ghcr.io",
+		username: "octocat",
+		secret:   "token-value",
+	})
+	if err != nil {
+		t.Fatalf("buildRegistryAuthHeader() error = %v", err)
+	}
+	if !ok {
+		t.Fatal("expected registry auth header to be present")
+	}
+	payload, err := base64.URLEncoding.DecodeString(header)
+	if err != nil {
+		t.Fatalf("expected base64 payload, got %v", err)
+	}
+	var auth map[string]string
+	if err := json.Unmarshal(payload, &auth); err != nil {
+		t.Fatalf("expected json payload, got %v", err)
+	}
+	if auth["serveraddress"] != "ghcr.io" || auth["username"] != "octocat" || auth["password"] != "token-value" {
+		t.Fatalf("unexpected auth payload: %#v", auth)
+	}
+}
+
+func TestBuildRegistryAuthHeaderAllowsAnonymousPull(t *testing.T) {
+	header, ok, err := buildRegistryAuthHeader(taskRegistryAuth{})
+	if err != nil {
+		t.Fatalf("buildRegistryAuthHeader() error = %v", err)
+	}
+	if ok || header != "" {
+		t.Fatalf("expected anonymous pull path, got header=%q ok=%v", header, ok)
 	}
 }

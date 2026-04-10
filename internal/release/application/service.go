@@ -20,6 +20,7 @@ type Service struct {
 	dispatcher    releasedomain.TaskDispatcher
 	services      *servicecatalogapp.Service
 	agentRegistry *application.RegistryService
+	registryAuth  releasedomain.RegistryCredentialResolver
 }
 
 func NewService(
@@ -28,12 +29,32 @@ func NewService(
 	services *servicecatalogapp.Service,
 	agentRegistry *application.RegistryService,
 ) *Service {
+	return NewServiceWithRegistryCredentials(repo, dispatcher, services, agentRegistry, nil)
+}
+
+func NewServiceWithRegistryCredentials(
+	repo releasedomain.Repository,
+	dispatcher releasedomain.TaskDispatcher,
+	services *servicecatalogapp.Service,
+	agentRegistry *application.RegistryService,
+	registryAuth releasedomain.RegistryCredentialResolver,
+) *Service {
+	if registryAuth == nil {
+		registryAuth = noopRegistryCredentialResolver{}
+	}
 	return &Service{
 		repo:          repo,
 		dispatcher:    dispatcher,
 		services:      services,
 		agentRegistry: agentRegistry,
+		registryAuth:  registryAuth,
 	}
+}
+
+type noopRegistryCredentialResolver struct{}
+
+func (noopRegistryCredentialResolver) ResolveForImageRepo(string) (*releasedomain.ResolvedRegistryCredential, error) {
+	return nil, nil
 }
 
 func (s *Service) CreateFromCI(req dto.CreateReleaseFromCIRequest) (*dto.ReleaseOutput, error) {
@@ -121,12 +142,16 @@ func (s *Service) Start(id uuid.UUID, operator string) (*dto.ReleaseOutput, erro
 	release.AgentID = spec.AgentID
 	release.PreviousLiveSlot = spec.CurrentLiveSlot
 	release.TargetSlot = nextSlot(spec.CurrentLiveSlot)
+	registryAuth, err := s.registryAuth.ResolveForImageRepo(release.ImageRepo)
+	if err != nil {
+		return nil, err
+	}
 	task := s.newDeployTask(release, spec, dto.CreateReleaseFromCIRequest{
 		ImageRepo: release.ImageRepo,
 		ImageTag:  release.ImageTag,
 		CommitSHA: release.CommitSHA,
 		TraceID:   release.TraceID,
-	})
+	}, registryAuth)
 	release.CurrentTaskID = &task.ID
 	release.Status = model.ReleaseStatusDispatching
 	if err := s.repo.CreateTask(task); err != nil {
@@ -642,7 +667,7 @@ func (s *Service) updateTrafficFlags(serviceID uuid.UUID, liveSlot model.Slot, o
 	return nil
 }
 
-func (s *Service) newDeployTask(release *model.Release, spec *dto.ServiceDeploymentSpec, req dto.CreateReleaseFromCIRequest) *model.Task {
+func (s *Service) newDeployTask(release *model.Release, spec *dto.ServiceDeploymentSpec, req dto.CreateReleaseFromCIRequest, registryAuth *releasedomain.ResolvedRegistryCredential) *model.Task {
 	payload := model.TaskPayload{
 		ServiceID:         spec.ID,
 		ServiceKey:        spec.ServiceKey,
@@ -665,6 +690,11 @@ func (s *Service) newDeployTask(release *model.Release, spec *dto.ServiceDeploym
 		Entrypoint:        spec.Entrypoint,
 		Volumes:           toModelVolumeMounts(spec.Volumes),
 		PublishedPorts:    toModelPublishedPorts(spec.PublishedPorts),
+	}
+	if registryAuth != nil {
+		payload.RegistryHost = registryAuth.Host
+		payload.RegistryUsername = registryAuth.Username
+		payload.RegistrySecret = registryAuth.Secret
 	}
 	return &model.Task{
 		ID:        uuid.New(),

@@ -283,7 +283,7 @@ func (c *DockerClient) recreateManagedContainer(ctx context.Context, spec manage
 		spec.RestartPolicy.Name,
 		spec.RestartPolicy.MaximumRetryCount,
 	)
-	if err := c.ensureImage(ctx, spec.Image); err != nil {
+	if err := c.ensureImage(ctx, spec.Image, nil); err != nil {
 		return err
 	}
 	labels := cloneStringMap(spec.Labels)
@@ -439,7 +439,7 @@ func (c *DockerClient) writeVolumeFiles(ctx context.Context, helperImage string,
 	if len(files) == 0 {
 		return nil
 	}
-	if err := c.ensureImage(ctx, helperImage); err != nil {
+	if err := c.ensureImage(ctx, helperImage, nil); err != nil {
 		return err
 	}
 	c.logger.Infof("writing proxy bootstrap files: volume=%s files=%d", volumeName, len(files))

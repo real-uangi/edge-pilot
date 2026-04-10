@@ -36,6 +36,11 @@ const AgentsPage = lazy(async () => {
   return { default: module.AgentsPage };
 });
 
+const RegistryCredentialsPage = lazy(async () => {
+  const module = await import("./pages/RegistryCredentialsPage");
+  return { default: module.RegistryCredentialsPage };
+});
+
 const AgentDetailPage = lazy(async () => {
   const module = await import("./pages/AgentDetailPage");
   return { default: module.AgentDetailPage };
@@ -145,6 +150,7 @@ export const router = createBrowserRouter([
       { path: "services", element: <ServicesPage /> },
       { path: "services/new", element: <ServiceEditorPage /> },
       { path: "services/:id", element: <ServiceEditorPage /> },
+      { path: "registry-credentials", element: <RegistryCredentialsPage /> },
       { path: "agents", element: <AgentsPage /> },
       { path: "agents/:id", element: <AgentDetailPage /> },
       { path: "releases", element: <ReleasesPage /> },

@@ -57,6 +57,15 @@ export interface AgentCredentialRecord extends AgentRecord {
   token: string;
 }
 
+export interface RegistryCredentialRecord {
+  id: string;
+  registryHost: string;
+  username: string;
+  secretConfigured: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface ReleaseRecord {
   id: string;
   serviceId: string;
@@ -161,6 +170,12 @@ export interface UpsertServiceInput {
   enabled: boolean;
 }
 
+export interface UpsertRegistryCredentialInput {
+  registryHost: string;
+  username: string;
+  secret: string;
+}
+
 class ApiError extends Error {
   status: number;
   code: number;
@@ -241,6 +256,29 @@ export const api = {
   },
   listAgents() {
     return request<AgentRecord[]>("/api/admin/agents");
+  },
+  listRegistryCredentials() {
+    return request<RegistryCredentialRecord[]>("/api/admin/registry-credentials");
+  },
+  getRegistryCredential(id: string) {
+    return request<RegistryCredentialRecord>(`/api/admin/registry-credentials/${id}`);
+  },
+  createRegistryCredential(input: UpsertRegistryCredentialInput) {
+    return request<RegistryCredentialRecord>("/api/admin/registry-credentials", {
+      method: "POST",
+      body: JSON.stringify(input),
+    });
+  },
+  updateRegistryCredential(id: string, input: UpsertRegistryCredentialInput) {
+    return request<RegistryCredentialRecord>(`/api/admin/registry-credentials/${id}`, {
+      method: "PUT",
+      body: JSON.stringify(input),
+    });
+  },
+  deleteRegistryCredential(id: string) {
+    return request<{ deleted: boolean }>(`/api/admin/registry-credentials/${id}`, {
+      method: "DELETE",
+    });
   },
   getAgent(id: string) {
     return request<AgentRecord>(`/api/admin/agents/${id}`);

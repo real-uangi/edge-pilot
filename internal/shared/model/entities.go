@@ -91,6 +91,19 @@ func (Service) TableName() string {
 	return "ep_service"
 }
 
+type RegistryCredential struct {
+	ID uuid.UUID `json:"id" gorm:"type:uuid;primaryKey"`
+	commondb.Model
+	RegistryHost     string `json:"registryHost" gorm:"size:255;uniqueIndex;not null"`
+	Username         string `json:"username" gorm:"size:255;not null"`
+	SecretCiphertext string `json:"secretCiphertext" gorm:"type:text;not null"`
+	SecretKeyVersion string `json:"secretKeyVersion" gorm:"size:64;not null"`
+}
+
+func (RegistryCredential) TableName() string {
+	return "ep_registry_credential"
+}
+
 type VolumeMount struct {
 	Source   string `json:"source"`
 	Target   string `json:"target"`
@@ -148,6 +161,9 @@ type TaskPayload struct {
 	ServiceKey        string            `json:"serviceKey"`
 	ImageRepo         string            `json:"imageRepo"`
 	ImageTag          string            `json:"imageTag"`
+	RegistryHost      string            `json:"registryHost,omitempty"`
+	RegistryUsername  string            `json:"registryUsername,omitempty"`
+	RegistrySecret    string            `json:"registrySecret,omitempty"`
 	CommitSHA         string            `json:"commitSha"`
 	TraceID           string            `json:"traceId"`
 	TargetSlot        Slot              `json:"targetSlot"`

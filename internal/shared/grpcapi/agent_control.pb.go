@@ -683,23 +683,26 @@ type TaskCommand struct {
 	Type              TaskType               `protobuf:"varint,6,opt,name=type,proto3,enum=edgepilot.grpcapi.TaskType" json:"type,omitempty"`
 	ImageRepo         string                 `protobuf:"bytes,7,opt,name=image_repo,json=imageRepo,proto3" json:"image_repo,omitempty"`
 	ImageTag          string                 `protobuf:"bytes,8,opt,name=image_tag,json=imageTag,proto3" json:"image_tag,omitempty"`
-	CommitSha         string                 `protobuf:"bytes,9,opt,name=commit_sha,json=commitSha,proto3" json:"commit_sha,omitempty"`
-	TraceId           string                 `protobuf:"bytes,10,opt,name=trace_id,json=traceId,proto3" json:"trace_id,omitempty"`
-	TargetSlot        Slot                   `protobuf:"varint,11,opt,name=target_slot,json=targetSlot,proto3,enum=edgepilot.grpcapi.Slot" json:"target_slot,omitempty"`
-	CurrentLiveSlot   Slot                   `protobuf:"varint,12,opt,name=current_live_slot,json=currentLiveSlot,proto3,enum=edgepilot.grpcapi.Slot" json:"current_live_slot,omitempty"`
-	ContainerPort     int32                  `protobuf:"varint,13,opt,name=container_port,json=containerPort,proto3" json:"container_port,omitempty"`
-	DockerHealthCheck bool                   `protobuf:"varint,14,opt,name=docker_health_check,json=dockerHealthCheck,proto3" json:"docker_health_check,omitempty"`
-	HttpHealthPath    string                 `protobuf:"bytes,15,opt,name=http_health_path,json=httpHealthPath,proto3" json:"http_health_path,omitempty"`
-	HttpExpectedCode  int32                  `protobuf:"varint,16,opt,name=http_expected_code,json=httpExpectedCode,proto3" json:"http_expected_code,omitempty"`
-	HttpTimeoutSecond int32                  `protobuf:"varint,17,opt,name=http_timeout_second,json=httpTimeoutSecond,proto3" json:"http_timeout_second,omitempty"`
-	BackendName       string                 `protobuf:"bytes,18,opt,name=backend_name,json=backendName,proto3" json:"backend_name,omitempty"`
-	ServerName        string                 `protobuf:"bytes,19,opt,name=server_name,json=serverName,proto3" json:"server_name,omitempty"`
-	PreviousServer    string                 `protobuf:"bytes,20,opt,name=previous_server,json=previousServer,proto3" json:"previous_server,omitempty"`
-	Env               map[string]string      `protobuf:"bytes,21,rep,name=env,proto3" json:"env,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
-	Command           []string               `protobuf:"bytes,22,rep,name=command,proto3" json:"command,omitempty"`
-	Entrypoint        []string               `protobuf:"bytes,23,rep,name=entrypoint,proto3" json:"entrypoint,omitempty"`
-	Volumes           []*VolumeMount         `protobuf:"bytes,24,rep,name=volumes,proto3" json:"volumes,omitempty"`
-	PublishedPorts    []*PublishedPort       `protobuf:"bytes,25,rep,name=published_ports,json=publishedPorts,proto3" json:"published_ports,omitempty"`
+	RegistryHost      string                 `protobuf:"bytes,9,opt,name=registry_host,json=registryHost,proto3" json:"registry_host,omitempty"`
+	RegistryUsername  string                 `protobuf:"bytes,10,opt,name=registry_username,json=registryUsername,proto3" json:"registry_username,omitempty"`
+	RegistrySecret    string                 `protobuf:"bytes,11,opt,name=registry_secret,json=registrySecret,proto3" json:"registry_secret,omitempty"`
+	CommitSha         string                 `protobuf:"bytes,12,opt,name=commit_sha,json=commitSha,proto3" json:"commit_sha,omitempty"`
+	TraceId           string                 `protobuf:"bytes,13,opt,name=trace_id,json=traceId,proto3" json:"trace_id,omitempty"`
+	TargetSlot        Slot                   `protobuf:"varint,14,opt,name=target_slot,json=targetSlot,proto3,enum=edgepilot.grpcapi.Slot" json:"target_slot,omitempty"`
+	CurrentLiveSlot   Slot                   `protobuf:"varint,15,opt,name=current_live_slot,json=currentLiveSlot,proto3,enum=edgepilot.grpcapi.Slot" json:"current_live_slot,omitempty"`
+	ContainerPort     int32                  `protobuf:"varint,16,opt,name=container_port,json=containerPort,proto3" json:"container_port,omitempty"`
+	DockerHealthCheck bool                   `protobuf:"varint,17,opt,name=docker_health_check,json=dockerHealthCheck,proto3" json:"docker_health_check,omitempty"`
+	HttpHealthPath    string                 `protobuf:"bytes,18,opt,name=http_health_path,json=httpHealthPath,proto3" json:"http_health_path,omitempty"`
+	HttpExpectedCode  int32                  `protobuf:"varint,19,opt,name=http_expected_code,json=httpExpectedCode,proto3" json:"http_expected_code,omitempty"`
+	HttpTimeoutSecond int32                  `protobuf:"varint,20,opt,name=http_timeout_second,json=httpTimeoutSecond,proto3" json:"http_timeout_second,omitempty"`
+	BackendName       string                 `protobuf:"bytes,21,opt,name=backend_name,json=backendName,proto3" json:"backend_name,omitempty"`
+	ServerName        string                 `protobuf:"bytes,22,opt,name=server_name,json=serverName,proto3" json:"server_name,omitempty"`
+	PreviousServer    string                 `protobuf:"bytes,23,opt,name=previous_server,json=previousServer,proto3" json:"previous_server,omitempty"`
+	Env               map[string]string      `protobuf:"bytes,24,rep,name=env,proto3" json:"env,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	Command           []string               `protobuf:"bytes,25,rep,name=command,proto3" json:"command,omitempty"`
+	Entrypoint        []string               `protobuf:"bytes,26,rep,name=entrypoint,proto3" json:"entrypoint,omitempty"`
+	Volumes           []*VolumeMount         `protobuf:"bytes,27,rep,name=volumes,proto3" json:"volumes,omitempty"`
+	PublishedPorts    []*PublishedPort       `protobuf:"bytes,28,rep,name=published_ports,json=publishedPorts,proto3" json:"published_ports,omitempty"`
 	unknownFields     protoimpl.UnknownFields
 	sizeCache         protoimpl.SizeCache
 }
@@ -786,6 +789,27 @@ func (x *TaskCommand) GetImageRepo() string {
 func (x *TaskCommand) GetImageTag() string {
 	if x != nil {
 		return x.ImageTag
+	}
+	return ""
+}
+
+func (x *TaskCommand) GetRegistryHost() string {
+	if x != nil {
+		return x.RegistryHost
+	}
+	return ""
+}
+
+func (x *TaskCommand) GetRegistryUsername() string {
+	if x != nil {
+		return x.RegistryUsername
+	}
+	return ""
+}
+
+func (x *TaskCommand) GetRegistrySecret() string {
+	if x != nil {
+		return x.RegistrySecret
 	}
 	return ""
 }
@@ -1372,7 +1396,7 @@ const file_internal_shared_grpcapi_agent_control_proto_rawDesc = "" +
 	"\tread_only\x18\x03 \x01(\bR\breadOnly\"S\n" +
 	"\rPublishedPort\x12\x1b\n" +
 	"\thost_port\x18\x01 \x01(\x05R\bhostPort\x12%\n" +
-	"\x0econtainer_port\x18\x02 \x01(\x05R\rcontainerPort\"\xc4\b\n" +
+	"\x0econtainer_port\x18\x02 \x01(\x05R\rcontainerPort\"\xbf\t\n" +
 	"\vTaskCommand\x12\x17\n" +
 	"\atask_id\x18\x01 \x01(\tR\x06taskId\x12\x1d\n" +
 	"\n" +
@@ -1385,30 +1409,33 @@ const file_internal_shared_grpcapi_agent_control_proto_rawDesc = "" +
 	"\x04type\x18\x06 \x01(\x0e2\x1b.edgepilot.grpcapi.TaskTypeR\x04type\x12\x1d\n" +
 	"\n" +
 	"image_repo\x18\a \x01(\tR\timageRepo\x12\x1b\n" +
-	"\timage_tag\x18\b \x01(\tR\bimageTag\x12\x1d\n" +
+	"\timage_tag\x18\b \x01(\tR\bimageTag\x12#\n" +
+	"\rregistry_host\x18\t \x01(\tR\fregistryHost\x12+\n" +
+	"\x11registry_username\x18\n" +
+	" \x01(\tR\x10registryUsername\x12'\n" +
+	"\x0fregistry_secret\x18\v \x01(\tR\x0eregistrySecret\x12\x1d\n" +
 	"\n" +
-	"commit_sha\x18\t \x01(\tR\tcommitSha\x12\x19\n" +
-	"\btrace_id\x18\n" +
-	" \x01(\tR\atraceId\x128\n" +
-	"\vtarget_slot\x18\v \x01(\x0e2\x17.edgepilot.grpcapi.SlotR\n" +
+	"commit_sha\x18\f \x01(\tR\tcommitSha\x12\x19\n" +
+	"\btrace_id\x18\r \x01(\tR\atraceId\x128\n" +
+	"\vtarget_slot\x18\x0e \x01(\x0e2\x17.edgepilot.grpcapi.SlotR\n" +
 	"targetSlot\x12C\n" +
-	"\x11current_live_slot\x18\f \x01(\x0e2\x17.edgepilot.grpcapi.SlotR\x0fcurrentLiveSlot\x12%\n" +
-	"\x0econtainer_port\x18\r \x01(\x05R\rcontainerPort\x12.\n" +
-	"\x13docker_health_check\x18\x0e \x01(\bR\x11dockerHealthCheck\x12(\n" +
-	"\x10http_health_path\x18\x0f \x01(\tR\x0ehttpHealthPath\x12,\n" +
-	"\x12http_expected_code\x18\x10 \x01(\x05R\x10httpExpectedCode\x12.\n" +
-	"\x13http_timeout_second\x18\x11 \x01(\x05R\x11httpTimeoutSecond\x12!\n" +
-	"\fbackend_name\x18\x12 \x01(\tR\vbackendName\x12\x1f\n" +
-	"\vserver_name\x18\x13 \x01(\tR\n" +
+	"\x11current_live_slot\x18\x0f \x01(\x0e2\x17.edgepilot.grpcapi.SlotR\x0fcurrentLiveSlot\x12%\n" +
+	"\x0econtainer_port\x18\x10 \x01(\x05R\rcontainerPort\x12.\n" +
+	"\x13docker_health_check\x18\x11 \x01(\bR\x11dockerHealthCheck\x12(\n" +
+	"\x10http_health_path\x18\x12 \x01(\tR\x0ehttpHealthPath\x12,\n" +
+	"\x12http_expected_code\x18\x13 \x01(\x05R\x10httpExpectedCode\x12.\n" +
+	"\x13http_timeout_second\x18\x14 \x01(\x05R\x11httpTimeoutSecond\x12!\n" +
+	"\fbackend_name\x18\x15 \x01(\tR\vbackendName\x12\x1f\n" +
+	"\vserver_name\x18\x16 \x01(\tR\n" +
 	"serverName\x12'\n" +
-	"\x0fprevious_server\x18\x14 \x01(\tR\x0epreviousServer\x129\n" +
-	"\x03env\x18\x15 \x03(\v2'.edgepilot.grpcapi.TaskCommand.EnvEntryR\x03env\x12\x18\n" +
-	"\acommand\x18\x16 \x03(\tR\acommand\x12\x1e\n" +
+	"\x0fprevious_server\x18\x17 \x01(\tR\x0epreviousServer\x129\n" +
+	"\x03env\x18\x18 \x03(\v2'.edgepilot.grpcapi.TaskCommand.EnvEntryR\x03env\x12\x18\n" +
+	"\acommand\x18\x19 \x03(\tR\acommand\x12\x1e\n" +
 	"\n" +
-	"entrypoint\x18\x17 \x03(\tR\n" +
+	"entrypoint\x18\x1a \x03(\tR\n" +
 	"entrypoint\x128\n" +
-	"\avolumes\x18\x18 \x03(\v2\x1e.edgepilot.grpcapi.VolumeMountR\avolumes\x12I\n" +
-	"\x0fpublished_ports\x18\x19 \x03(\v2 .edgepilot.grpcapi.PublishedPortR\x0epublishedPorts\x1a6\n" +
+	"\avolumes\x18\x1b \x03(\v2\x1e.edgepilot.grpcapi.VolumeMountR\avolumes\x12I\n" +
+	"\x0fpublished_ports\x18\x1c \x03(\v2 .edgepilot.grpcapi.PublishedPortR\x0epublishedPorts\x1a6\n" +
 	"\bEnvEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\xaf\x03\n" +

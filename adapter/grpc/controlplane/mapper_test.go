@@ -24,6 +24,9 @@ func TestTaskToProtoPreservesFields(t *testing.T) {
 			ServiceKey:        "svc-a",
 			ImageRepo:         "repo/app",
 			ImageTag:          "v1.2.3",
+			RegistryHost:      "ghcr.io",
+			RegistryUsername:  "octocat",
+			RegistrySecret:    "token-value",
 			CommitSHA:         "abc123",
 			TraceID:           "trace-1",
 			TargetSlot:        model.SlotGreen,
@@ -60,6 +63,9 @@ func TestTaskToProtoPreservesFields(t *testing.T) {
 	}
 	if pb.GetContainerPort() != 8080 || !pb.GetDockerHealthCheck() {
 		t.Fatalf("unexpected ports/health: container=%d health=%v", pb.GetContainerPort(), pb.GetDockerHealthCheck())
+	}
+	if pb.GetRegistryHost() != "ghcr.io" || pb.GetRegistryUsername() != "octocat" || pb.GetRegistrySecret() != "token-value" {
+		t.Fatalf("unexpected registry credentials: %#v", pb)
 	}
 	if len(pb.GetPublishedPorts()) != 1 || pb.GetPublishedPorts()[0].GetHostPort() != 18081 {
 		t.Fatalf("unexpected published ports: %#v", pb.GetPublishedPorts())

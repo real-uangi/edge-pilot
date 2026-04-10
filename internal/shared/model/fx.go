@@ -13,6 +13,7 @@ var ControlPlaneModule = fx.Module(
 func autoMigrate(manager *db.Manager) error {
 	return manager.GetDB().AutoMigrate(
 		&Service{},
+		&RegistryCredential{},
 		&Release{},
 		&Task{},
 		&TaskAttempt{},

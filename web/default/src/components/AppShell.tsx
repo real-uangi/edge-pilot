@@ -5,6 +5,7 @@ import styles from "./AppShell.module.css";
 const navItems = [
   { to: "/", label: "总览", end: true },
   { to: "/services", label: "服务" },
+  { to: "/registry-credentials", label: "镜像仓库" },
   { to: "/agents", label: "节点" },
   { to: "/releases", label: "发布" },
 ];

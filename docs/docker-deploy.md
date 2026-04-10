@@ -108,6 +108,7 @@ docker run -d \
 
 ### 常用可选环境变量
 
+- `REGISTRY_SECRET_MASTER_KEY`：仅 control-plane 使用；base64 编码后的 32 字节主密钥，用于加密存储私有镜像仓库密码/令牌
 - `DOCKER_SOCKET_PATH`：默认 `/var/run/docker.sock`
 - `HTTP_PROBE_TIMEOUT_SECONDS`：默认 `5`
 - `PROXY_NETWORK_NAME`：默认 `epNet`
@@ -185,6 +186,7 @@ token 明文只会在创建和重置时返回一次。
 - 镜像内运行用户：`edgepilot`
 - 不需要访问宿主机 Docker
 - 不需要额外 Linux capabilities
+- 若需要平台内私有镜像登录能力，需要额外配置 `REGISTRY_SECRET_MASTER_KEY`
 
 ### agent
 
@@ -192,6 +194,7 @@ token 明文只会在创建和重置时返回一次。
 - 需要访问 `/var/run/docker.sock`
 - 需要通过 `--group-add <docker.sock gid>` 追加 socket 对应组
 - 不建议把 agent 容器切回 root；默认非 root 模型已经能满足访问 Docker 的需求
+- agent 本身不保存镜像仓库凭据；私有镜像发布时由 control-plane 按 registry host 匹配并通过内部 gRPC 下发拉取凭据
 
 ## 排错建议
 

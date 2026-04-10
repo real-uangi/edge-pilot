@@ -6,6 +6,7 @@ import (
 	"edge-pilot/internal/agent/application"
 	"edge-pilot/internal/shared/config"
 	"edge-pilot/internal/shared/grpcapi"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -60,7 +61,7 @@ func (c *DockerClient) Ping(ctx context.Context) error {
 
 func (c *DockerClient) DeployContainer(ctx context.Context, task *grpcapi.TaskCommand) (*application.ContainerRuntime, error) {
 	imageRef := task.GetImageRepo() + ":" + task.GetImageTag()
-	if err := c.ensureImage(ctx, imageRef); err != nil {
+	if err := c.ensureImage(ctx, imageRef, task); err != nil {
 		return nil, err
 	}
 	createReq := buildWorkloadCreateRequest(c.cfg, imageRef, task)
@@ -147,7 +148,7 @@ func buildWorkloadCreateRequest(cfg *config.AgentRuntimeConfig, imageRef string,
 	}
 }
 
-func (c *DockerClient) ensureImage(ctx context.Context, imageRef string) error {
+func (c *DockerClient) ensureImage(ctx context.Context, imageRef string, task *grpcapi.TaskCommand) error {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "http://docker/images/"+url.PathEscape(imageRef)+"/json", nil)
 	if err != nil {
 		return err
@@ -162,6 +163,17 @@ func (c *DockerClient) ensureImage(ctx context.Context, imageRef string) error {
 		pullReq, err := http.NewRequestWithContext(ctx, http.MethodPost, "http://docker/images/create?fromImage="+url.QueryEscape(imageRef), nil)
 		if err != nil {
 			return err
+		}
+		auth := taskRegistryAuth{}
+		if task != nil {
+			auth.host = task.GetRegistryHost()
+			auth.username = task.GetRegistryUsername()
+			auth.secret = task.GetRegistrySecret()
+		}
+		if header, ok, err := buildRegistryAuthHeader(auth); err != nil {
+			return err
+		} else if ok {
+			pullReq.Header.Set("X-Registry-Auth", header)
 		}
 		pullResp, err := c.httpClient.Do(pullReq)
 		if err != nil {
@@ -180,6 +192,27 @@ func (c *DockerClient) ensureImage(ctx context.Context, imageRef string) error {
 		return fmt.Errorf("docker inspect image failed: %s %s", resp.Status, strings.TrimSpace(string(body)))
 	}
 	return nil
+}
+
+type taskRegistryAuth struct {
+	host     string
+	username string
+	secret   string
+}
+
+func buildRegistryAuthHeader(auth taskRegistryAuth) (string, bool, error) {
+	if strings.TrimSpace(auth.host) == "" || strings.TrimSpace(auth.username) == "" || strings.TrimSpace(auth.secret) == "" {
+		return "", false, nil
+	}
+	payload, err := json.Marshal(map[string]string{
+		"username":      auth.username,
+		"password":      auth.secret,
+		"serveraddress": auth.host,
+	})
+	if err != nil {
+		return "", false, err
+	}
+	return base64.URLEncoding.EncodeToString(payload), true, nil
 }
 
 func (c *DockerClient) InspectHealth(ctx context.Context, containerID string) (string, error) {

@@ -83,23 +83,26 @@ message TaskCommand {
   TaskType type = 6;
   string image_repo = 7;
   string image_tag = 8;
-  string commit_sha = 9;
-  string trace_id = 10;
-  Slot target_slot = 11;
-  Slot current_live_slot = 12;
-  int32 container_port = 13;
-  bool docker_health_check = 14;
-  string http_health_path = 15;
-  int32 http_expected_code = 16;
-  int32 http_timeout_second = 17;
-  string backend_name = 18;
-  string server_name = 19;
-  string previous_server = 20;
-  map<string, string> env = 21;
-  repeated string command = 22;
-  repeated string entrypoint = 23;
-  repeated VolumeMount volumes = 24;
-  repeated PublishedPort published_ports = 25;
+  string registry_host = 9;
+  string registry_username = 10;
+  string registry_secret = 11;
+  string commit_sha = 12;
+  string trace_id = 13;
+  Slot target_slot = 14;
+  Slot current_live_slot = 15;
+  int32 container_port = 16;
+  bool docker_health_check = 17;
+  string http_health_path = 18;
+  int32 http_expected_code = 19;
+  int32 http_timeout_second = 20;
+  string backend_name = 21;
+  string server_name = 22;
+  string previous_server = 23;
+  map<string, string> env = 24;
+  repeated string command = 25;
+  repeated string entrypoint = 26;
+  repeated VolumeMount volumes = 27;
+  repeated PublishedPort published_ports = 28;
 }
 
 message TaskUpdate {
