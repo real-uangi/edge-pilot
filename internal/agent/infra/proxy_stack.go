@@ -34,9 +34,11 @@ type ManagedProxyRuntime struct {
 	desired            *grpcapi.ProxyConfigSnapshot
 	desiredHash        string
 	appliedHash        string
+	prepared           bool
 	ready              bool
 	attachedToNetwork  bool
 	selfContainerID    string
+	lastPrepareError   string
 	lastApplyErrorText string
 }
 
@@ -65,6 +67,12 @@ func StartManagedProxyRuntime(lc fx.Lifecycle, runtime *ManagedProxyRuntime) {
 				return err
 			}
 			runtime.logger.Infof("docker socket is accessible: agentId=%s socket=%s", runtime.cfg.AgentID, runtime.cfg.DockerSocketPath)
+			prepareCtx, cancelPrepare := context.WithTimeout(context.Background(), 5*time.Minute)
+			defer cancelPrepare()
+			if err := runtime.Prepare(prepareCtx); err != nil {
+				runtime.logger.Errorf(err, "proxy stack startup prepare failed: agentId=%s", runtime.cfg.AgentID)
+				return err
+			}
 			go runtime.runSelfHeal(ctx)
 			return nil
 		},
@@ -73,6 +81,13 @@ func StartManagedProxyRuntime(lc fx.Lifecycle, runtime *ManagedProxyRuntime) {
 			return nil
 		},
 	})
+}
+
+func (m *ManagedProxyRuntime) Prepare(ctx context.Context) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	_, err := m.prepareLocked(ctx, true)
+	return err
 }
 
 func (m *ManagedProxyRuntime) runSelfHeal(ctx context.Context) {
@@ -84,7 +99,7 @@ func (m *ManagedProxyRuntime) runSelfHeal(ctx context.Context) {
 			return
 		case <-ticker.C:
 			m.mu.Lock()
-			changed, err := m.ensureProxyStackLocked(ctx)
+			changed, err := m.prepareLocked(ctx, false)
 			if err == nil && m.desired != nil && (changed || !m.ready || m.desiredHash != m.appliedHash) {
 				err = m.reconcileLocked(ctx, m.desired)
 				if err == nil {
@@ -113,7 +128,22 @@ func (m *ManagedProxyRuntime) ApplySnapshot(ctx context.Context, snapshot *grpca
 	m.desired = cloneSnapshot(snapshot)
 	m.desiredHash = snapshotHash(m.desired)
 	m.logger.Infof("received proxy snapshot: agentId=%s services=%d frontend=%s", m.cfg.AgentID, len(snapshot.GetServices()), snapshot.GetFrontendName())
-	return m.ensureReadyLocked(ctx)
+	if !m.prepared {
+		m.ready = false
+		if m.lastPrepareError == "" {
+			m.lastPrepareError = "proxy stack is not prepared"
+		}
+		return fmt.Errorf("%w: %s", application.ErrProxyNotReady, m.lastPrepareError)
+	}
+	if err := m.reconcileLocked(ctx, m.desired); err != nil {
+		m.ready = false
+		m.lastApplyErrorText = err.Error()
+		return err
+	}
+	m.ready = true
+	m.appliedHash = m.desiredHash
+	m.lastApplyErrorText = ""
+	return nil
 }
 
 func (m *ManagedProxyRuntime) EnsureReady(ctx context.Context) error {
@@ -124,9 +154,17 @@ func (m *ManagedProxyRuntime) EnsureReady(ctx context.Context) error {
 
 func (m *ManagedProxyRuntime) ShowStats(ctx context.Context) ([]*grpcapi.BackendStatPoint, error) {
 	m.mu.Lock()
+	prepared := m.prepared
 	ready := m.ready
+	prepareErr := m.lastPrepareError
 	lastErr := m.lastApplyErrorText
 	m.mu.Unlock()
+	if !prepared {
+		if strings.TrimSpace(prepareErr) == "" {
+			prepareErr = "proxy stack is still preparing"
+		}
+		return nil, fmt.Errorf("%w: %s", application.ErrProxyNotReady, prepareErr)
+	}
 	if !ready {
 		if strings.TrimSpace(lastErr) == "" {
 			lastErr = "proxy stack is still bootstrapping"
@@ -149,7 +187,7 @@ func (m *ManagedProxyRuntime) DisableServer(ctx context.Context, backend string,
 }
 
 func (m *ManagedProxyRuntime) ensureReadyLocked(ctx context.Context) error {
-	if _, err := m.ensureProxyStackLocked(ctx); err != nil {
+	if _, err := m.prepareLocked(ctx, false); err != nil {
 		m.ready = false
 		m.lastApplyErrorText = err.Error()
 		return err
@@ -170,15 +208,29 @@ func (m *ManagedProxyRuntime) ensureReadyLocked(ctx context.Context) error {
 	return nil
 }
 
-func (m *ManagedProxyRuntime) ensureProxyStackLocked(ctx context.Context) (bool, error) {
-	if !m.ready {
+func (m *ManagedProxyRuntime) prepareLocked(ctx context.Context, startup bool) (bool, error) {
+	if startup {
+		m.logger.Infof("pulling proxy stack images: haproxyImage=%s helperImage=%s", m.cfg.HAProxyImage, m.cfg.ProxyHelperImage)
+	} else if !m.ready {
 		m.logger.Infof("ensuring managed proxy stack: container=%s network=%s", m.cfg.ProxyContainerName, m.cfg.ProxyNetworkName)
 	}
 	changed := false
+	if err := m.pullProxyImagesLocked(ctx); err != nil {
+		m.prepared = false
+		m.lastPrepareError = err.Error()
+		return false, err
+	}
+	if startup {
+		m.logger.Infof("preparing proxy network and config volume: container=%s network=%s volume=%s", m.cfg.ProxyContainerName, m.cfg.ProxyNetworkName, m.cfg.HAProxyConfigVolume)
+	}
 	if err := m.docker.ensureNetwork(ctx, m.cfg.ProxyNetworkName, m.cfg.ProxyNetworkSubnet); err != nil {
+		m.prepared = false
+		m.lastPrepareError = err.Error()
 		return false, err
 	}
 	if err := m.ensureReservedProxyIPLocked(ctx); err != nil {
+		m.prepared = false
+		m.lastPrepareError = err.Error()
 		return false, err
 	}
 
@@ -188,47 +240,84 @@ func (m *ManagedProxyRuntime) ensureProxyStackLocked(ctx context.Context) (bool,
 	}
 	if proxyInspect == nil {
 		if err := m.docker.recreateVolume(ctx, m.cfg.HAProxyConfigVolume); err != nil {
+			m.prepared = false
+			m.lastPrepareError = err.Error()
 			return false, err
 		}
 		if err := m.bootstrapBaseFiles(ctx); err != nil {
+			m.prepared = false
+			m.lastPrepareError = err.Error()
 			return false, err
 		}
 		changed = true
 	} else {
 		if err := m.docker.ensureVolume(ctx, m.cfg.HAProxyConfigVolume); err != nil {
+			m.prepared = false
+			m.lastPrepareError = err.Error()
 			return false, err
 		}
 	}
 	if proxyInspect != nil && !proxyInspect.State.Running {
 		if err := m.bootstrapBaseFiles(ctx); err != nil {
+			m.prepared = false
+			m.lastPrepareError = err.Error()
 			return false, err
 		}
 		changed = true
 	}
 
+	if startup {
+		m.logger.Infof("starting proxy container: container=%s", m.cfg.ProxyContainerName)
+	}
 	containerChanged, err := m.docker.ensureManagedContainer(ctx, m.proxySpec())
 	if err != nil {
+		m.prepared = false
+		m.lastPrepareError = err.Error()
 		return false, err
 	}
 	if containerChanged {
 		changed = true
 	}
 	if err := m.ensureSelfConnectedLocked(ctx); err != nil {
+		m.prepared = false
+		m.lastPrepareError = err.Error()
 		return false, err
+	}
+	if startup {
+		m.logger.Infof("waiting for proxy runtime api: addr=%s", m.runtimeAddress())
 	}
 	if err := retry(ctx, 12, time.Second, func() error {
 		_, err := m.runtime.run(ctx, "show info")
 		return err
 	}); err != nil {
+		m.prepared = false
+		m.lastPrepareError = err.Error()
 		return false, err
+	}
+	if startup {
+		m.logger.Infof("waiting for dataplane api: baseURL=%s", m.dataplaneBaseURL())
 	}
 	if err := retry(ctx, 12, time.Second, func() error {
 		_, err := m.dataplane.ConfigurationVersion(ctx)
 		return err
 	}); err != nil {
+		m.prepared = false
+		m.lastPrepareError = err.Error()
 		return false, err
 	}
+	m.prepared = true
+	m.lastPrepareError = ""
 	return changed, nil
+}
+
+func (m *ManagedProxyRuntime) pullProxyImagesLocked(ctx context.Context) error {
+	if err := m.docker.ensureImage(ctx, m.cfg.HAProxyImage, nil); err != nil {
+		return err
+	}
+	if strings.TrimSpace(m.cfg.ProxyHelperImage) == "" || m.cfg.ProxyHelperImage == m.cfg.HAProxyImage {
+		return nil
+	}
+	return m.docker.ensureImage(ctx, m.cfg.ProxyHelperImage, nil)
 }
 
 func (m *ManagedProxyRuntime) bootstrapBaseFiles(ctx context.Context) error {

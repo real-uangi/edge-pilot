@@ -5,6 +5,7 @@ import (
 	"edge-pilot/internal/shared/grpcapi"
 	"encoding/base64"
 	"encoding/json"
+	"strings"
 	"testing"
 )
 
@@ -66,5 +67,28 @@ func TestBuildRegistryAuthHeaderAllowsAnonymousPull(t *testing.T) {
 	}
 	if ok || header != "" {
 		t.Fatalf("expected anonymous pull path, got header=%q ok=%v", header, ok)
+	}
+}
+
+func TestConsumeDockerPullStreamSuccess(t *testing.T) {
+	stream := strings.NewReader(`{"status":"Pulling from library/busybox"}
+{"status":"Digest: sha256:abc"}
+{"status":"Status: Downloaded newer image"}
+`)
+	if err := consumeDockerPullStream(stream); err != nil {
+		t.Fatalf("consumeDockerPullStream() error = %v", err)
+	}
+}
+
+func TestConsumeDockerPullStreamReturnsStreamError(t *testing.T) {
+	stream := strings.NewReader(`{"status":"Pulling from library/busybox"}
+{"errorDetail":{"message":"pull access denied"}}
+`)
+	err := consumeDockerPullStream(stream)
+	if err == nil {
+		t.Fatal("expected consumeDockerPullStream to fail")
+	}
+	if !strings.Contains(err.Error(), "pull access denied") {
+		t.Fatalf("unexpected error: %v", err)
 	}
 }

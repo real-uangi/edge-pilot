@@ -149,49 +149,77 @@ func buildWorkloadCreateRequest(cfg *config.AgentRuntimeConfig, imageRef string,
 }
 
 func (c *DockerClient) ensureImage(ctx context.Context, imageRef string, task *grpcapi.TaskCommand) error {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "http://docker/images/"+url.PathEscape(imageRef)+"/json", nil)
+	exists, err := c.imageExists(ctx, imageRef)
 	if err != nil {
 		return err
+	}
+	if exists {
+		return nil
+	}
+
+	c.logger.Infof("pulling docker image: image=%s", imageRef)
+	pullCtx, cancel := context.WithTimeout(ctx, 5*time.Minute)
+	defer cancel()
+	pullReq, err := http.NewRequestWithContext(pullCtx, http.MethodPost, "http://docker/images/create?fromImage="+url.QueryEscape(imageRef), nil)
+	if err != nil {
+		return err
+	}
+	auth := taskRegistryAuth{}
+	if task != nil {
+		auth.host = task.GetRegistryHost()
+		auth.username = task.GetRegistryUsername()
+		auth.secret = task.GetRegistrySecret()
+	}
+	if header, ok, err := buildRegistryAuthHeader(auth); err != nil {
+		return err
+	} else if ok {
+		pullReq.Header.Set("X-Registry-Auth", header)
+	}
+	pullClient := &http.Client{
+		Transport: c.httpClient.Transport,
+		Timeout:   5 * time.Minute,
+	}
+	pullResp, err := pullClient.Do(pullReq)
+	if err != nil {
+		return err
+	}
+	defer pullResp.Body.Close()
+	if pullResp.StatusCode >= 300 {
+		body, _ := io.ReadAll(pullResp.Body)
+		return fmt.Errorf("docker pull image failed: %s %s", pullResp.Status, strings.TrimSpace(string(body)))
+	}
+	if err := consumeDockerPullStream(pullResp.Body); err != nil {
+		return fmt.Errorf("docker pull image failed: %w", err)
+	}
+
+	exists, err = c.imageExists(ctx, imageRef)
+	if err != nil {
+		return err
+	}
+	if !exists {
+		return fmt.Errorf("docker image %s still not present after pull", imageRef)
+	}
+	return nil
+}
+
+func (c *DockerClient) imageExists(ctx context.Context, imageRef string) (bool, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "http://docker/images/"+url.PathEscape(imageRef)+"/json", nil)
+	if err != nil {
+		return false, err
 	}
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
-		return err
-	}
-	if resp.StatusCode == http.StatusNotFound {
-		resp.Body.Close()
-		c.logger.Infof("pulling docker image: image=%s", imageRef)
-		pullReq, err := http.NewRequestWithContext(ctx, http.MethodPost, "http://docker/images/create?fromImage="+url.QueryEscape(imageRef), nil)
-		if err != nil {
-			return err
-		}
-		auth := taskRegistryAuth{}
-		if task != nil {
-			auth.host = task.GetRegistryHost()
-			auth.username = task.GetRegistryUsername()
-			auth.secret = task.GetRegistrySecret()
-		}
-		if header, ok, err := buildRegistryAuthHeader(auth); err != nil {
-			return err
-		} else if ok {
-			pullReq.Header.Set("X-Registry-Auth", header)
-		}
-		pullResp, err := c.httpClient.Do(pullReq)
-		if err != nil {
-			return err
-		}
-		defer pullResp.Body.Close()
-		body, _ := io.ReadAll(pullResp.Body)
-		if pullResp.StatusCode >= 300 {
-			return fmt.Errorf("docker pull image failed: %s %s", pullResp.Status, strings.TrimSpace(string(body)))
-		}
-		return nil
+		return false, err
 	}
 	defer resp.Body.Close()
+	if resp.StatusCode == http.StatusNotFound {
+		return false, nil
+	}
 	if resp.StatusCode >= 300 {
 		body, _ := io.ReadAll(resp.Body)
-		return fmt.Errorf("docker inspect image failed: %s %s", resp.Status, strings.TrimSpace(string(body)))
+		return false, fmt.Errorf("docker inspect image failed: %s %s", resp.Status, strings.TrimSpace(string(body)))
 	}
-	return nil
+	return true, nil
 }
 
 type taskRegistryAuth struct {
@@ -213,6 +241,33 @@ func buildRegistryAuthHeader(auth taskRegistryAuth) (string, bool, error) {
 		return "", false, err
 	}
 	return base64.URLEncoding.EncodeToString(payload), true, nil
+}
+
+type dockerPullStatusLine struct {
+	Status      string `json:"status"`
+	Error       string `json:"error"`
+	ErrorDetail *struct {
+		Message string `json:"message"`
+	} `json:"errorDetail"`
+}
+
+func consumeDockerPullStream(r io.Reader) error {
+	decoder := json.NewDecoder(r)
+	for {
+		var line dockerPullStatusLine
+		if err := decoder.Decode(&line); err != nil {
+			if err == io.EOF {
+				return nil
+			}
+			return err
+		}
+		if strings.TrimSpace(line.Error) != "" {
+			return fmt.Errorf("%s", strings.TrimSpace(line.Error))
+		}
+		if line.ErrorDetail != nil && strings.TrimSpace(line.ErrorDetail.Message) != "" {
+			return fmt.Errorf("%s", strings.TrimSpace(line.ErrorDetail.Message))
+		}
+	}
 }
 
 func (c *DockerClient) InspectHealth(ctx context.Context, containerID string) (string, error) {

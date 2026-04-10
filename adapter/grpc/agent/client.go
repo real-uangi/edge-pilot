@@ -37,6 +37,7 @@ func startClient(lc fx.Lifecycle, client *Client) {
 	ctx, cancel := context.WithCancel(context.Background())
 	lc.Append(fx.Hook{
 		OnStart: func(context.Context) error {
+			client.logger.Infof("starting grpc client after proxy stack preparation: agentId=%s addr=%s", client.cfg.AgentID, client.cfg.ControlPlaneAddr)
 			go client.run(ctx)
 			return nil
 		},
