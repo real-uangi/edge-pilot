@@ -24,23 +24,25 @@ const (
 )
 
 type managedContainerSpec struct {
-	Name       string
-	Image      string
-	Labels     map[string]string
-	Env        []string
-	Cmd        []string
-	Entrypoint []string
-	Binds      []string
-	PortBinds  map[string][]dockerPortBinding
-	Exposed    map[string]map[string]string
-	Network    string
-	IPAddress  string
+	Name          string
+	Image         string
+	Labels        map[string]string
+	Env           []string
+	Cmd           []string
+	Entrypoint    []string
+	Binds         []string
+	PortBinds     map[string][]dockerPortBinding
+	Exposed       map[string]map[string]string
+	Network       string
+	IPAddress     string
+	RestartPolicy dockerRestartPolicy
 }
 
 type dockerContainerInspect struct {
-	ID     string `json:"Id"`
-	Name   string `json:"Name"`
-	Config struct {
+	ID           string `json:"Id"`
+	Name         string `json:"Name"`
+	RestartCount int    `json:"RestartCount"`
+	Config       struct {
 		Image  string            `json:"Image"`
 		Labels map[string]string `json:"Labels"`
 	} `json:"Config"`
@@ -96,7 +98,8 @@ type dockerEndpointIPAMConfig struct {
 }
 
 type dockerRestartPolicy struct {
-	Name string `json:"Name,omitempty"`
+	Name              string `json:"Name,omitempty"`
+	MaximumRetryCount int    `json:"MaximumRetryCount,omitempty"`
 }
 
 type dockerNetworkCreateRequest struct {
@@ -252,7 +255,18 @@ func (c *DockerClient) ensureVolume(ctx context.Context, name string) error {
 }
 
 func (c *DockerClient) recreateManagedContainer(ctx context.Context, spec managedContainerSpec) error {
-	c.logger.Infof("creating managed proxy container: name=%s image=%s ip=%s network=%s", spec.Name, spec.Image, spec.IPAddress, spec.Network)
+	c.logger.Infof(
+		"creating managed proxy container: name=%s image=%s ip=%s network=%s restartPolicy=%s maxRetries=%d",
+		spec.Name,
+		spec.Image,
+		spec.IPAddress,
+		spec.Network,
+		spec.RestartPolicy.Name,
+		spec.RestartPolicy.MaximumRetryCount,
+	)
+	if err := c.ensureImage(ctx, spec.Image); err != nil {
+		return err
+	}
 	labels := cloneStringMap(spec.Labels)
 	labels[proxyStackSpecLabelKey] = specHash(spec)
 	body, err := json.Marshal(dockerCreateContainerRequest{
@@ -263,11 +277,9 @@ func (c *DockerClient) recreateManagedContainer(ctx context.Context, spec manage
 		Labels:       labels,
 		ExposedPorts: spec.Exposed,
 		HostConfig: dockerHostConfig{
-			PortBindings: spec.PortBinds,
-			Binds:        spec.Binds,
-			RestartPolicy: dockerRestartPolicy{
-				Name: "unless-stopped",
-			},
+			PortBindings:  spec.PortBinds,
+			Binds:         spec.Binds,
+			RestartPolicy: spec.RestartPolicy,
 		},
 		NetworkingConfig: dockerNetworkingConfig{
 			EndpointsConfig: map[string]dockerEndpointSettings{
@@ -313,43 +325,62 @@ func (c *DockerClient) recreateManagedContainer(ctx context.Context, spec manage
 	return nil
 }
 
-func (c *DockerClient) ensureManagedContainer(ctx context.Context, spec managedContainerSpec) error {
+func (c *DockerClient) ensureManagedContainer(ctx context.Context, spec managedContainerSpec) (bool, error) {
 	inspect, err := c.inspectManagedContainer(ctx, spec.Name)
 	if err != nil {
-		return err
+		return false, err
 	}
 	if inspect == nil {
 		c.logger.Infof("managed proxy container missing, creating: name=%s", spec.Name)
-		return c.recreateManagedContainer(ctx, spec)
+		return true, c.recreateManagedContainer(ctx, spec)
 	}
 	if inspect.Config.Labels[proxyStackLabelKey] != "true" || inspect.Config.Labels[proxyStackRoleLabelKey] != spec.Labels[proxyStackRoleLabelKey] {
 		c.logger.Infof("managed proxy container name conflict: name=%s role=%s", spec.Name, spec.Labels[proxyStackRoleLabelKey])
-		return fmt.Errorf("proxy stack container name conflict: %s is not managed by edge-pilot", spec.Name)
+		return false, fmt.Errorf("proxy stack container name conflict: %s is not managed by edge-pilot", spec.Name)
 	}
 	if !managedContainerMatches(inspect, spec) {
 		c.logger.Infof("managed proxy container drift detected, recreating: name=%s currentImage=%s desiredImage=%s", spec.Name, inspect.Config.Image, spec.Image)
 		if err := c.RemoveContainer(ctx, inspect.ID); err != nil {
-			return err
+			return false, err
 		}
-		return c.recreateManagedContainer(ctx, spec)
+		return true, c.recreateManagedContainer(ctx, spec)
 	}
 	if inspect.State.Running {
-		return nil
+		return false, nil
 	}
-	c.logger.Infof("managed proxy container stopped, restarting: name=%s containerId=%s", spec.Name, inspect.ID)
+	if spec.RestartPolicy.Name == "on-failure" &&
+		spec.RestartPolicy.MaximumRetryCount > 0 &&
+		inspect.RestartCount >= spec.RestartPolicy.MaximumRetryCount {
+		c.logger.Infof(
+			"managed proxy container exhausted restart attempts, restarting via self-heal: name=%s containerId=%s restartCount=%d maxRetries=%d",
+			spec.Name,
+			inspect.ID,
+			inspect.RestartCount,
+			spec.RestartPolicy.MaximumRetryCount,
+		)
+	} else {
+		c.logger.Infof(
+			"managed proxy container stopped, restarting: name=%s containerId=%s restartPolicy=%s maxRetries=%d restartCount=%d",
+			spec.Name,
+			inspect.ID,
+			spec.RestartPolicy.Name,
+			spec.RestartPolicy.MaximumRetryCount,
+			inspect.RestartCount,
+		)
+	}
 	startReq, err := http.NewRequestWithContext(ctx, http.MethodPost, "http://docker/containers/"+inspect.ID+"/start", nil)
 	if err != nil {
-		return err
+		return false, err
 	}
 	resp, err := c.httpClient.Do(startReq)
 	if err != nil {
-		return err
+		return false, err
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode >= 300 {
-		return fmt.Errorf("docker start container failed: %s", resp.Status)
+		return false, fmt.Errorf("docker start container failed: %s", resp.Status)
 	}
-	return nil
+	return true, nil
 }
 
 func (c *DockerClient) ensureContainerConnectedToNetwork(ctx context.Context, containerID string, networkName string) error {
@@ -388,6 +419,9 @@ func (c *DockerClient) writeVolumeFiles(ctx context.Context, helperImage string,
 	if len(files) == 0 {
 		return nil
 	}
+	if err := c.ensureImage(ctx, helperImage); err != nil {
+		return err
+	}
 	c.logger.Infof("writing proxy bootstrap files: volume=%s files=%d", volumeName, len(files))
 	helperName := "ep-volume-init-" + strconvNow()
 	spec := managedContainerSpec{
@@ -417,7 +451,8 @@ func (c *DockerClient) writeVolumeFiles(ctx context.Context, helperImage string,
 	}
 	defer createResp.Body.Close()
 	if createResp.StatusCode >= 300 {
-		return fmt.Errorf("docker create volume helper failed: %s", createResp.Status)
+		respBody, _ := io.ReadAll(createResp.Body)
+		return fmt.Errorf("docker create volume helper failed: %s %s", createResp.Status, strings.TrimSpace(string(respBody)))
 	}
 	var createOut dockerCreateResponse
 	if err := json.NewDecoder(createResp.Body).Decode(&createOut); err != nil {
@@ -468,6 +503,8 @@ func specHash(spec managedContainerSpec) string {
 	parts = append(parts, sortedStrings(spec.Cmd)...)
 	parts = append(parts, sortedStrings(spec.Entrypoint)...)
 	parts = append(parts, sortedStrings(spec.Binds)...)
+	parts = append(parts, spec.RestartPolicy.Name)
+	parts = append(parts, fmt.Sprintf("%d", spec.RestartPolicy.MaximumRetryCount))
 	parts = append(parts, mapPairs(spec.PortBinds)...)
 	parts = append(parts, mapKeys(spec.Exposed)...)
 	parts = append(parts, mapPairsString(spec.Labels)...)

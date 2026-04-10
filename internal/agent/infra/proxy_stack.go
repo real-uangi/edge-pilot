@@ -18,6 +18,7 @@ import (
 
 	"github.com/real-uangi/allingo/common/log"
 	"go.uber.org/fx"
+	"google.golang.org/protobuf/proto"
 )
 
 var containerIDPattern = regexp.MustCompile(`[0-9a-f]{12,64}`)
@@ -31,6 +32,8 @@ type ManagedProxyRuntime struct {
 
 	mu                 sync.Mutex
 	desired            *grpcapi.ProxyConfigSnapshot
+	desiredHash        string
+	appliedHash        string
 	ready              bool
 	attachedToNetwork  bool
 	selfContainerID    string
@@ -81,11 +84,12 @@ func (m *ManagedProxyRuntime) runSelfHeal(ctx context.Context) {
 			return
 		case <-ticker.C:
 			m.mu.Lock()
-			err := m.ensureProxyStackLocked(ctx)
-			if err == nil && m.desired != nil {
+			changed, err := m.ensureProxyStackLocked(ctx)
+			if err == nil && m.desired != nil && (changed || !m.ready || m.desiredHash != m.appliedHash) {
 				err = m.reconcileLocked(ctx, m.desired)
 				if err == nil {
 					m.ready = true
+					m.appliedHash = m.desiredHash
 					m.lastApplyErrorText = ""
 				} else {
 					m.ready = false
@@ -107,6 +111,7 @@ func (m *ManagedProxyRuntime) ApplySnapshot(ctx context.Context, snapshot *grpca
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.desired = cloneSnapshot(snapshot)
+	m.desiredHash = snapshotHash(m.desired)
 	m.logger.Infof("received proxy snapshot: agentId=%s services=%d frontend=%s", m.cfg.AgentID, len(snapshot.GetServices()), snapshot.GetFrontendName())
 	return m.ensureReadyLocked(ctx)
 }
@@ -118,6 +123,16 @@ func (m *ManagedProxyRuntime) EnsureReady(ctx context.Context) error {
 }
 
 func (m *ManagedProxyRuntime) ShowStats(ctx context.Context) ([]*grpcapi.BackendStatPoint, error) {
+	m.mu.Lock()
+	ready := m.ready
+	lastErr := m.lastApplyErrorText
+	m.mu.Unlock()
+	if !ready {
+		if strings.TrimSpace(lastErr) == "" {
+			lastErr = "proxy stack is still bootstrapping"
+		}
+		return nil, fmt.Errorf("%w: %s", application.ErrProxyNotReady, lastErr)
+	}
 	return m.runtime.ShowStats(ctx)
 }
 
@@ -134,7 +149,7 @@ func (m *ManagedProxyRuntime) DisableServer(ctx context.Context, backend string,
 }
 
 func (m *ManagedProxyRuntime) ensureReadyLocked(ctx context.Context) error {
-	if err := m.ensureProxyStackLocked(ctx); err != nil {
+	if _, err := m.ensureProxyStackLocked(ctx); err != nil {
 		m.ready = false
 		m.lastApplyErrorText = err.Error()
 		return err
@@ -150,51 +165,60 @@ func (m *ManagedProxyRuntime) ensureReadyLocked(ctx context.Context) error {
 		return err
 	}
 	m.ready = true
+	m.appliedHash = m.desiredHash
 	m.lastApplyErrorText = ""
 	return nil
 }
 
-func (m *ManagedProxyRuntime) ensureProxyStackLocked(ctx context.Context) error {
-	m.logger.Infof("ensuring managed proxy stack: container=%s network=%s", m.cfg.ProxyContainerName, m.cfg.ProxyNetworkName)
+func (m *ManagedProxyRuntime) ensureProxyStackLocked(ctx context.Context) (bool, error) {
+	if !m.ready {
+		m.logger.Infof("ensuring managed proxy stack: container=%s network=%s", m.cfg.ProxyContainerName, m.cfg.ProxyNetworkName)
+	}
+	changed := false
 	if err := m.docker.ensureNetwork(ctx, m.cfg.ProxyNetworkName, m.cfg.ProxyNetworkSubnet); err != nil {
-		return err
+		return false, err
 	}
 	if err := m.ensureReservedProxyIPLocked(ctx); err != nil {
-		return err
+		return false, err
 	}
 	if err := m.docker.ensureVolume(ctx, m.cfg.HAProxyConfigVolume); err != nil {
-		return err
+		return false, err
 	}
 
 	proxyInspect, err := m.docker.inspectManagedContainer(ctx, m.cfg.ProxyContainerName)
 	if err != nil {
-		return err
+		return false, err
 	}
-	if proxyInspect == nil {
+	if proxyInspect == nil || !proxyInspect.State.Running {
 		if err := m.bootstrapBaseFiles(ctx); err != nil {
-			return err
+			return false, err
 		}
+		changed = true
 	}
 
-	if err := m.docker.ensureManagedContainer(ctx, m.proxySpec()); err != nil {
-		return err
+	containerChanged, err := m.docker.ensureManagedContainer(ctx, m.proxySpec())
+	if err != nil {
+		return false, err
+	}
+	if containerChanged {
+		changed = true
 	}
 	if err := m.ensureSelfConnectedLocked(ctx); err != nil {
-		return err
+		return false, err
 	}
 	if err := retry(ctx, 12, time.Second, func() error {
 		_, err := m.runtime.run(ctx, "show info")
 		return err
 	}); err != nil {
-		return err
+		return false, err
 	}
 	if err := retry(ctx, 12, time.Second, func() error {
 		_, err := m.dataplane.ConfigurationVersion(ctx)
 		return err
 	}); err != nil {
-		return err
+		return false, err
 	}
-	return nil
+	return changed, nil
 }
 
 func (m *ManagedProxyRuntime) bootstrapBaseFiles(ctx context.Context) error {
@@ -405,6 +429,10 @@ func (m *ManagedProxyRuntime) proxySpec() managedContainerSpec {
 		},
 		Network:   m.cfg.ProxyNetworkName,
 		IPAddress: m.cfg.ProxyIPAddress,
+		RestartPolicy: dockerRestartPolicy{
+			Name:              "on-failure",
+			MaximumRetryCount: 3,
+		},
 	}
 }
 
@@ -414,7 +442,6 @@ func (m *ManagedProxyRuntime) ensureSelfConnectedLocked(ctx context.Context) err
 		return err
 	}
 	if containerID == "" {
-		m.logger.Infof("agent is not running in docker, skip self attach: agentId=%s", m.cfg.AgentID)
 		m.attachedToNetwork = false
 		m.selfContainerID = ""
 		return nil
@@ -475,6 +502,17 @@ func (m *ManagedProxyRuntime) dataplaneBaseURL() string {
 	return "http://" + net.JoinHostPort(host, strconv.Itoa(m.cfg.DataPlaneAPIPort))
 }
 
+func snapshotHash(snapshot *grpcapi.ProxyConfigSnapshot) string {
+	if snapshot == nil {
+		return ""
+	}
+	raw, err := proto.Marshal(snapshot)
+	if err != nil {
+		return ""
+	}
+	return fmt.Sprintf("%x", raw)
+}
+
 func (m *ManagedProxyRuntime) baseHAProxyConfig() string {
 	return fmt.Sprintf(`global
   log stdout format raw local0
@@ -507,7 +545,8 @@ func (m *ManagedProxyRuntime) dataPlaneConfig() string {
 	return fmt.Sprintf(`dataplaneapi:
   host: 0.0.0.0
   port: %d
-  userlist: dataplaneapi
+  userlist:
+    userlist: dataplaneapi
   transaction:
     transaction_dir: /tmp/haproxy
   resources:
@@ -517,7 +556,7 @@ haproxy:
   config_file: /usr/local/etc/haproxy/haproxy.cfg
   haproxy_bin: /usr/local/sbin/haproxy
   reload:
-    reload_cmd: s6-svc -2 /var/run/s6/services/haproxy
+    reload_strategy: s6
     reload_delay: 1
 log_targets:
   - log_to: stdout

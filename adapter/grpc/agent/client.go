@@ -5,6 +5,7 @@ import (
 	agentapp "edge-pilot/internal/agent/application"
 	"edge-pilot/internal/shared/config"
 	"edge-pilot/internal/shared/grpcapi"
+	"errors"
 	"sync"
 	"time"
 
@@ -127,6 +128,9 @@ func (c *Client) connectOnce(ctx context.Context) error {
 			case <-statsTicker.C:
 				stats, err := c.executor.CollectStats(ctx)
 				if err != nil {
+					if errors.Is(err, agentapp.ErrProxyNotReady) {
+						continue
+					}
 					c.logger.Errorf(err, "failed to collect stats: agentId=%s", c.cfg.AgentID)
 					continue
 				}

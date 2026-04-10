@@ -34,6 +34,7 @@ type AgentRuntimeConfig struct {
 
 func LoadAgentRuntimeConfig() (*AgentRuntimeConfig, error) {
 	hostname, _ := os.Hostname()
+	haproxyImage := defaultString(os.Getenv("HAPROXY_IMAGE"), "haproxytech/haproxy-debian:s6-3.4")
 	cfg := &AgentRuntimeConfig{
 		AgentID:                strings.TrimSpace(os.Getenv("AGENT_ID")),
 		AgentToken:             strings.TrimSpace(os.Getenv("AGENT_TOKEN")),
@@ -44,8 +45,8 @@ func LoadAgentRuntimeConfig() (*AgentRuntimeConfig, error) {
 		HTTPProbeTimeoutS:      defaultInt(os.Getenv("HTTP_PROBE_TIMEOUT_SECONDS"), 5),
 		ProxyNetworkName:       defaultString(os.Getenv("PROXY_NETWORK_NAME"), "epNet"),
 		ProxyNetworkSubnet:     defaultString(os.Getenv("PROXY_NETWORK_SUBNET"), "172.29.0.0/24"),
-		HAProxyImage:           defaultString(os.Getenv("HAPROXY_IMAGE"), "haproxytech/haproxy-debian:s6-3.4"),
-		ProxyHelperImage:       defaultString(os.Getenv("PROXY_HELPER_IMAGE"), "busybox:1.36.1"),
+		HAProxyImage:           haproxyImage,
+		ProxyHelperImage:       defaultString(os.Getenv("PROXY_HELPER_IMAGE"), haproxyImage),
 		ProxyContainerName:     defaultString(os.Getenv("HAPROXY_CONTAINER_NAME"), "edge-pilot-haproxy"),
 		ProxyIPAddress:         defaultString(os.Getenv("HAPROXY_IP"), "172.29.0.233"),
 		HAProxyConfigVolume:    defaultString(os.Getenv("HAPROXY_CONFIG_VOLUME"), "ep_haproxy_cfg"),

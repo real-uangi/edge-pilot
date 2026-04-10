@@ -34,6 +34,8 @@ type ContainerRuntime struct {
 	ListenAddress string
 }
 
+var ErrProxyNotReady = errors.New("proxy stack not ready")
+
 type Executor struct {
 	cfg       *config.AgentRuntimeConfig
 	docker    DockerRuntime

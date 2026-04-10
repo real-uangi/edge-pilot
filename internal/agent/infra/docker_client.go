@@ -8,6 +8,7 @@ import (
 	"edge-pilot/internal/shared/grpcapi"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net"
 	"net/http"
 	"net/url"
@@ -58,36 +59,23 @@ func (c *DockerClient) Ping(ctx context.Context) error {
 }
 
 func (c *DockerClient) DeployContainer(ctx context.Context, task *grpcapi.TaskCommand) (*application.ContainerRuntime, error) {
-	createReq := dockerCreateRequest{
-		Image:      task.GetImageRepo() + ":" + task.GetImageTag(),
-		Env:        flattenEnv(task.GetEnv()),
-		Cmd:        task.GetCommand(),
-		Entrypoint: task.GetEntrypoint(),
-		Labels: map[string]string{
-			application.ManagedLabelKey:        application.ManagedLabelValue,
-			application.ManagedLabelAgentID:    task.GetAgentId(),
-			application.ManagedLabelServiceID:  task.GetServiceId(),
-			application.ManagedLabelServiceKey: task.GetServiceKey(),
-			application.ManagedLabelSlot:       application.ManagedSlotValue(task.GetTargetSlot()),
-			application.ManagedLabelReleaseID:  task.GetReleaseId(),
-		},
-		ExposedPorts: exposedPorts(task),
-		HostConfig: dockerHostConfig{
-			PortBindings:  flattenPublishedPorts(task.GetPublishedPorts()),
-			Binds:         flattenVolumes(task.GetVolumes()),
-			RestartPolicy: dockerRestartPolicy{Name: "unless-stopped"},
-		},
-		NetworkingConfig: dockerNetworkingConfig{
-			EndpointsConfig: map[string]dockerEndpointSettings{
-				c.cfg.ProxyNetworkName: {},
-			},
-		},
+	imageRef := task.GetImageRepo() + ":" + task.GetImageTag()
+	if err := c.ensureImage(ctx, imageRef); err != nil {
+		return nil, err
 	}
+	createReq := buildWorkloadCreateRequest(c.cfg, imageRef, task)
 	body, err := json.Marshal(createReq)
 	if err != nil {
 		return nil, err
 	}
 	name := application.ManagedContainerName(task.GetServiceKey(), task.GetTargetSlot())
+	c.logger.Infof(
+		"creating managed workload container: name=%s image=%s restartPolicy=%s maxRetries=%d",
+		name,
+		imageRef,
+		createReq.HostConfig.RestartPolicy.Name,
+		createReq.HostConfig.RestartPolicy.MaximumRetryCount,
+	)
 	createURL := "http://docker/containers/create?name=" + url.QueryEscape(name)
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, createURL, bytes.NewReader(body))
 	if err != nil {
@@ -126,6 +114,72 @@ func (c *DockerClient) DeployContainer(ctx context.Context, task *grpcapi.TaskCo
 		ContainerID:   createResp.ID,
 		ListenAddress: listenAddress,
 	}, nil
+}
+
+func buildWorkloadCreateRequest(cfg *config.AgentRuntimeConfig, imageRef string, task *grpcapi.TaskCommand) dockerCreateRequest {
+	return dockerCreateRequest{
+		Image:      imageRef,
+		Env:        flattenEnv(task.GetEnv()),
+		Cmd:        task.GetCommand(),
+		Entrypoint: task.GetEntrypoint(),
+		Labels: map[string]string{
+			application.ManagedLabelKey:        application.ManagedLabelValue,
+			application.ManagedLabelAgentID:    task.GetAgentId(),
+			application.ManagedLabelServiceID:  task.GetServiceId(),
+			application.ManagedLabelServiceKey: task.GetServiceKey(),
+			application.ManagedLabelSlot:       application.ManagedSlotValue(task.GetTargetSlot()),
+			application.ManagedLabelReleaseID:  task.GetReleaseId(),
+		},
+		ExposedPorts: exposedPorts(task),
+		HostConfig: dockerHostConfig{
+			PortBindings: flattenPublishedPorts(task.GetPublishedPorts()),
+			Binds:        flattenVolumes(task.GetVolumes()),
+			RestartPolicy: dockerRestartPolicy{
+				Name:              "on-failure",
+				MaximumRetryCount: 5,
+			},
+		},
+		NetworkingConfig: dockerNetworkingConfig{
+			EndpointsConfig: map[string]dockerEndpointSettings{
+				cfg.ProxyNetworkName: {},
+			},
+		},
+	}
+}
+
+func (c *DockerClient) ensureImage(ctx context.Context, imageRef string) error {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "http://docker/images/"+url.PathEscape(imageRef)+"/json", nil)
+	if err != nil {
+		return err
+	}
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return err
+	}
+	if resp.StatusCode == http.StatusNotFound {
+		resp.Body.Close()
+		c.logger.Infof("pulling docker image: image=%s", imageRef)
+		pullReq, err := http.NewRequestWithContext(ctx, http.MethodPost, "http://docker/images/create?fromImage="+url.QueryEscape(imageRef), nil)
+		if err != nil {
+			return err
+		}
+		pullResp, err := c.httpClient.Do(pullReq)
+		if err != nil {
+			return err
+		}
+		defer pullResp.Body.Close()
+		body, _ := io.ReadAll(pullResp.Body)
+		if pullResp.StatusCode >= 300 {
+			return fmt.Errorf("docker pull image failed: %s %s", pullResp.Status, strings.TrimSpace(string(body)))
+		}
+		return nil
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode >= 300 {
+		body, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("docker inspect image failed: %s %s", resp.Status, strings.TrimSpace(string(body)))
+	}
+	return nil
 }
 
 func (c *DockerClient) InspectHealth(ctx context.Context, containerID string) (string, error) {
@@ -280,9 +334,10 @@ type dockerCreateResponse struct {
 }
 
 type dockerInspectResponse struct {
-	ID     string `json:"Id"`
-	Name   string `json:"Name"`
-	Config struct {
+	ID           string `json:"Id"`
+	Name         string `json:"Name"`
+	RestartCount int    `json:"RestartCount"`
+	Config       struct {
 		Labels map[string]string `json:"Labels"`
 	} `json:"Config"`
 	State struct {
