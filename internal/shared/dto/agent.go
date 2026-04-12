@@ -6,6 +6,7 @@ type AgentOutput struct {
 	ID              string     `json:"id"`
 	Enabled         *bool      `json:"enabled"`
 	Hostname        string     `json:"hostname"`
+	IP              string     `json:"ip"`
 	Version         string     `json:"version"`
 	Online          *bool      `json:"online"`
 	LastHeartbeatAt *time.Time `json:"lastHeartbeatAt"`
@@ -21,6 +22,7 @@ type AgentCredentialOutput struct {
 	Token           string     `json:"token"`
 	Enabled         *bool      `json:"enabled"`
 	Hostname        string     `json:"hostname"`
+	IP              string     `json:"ip"`
 	Version         string     `json:"version"`
 	Online          *bool      `json:"online"`
 	LastHeartbeatAt *time.Time `json:"lastHeartbeatAt"`

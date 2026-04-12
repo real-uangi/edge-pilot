@@ -128,6 +128,10 @@ export function AgentDetailPage() {
             <span className={styles.value}>{agent.hostname || "—"}</span>
           </div>
           <div className={styles.keyValue}>
+            <span className={styles.key}>IP</span>
+            <span className={styles.value}>{agent.ip || "—"}</span>
+          </div>
+          <div className={styles.keyValue}>
             <span className={styles.key}>版本</span>
             <span className={styles.value}>{agent.version || "—"}</span>
           </div>

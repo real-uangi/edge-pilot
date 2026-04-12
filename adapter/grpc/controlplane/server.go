@@ -8,6 +8,7 @@ import (
 	servicecatalogdomain "edge-pilot/internal/servicecatalog/domain"
 	"edge-pilot/internal/shared/grpcapi"
 	"edge-pilot/internal/shared/model"
+	"edge-pilot/internal/shared/secret"
 	"errors"
 	"fmt"
 	"net"
@@ -24,6 +25,7 @@ import (
 type sessionHub struct {
 	mu       sync.RWMutex
 	sessions map[string]*agentSession
+	codec    *secret.Codec
 }
 
 var ErrAgentOffline = errors.New("agent offline")
@@ -36,9 +38,10 @@ type agentSession struct {
 	replayed map[string]struct{}
 }
 
-func NewSessionHub() *sessionHub {
+func NewSessionHub(codec *secret.Codec) *sessionHub {
 	return &sessionHub{
 		sessions: make(map[string]*agentSession),
+		codec:    codec,
 	}
 }
 
@@ -73,9 +76,13 @@ func (h *sessionHub) DispatchTask(agentID string, task *model.Task) error {
 	if !ok {
 		return ErrAgentOffline
 	}
+	protoTask, err := taskToProto(task, h.codec)
+	if err != nil {
+		return err
+	}
 	return session.send(&grpcapi.ControlMessage{
 		Payload: &grpcapi.ControlMessage_Task{
-			Task: taskToProto(task),
+			Task: protoTask,
 		},
 	})
 }
@@ -90,9 +97,13 @@ func (h *sessionHub) ReplayTask(agentID string, task *model.Task) (bool, error) 
 	if !session.markReplay(task.ID.String()) {
 		return false, nil
 	}
+	protoTask, err := taskToProto(task, h.codec)
+	if err != nil {
+		return false, err
+	}
 	if err := session.send(&grpcapi.ControlMessage{
 		Payload: &grpcapi.ControlMessage_Task{
-			Task: taskToProto(task),
+			Task: protoTask,
 		},
 	}); err != nil {
 		return false, err
@@ -163,7 +174,7 @@ func (s *Server) Connect(stream grpcapi.AgentControl_ConnectServer) (err error) 
 	if err := s.agents.Authenticate(hello.GetAgentId(), hello.GetToken()); err != nil {
 		return status.Error(codes.Unauthenticated, "invalid agent credentials")
 	}
-	if err := s.agents.MarkConnected(hello.GetAgentId(), hello.GetHostname(), hello.GetVersion(), hello.GetCapabilities()); err != nil {
+	if err := s.agents.MarkConnectedWithIP(hello.GetAgentId(), hello.GetHostname(), hello.GetReportedIp(), hello.GetVersion(), hello.GetCapabilities()); err != nil {
 		return err
 	}
 	session := s.hub.register(hello.GetAgentId())

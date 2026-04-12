@@ -11,6 +11,7 @@ import (
 	"edge-pilot/internal/release"
 	"edge-pilot/internal/servicecatalog"
 	"edge-pilot/internal/shared/model"
+	"edge-pilot/internal/shared/secret"
 	"edge-pilot/web"
 
 	"github.com/real-uangi/allingo/common"
@@ -26,6 +27,7 @@ func RunControlPlane() {
 	app.Current().Option(common.Module)
 	app.Current().Option(db.Module)
 	app.Current().Option(model.ControlPlaneModule)
+	app.Current().Option(secret.ControlPlaneModule)
 	app.Current().Option(servicecatalog.ControlPlaneModule)
 	app.Current().Option(agent.ControlPlaneModule)
 	app.Current().Option(adminauth.ControlPlaneModule)

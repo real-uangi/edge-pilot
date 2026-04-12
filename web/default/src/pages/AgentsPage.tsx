@@ -69,6 +69,7 @@ export function AgentsPage() {
               <tr>
                 <th>节点</th>
                 <th>主机名</th>
+                <th>IP</th>
                 <th>版本</th>
                 <th>在线</th>
                 <th>启用</th>
@@ -84,6 +85,7 @@ export function AgentsPage() {
                     </Link>
                   </td>
                   <td>{agent.hostname || "—"}</td>
+                  <td>{agent.ip || "—"}</td>
                   <td>{agent.version || "—"}</td>
                   <td>
                     <StatusPill

@@ -14,6 +14,6 @@ var ControlPlaneModule = fx.Module(
 	fx.Provide(
 		infra.NewRepository,
 		func(registry *agentapp.RegistryService) domain.AgentLookup { return registry },
-		application.NewServiceWithPublisher,
+		application.NewServiceWithPublisherAndCodec,
 	),
 )

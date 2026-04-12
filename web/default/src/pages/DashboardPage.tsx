@@ -108,6 +108,7 @@ export function DashboardPage() {
               <thead>
                 <tr>
                   <th>ID</th>
+                  <th>IP</th>
                   <th>在线</th>
                   <th>启用</th>
                   <th>最近心跳</th>
@@ -121,6 +122,7 @@ export function DashboardPage() {
                         {agent.id}
                       </Link>
                     </td>
+                    <td>{agent.ip || "—"}</td>
                     <td>
                       <StatusPill
                         label={boolLabel(agent.online, "在线", "离线")}

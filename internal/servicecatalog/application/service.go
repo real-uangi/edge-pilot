@@ -4,6 +4,7 @@ import (
 	"edge-pilot/internal/servicecatalog/domain"
 	"edge-pilot/internal/shared/dto"
 	"edge-pilot/internal/shared/model"
+	"edge-pilot/internal/shared/secret"
 	"fmt"
 	"strings"
 
@@ -16,17 +17,23 @@ type Service struct {
 	repo      domain.Repository
 	publisher domain.ProxyConfigPublisher
 	agents    domain.AgentLookup
+	codec     *secret.Codec
 }
 
 func NewService(repo domain.Repository) *Service {
-	return NewServiceWithPublisher(repo, nil, nil)
+	return NewServiceWithPublisherAndCodec(repo, nil, nil, nil)
 }
 
 func NewServiceWithPublisher(repo domain.Repository, publisher domain.ProxyConfigPublisher, agents domain.AgentLookup) *Service {
+	return NewServiceWithPublisherAndCodec(repo, publisher, agents, nil)
+}
+
+func NewServiceWithPublisherAndCodec(repo domain.Repository, publisher domain.ProxyConfigPublisher, agents domain.AgentLookup, codec *secret.Codec) *Service {
 	return &Service{
 		repo:      repo,
 		publisher: publisher,
 		agents:    agents,
+		codec:     codec,
 	}
 }
 
@@ -38,7 +45,10 @@ func (s *Service) Create(req dto.UpsertServiceRequest) (*dto.ServiceOutput, erro
 	if existing != nil {
 		return nil, business.NewBadRequest("serviceKey 已存在")
 	}
-	entity := buildServiceEntity(uuid.New(), req)
+	entity, err := s.buildServiceEntity(uuid.New(), req)
+	if err != nil {
+		return nil, err
+	}
 	if err := validatePublishedPorts(entity.PublishedPorts.Get()); err != nil {
 		return nil, err
 	}
@@ -57,7 +67,10 @@ func (s *Service) Create(req dto.UpsertServiceRequest) (*dto.ServiceOutput, erro
 	if err := s.publishAgent(entity.AgentID); err != nil {
 		return nil, err
 	}
-	output := toServiceOutput(entity)
+	output, err := s.toServiceOutput(entity)
+	if err != nil {
+		return nil, err
+	}
 	return &output, nil
 }
 
@@ -69,7 +82,10 @@ func (s *Service) Update(id uuid.UUID, req dto.UpsertServiceRequest) (*dto.Servi
 	if current == nil {
 		return nil, business.ErrNotFound
 	}
-	updated := buildServiceEntity(id, req)
+	updated, err := s.buildServiceEntity(id, req)
+	if err != nil {
+		return nil, err
+	}
 	updated.CreatedAt = current.CreatedAt
 	updated.CurrentLiveSlot = current.CurrentLiveSlot
 	if err := validatePublishedPorts(updated.PublishedPorts.Get()); err != nil {
@@ -95,7 +111,10 @@ func (s *Service) Update(id uuid.UUID, req dto.UpsertServiceRequest) (*dto.Servi
 	if err := s.publishAgent(updated.AgentID); err != nil {
 		return nil, err
 	}
-	output := toServiceOutput(updated)
+	output, err := s.toServiceOutput(updated)
+	if err != nil {
+		return nil, err
+	}
 	return &output, nil
 }
 
@@ -107,7 +126,10 @@ func (s *Service) Get(id uuid.UUID) (*dto.ServiceOutput, error) {
 	if service == nil {
 		return nil, business.ErrNotFound
 	}
-	output := toServiceOutput(service)
+	output, err := s.toServiceOutput(service)
+	if err != nil {
+		return nil, err
+	}
 	return &output, nil
 }
 
@@ -118,7 +140,11 @@ func (s *Service) List() ([]dto.ServiceOutput, error) {
 	}
 	output := make([]dto.ServiceOutput, 0, len(services))
 	for i := range services {
-		output = append(output, toServiceOutput(&services[i]))
+		item, err := s.toServiceOutput(&services[i])
+		if err != nil {
+			return nil, err
+		}
+		output = append(output, item)
 	}
 	return output, nil
 }
@@ -131,7 +157,10 @@ func (s *Service) GetSpecByKey(key string) (*dto.ServiceDeploymentSpec, error) {
 	if service == nil {
 		return nil, business.ErrNotFound
 	}
-	spec := toDeploymentSpec(service)
+	spec, err := s.toDeploymentSpec(service)
+	if err != nil {
+		return nil, err
+	}
 	return &spec, nil
 }
 
@@ -143,7 +172,10 @@ func (s *Service) GetSpecByID(id uuid.UUID) (*dto.ServiceDeploymentSpec, error) 
 	if service == nil {
 		return nil, business.ErrNotFound
 	}
-	spec := toDeploymentSpec(service)
+	spec, err := s.toDeploymentSpec(service)
+	if err != nil {
+		return nil, err
+	}
 	return &spec, nil
 }
 
@@ -151,7 +183,7 @@ func (s *Service) UpdateLiveSlot(id uuid.UUID, slot model.Slot) error {
 	return s.repo.UpdateLiveSlot(id, slot)
 }
 
-func buildServiceEntity(id uuid.UUID, req dto.UpsertServiceRequest) *model.Service {
+func (s *Service) buildServiceEntity(id uuid.UUID, req dto.UpsertServiceRequest) (*model.Service, error) {
 	dockerHealth := req.DockerHealthCheck
 	if dockerHealth == nil {
 		dockerHealth = boolPointer(true)
@@ -168,6 +200,10 @@ func buildServiceEntity(id uuid.UUID, req dto.UpsertServiceRequest) *model.Servi
 	if timeoutSeconds == 0 {
 		timeoutSeconds = 5
 	}
+	envCiphertext, envKeyVersion, err := s.encryptEnv(req.Env)
+	if err != nil {
+		return nil, err
+	}
 
 	return &model.Service{
 		ID:                id,
@@ -182,13 +218,15 @@ func buildServiceEntity(id uuid.UUID, req dto.UpsertServiceRequest) *model.Servi
 		HTTPTimeoutSecond: timeoutSeconds,
 		RouteHost:         NormalizeRouteHost(req.RouteHost),
 		RoutePathPrefix:   NormalizeRoutePathPrefix(req.RoutePathPrefix),
-		Env:               commondb.NewJSONB(req.Env),
+		Env:               nil,
+		EnvCiphertext:     envCiphertext,
+		EnvKeyVersion:     envKeyVersion,
 		Command:           commondb.NewJSONB(req.Command),
 		Entrypoint:        commondb.NewJSONB(req.Entrypoint),
 		Volumes:           commondb.NewJSONB(toModelVolumes(req.Volumes)),
 		PublishedPorts:    commondb.NewJSONB(toModelPublishedPorts(req.PublishedPorts)),
 		Enabled:           enabled,
-	}
+	}, nil
 }
 
 func (s *Service) ensureAgentAssignable(agentID string) error {
@@ -214,7 +252,11 @@ func (s *Service) ensureAgentAssignable(agentID string) error {
 	return nil
 }
 
-func toServiceOutput(service *model.Service) dto.ServiceOutput {
+func (s *Service) toServiceOutput(service *model.Service) (dto.ServiceOutput, error) {
+	env, err := s.resolveEnv(service)
+	if err != nil {
+		return dto.ServiceOutput{}, err
+	}
 	return dto.ServiceOutput{
 		ID:                service.ID,
 		Name:              service.Name,
@@ -229,7 +271,7 @@ func toServiceOutput(service *model.Service) dto.ServiceOutput {
 		HTTPTimeoutSecond: service.HTTPTimeoutSecond,
 		RouteHost:         service.RouteHost,
 		RoutePathPrefix:   service.RoutePathPrefix,
-		Env:               getJSON(service.Env),
+		Env:               env,
 		Command:           getJSON(service.Command),
 		Entrypoint:        getJSON(service.Entrypoint),
 		Volumes:           toDTOVolumes(getJSON(service.Volumes)),
@@ -237,10 +279,14 @@ func toServiceOutput(service *model.Service) dto.ServiceOutput {
 		Enabled:           service.Enabled,
 		CreatedAt:         service.CreatedAt,
 		UpdatedAt:         service.UpdatedAt,
-	}
+	}, nil
 }
 
-func toDeploymentSpec(service *model.Service) dto.ServiceDeploymentSpec {
+func (s *Service) toDeploymentSpec(service *model.Service) (dto.ServiceDeploymentSpec, error) {
+	env, err := s.resolveEnv(service)
+	if err != nil {
+		return dto.ServiceDeploymentSpec{}, err
+	}
 	return dto.ServiceDeploymentSpec{
 		ID:                service.ID,
 		Name:              service.Name,
@@ -255,13 +301,41 @@ func toDeploymentSpec(service *model.Service) dto.ServiceDeploymentSpec {
 		HTTPTimeoutSecond: service.HTTPTimeoutSecond,
 		RouteHost:         service.RouteHost,
 		RoutePathPrefix:   service.RoutePathPrefix,
-		Env:               getJSON(service.Env),
+		Env:               env,
+		EnvEncrypted:      strings.TrimSpace(service.EnvCiphertext) != "",
 		Command:           getJSON(service.Command),
 		Entrypoint:        getJSON(service.Entrypoint),
 		Volumes:           toDTOVolumes(getJSON(service.Volumes)),
 		PublishedPorts:    toDTOPublishedPorts(getJSON(service.PublishedPorts)),
 		Enabled:           service.Enabled != nil && *service.Enabled,
+	}, nil
+}
+
+func (s *Service) encryptEnv(env map[string]string) (string, string, error) {
+	if len(env) == 0 {
+		return "", "", nil
 	}
+	if s.codec == nil {
+		return "", "", business.NewErrorWithCode("service secret master key not configured", 500)
+	}
+	return s.codec.EncryptJSON(env)
+}
+
+func (s *Service) resolveEnv(service *model.Service) (map[string]string, error) {
+	if strings.TrimSpace(service.EnvCiphertext) == "" {
+		return getJSON(service.Env), nil
+	}
+	if s.codec == nil {
+		return nil, business.NewErrorWithCode("service secret master key not configured", 500)
+	}
+	var env map[string]string
+	if err := s.codec.DecryptJSON(service.EnvCiphertext, service.EnvKeyVersion, &env); err != nil {
+		return nil, err
+	}
+	if env == nil {
+		return map[string]string{}, nil
+	}
+	return env, nil
 }
 
 func toModelVolumes(items []dto.VolumeMount) []model.VolumeMount {

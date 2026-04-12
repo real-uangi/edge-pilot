@@ -52,6 +52,7 @@ message HelloMessage {
   string version = 3;
   string hostname = 4;
   repeated string capabilities = 5;
+  string reported_ip = 6;
 }
 
 message HeartbeatMessage {

@@ -101,6 +101,7 @@ func (c *Client) connectOnce(ctx context.Context) error {
 				Version:      c.cfg.AgentVersion,
 				Hostname:     c.cfg.Hostname,
 				Capabilities: []string{"docker", "haproxy_runtime", "haproxy_dataplane", "http_probe"},
+				ReportedIp:   c.cfg.ReportedIP,
 			},
 		},
 	}

@@ -1,8 +1,10 @@
 package controlplane
 
 import (
+	"edge-pilot/internal/shared/config"
 	"edge-pilot/internal/shared/grpcapi"
 	"edge-pilot/internal/shared/model"
+	"edge-pilot/internal/shared/secret"
 	"testing"
 
 	"github.com/google/uuid"
@@ -13,6 +15,10 @@ func TestTaskToProtoPreservesFields(t *testing.T) {
 	taskID := uuid.New()
 	releaseID := uuid.New()
 	serviceID := uuid.New()
+	codec := secret.NewCodec(&config.ServiceSecretConfig{
+		MasterKey:  []byte("12345678901234567890123456789012"),
+		KeyVersion: "v1",
+	})
 	task := &model.Task{
 		ID:        taskID,
 		ReleaseID: releaseID,
@@ -26,7 +32,6 @@ func TestTaskToProtoPreservesFields(t *testing.T) {
 			ImageTag:          "v1.2.3",
 			RegistryHost:      "ghcr.io",
 			RegistryUsername:  "octocat",
-			RegistrySecret:    "token-value",
 			CommitSHA:         "abc123",
 			TraceID:           "trace-1",
 			TargetSlot:        model.SlotGreen,
@@ -39,7 +44,6 @@ func TestTaskToProtoPreservesFields(t *testing.T) {
 			BackendName:       "be_api",
 			ServerName:        "srv_green",
 			PreviousServer:    "srv_blue",
-			Env:               map[string]string{"A": "1"},
 			Command:           []string{"run"},
 			Entrypoint:        []string{"/bin/app"},
 			Volumes: []model.VolumeMount{
@@ -50,8 +54,20 @@ func TestTaskToProtoPreservesFields(t *testing.T) {
 			},
 		}),
 	}
+	ciphertext, keyVersion, err := codec.EncryptJSON(model.TaskSensitivePayload{
+		Env:            map[string]string{"A": "1"},
+		RegistrySecret: "token-value",
+	})
+	if err != nil {
+		t.Fatalf("EncryptJSON() error = %v", err)
+	}
+	task.SensitiveCiphertext = ciphertext
+	task.SensitiveKeyVersion = keyVersion
 
-	pb := taskToProto(task)
+	pb, err := taskToProto(task, codec)
+	if err != nil {
+		t.Fatalf("taskToProto() error = %v", err)
+	}
 	if pb.GetTaskId() != taskID.String() || pb.GetReleaseId() != releaseID.String() || pb.GetServiceId() != serviceID.String() {
 		t.Fatalf("unexpected ids: %#v", pb)
 	}

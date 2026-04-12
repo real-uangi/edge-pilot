@@ -396,6 +396,7 @@ type HelloMessage struct {
 	Version       string                 `protobuf:"bytes,3,opt,name=version,proto3" json:"version,omitempty"`
 	Hostname      string                 `protobuf:"bytes,4,opt,name=hostname,proto3" json:"hostname,omitempty"`
 	Capabilities  []string               `protobuf:"bytes,5,rep,name=capabilities,proto3" json:"capabilities,omitempty"`
+	ReportedIp    string                 `protobuf:"bytes,6,opt,name=reported_ip,json=reportedIp,proto3" json:"reported_ip,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -463,6 +464,13 @@ func (x *HelloMessage) GetCapabilities() []string {
 		return x.Capabilities
 	}
 	return nil
+}
+
+func (x *HelloMessage) GetReportedIp() string {
+	if x != nil {
+		return x.ReportedIp
+	}
+	return ""
 }
 
 type HeartbeatMessage struct {
@@ -1377,13 +1385,15 @@ const file_internal_shared_grpcapi_agent_control_proto_rawDesc = "" +
 	"\x03ack\x18\x01 \x01(\v2\x1d.edgepilot.grpcapi.AckMessageH\x00R\x03ack\x124\n" +
 	"\x04task\x18\x02 \x01(\v2\x1e.edgepilot.grpcapi.TaskCommandH\x00R\x04task\x12K\n" +
 	"\fproxy_config\x18\x03 \x01(\v2&.edgepilot.grpcapi.ProxyConfigSnapshotH\x00R\vproxyConfigB\t\n" +
-	"\apayload\"\x99\x01\n" +
+	"\apayload\"\xba\x01\n" +
 	"\fHelloMessage\x12\x19\n" +
 	"\bagent_id\x18\x01 \x01(\tR\aagentId\x12\x14\n" +
 	"\x05token\x18\x02 \x01(\tR\x05token\x12\x18\n" +
 	"\aversion\x18\x03 \x01(\tR\aversion\x12\x1a\n" +
 	"\bhostname\x18\x04 \x01(\tR\bhostname\x12\"\n" +
-	"\fcapabilities\x18\x05 \x03(\tR\fcapabilities\"W\n" +
+	"\fcapabilities\x18\x05 \x03(\tR\fcapabilities\x12\x1f\n" +
+	"\vreported_ip\x18\x06 \x01(\tR\n" +
+	"reportedIp\"W\n" +
 	"\x10HeartbeatMessage\x12\x19\n" +
 	"\bagent_id\x18\x01 \x01(\tR\aagentId\x12(\n" +
 	"\x10running_task_ids\x18\x02 \x03(\tR\x0erunningTaskIds\"&\n" +

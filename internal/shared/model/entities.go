@@ -80,6 +80,8 @@ type Service struct {
 	RouteHost         string                             `json:"routeHost" gorm:"size:255;index;not null"`
 	RoutePathPrefix   string                             `json:"routePathPrefix" gorm:"size:255;index;not null"`
 	Env               *commondb.JSONB[map[string]string] `json:"env" gorm:"type:jsonb"`
+	EnvCiphertext     string                             `json:"envCiphertext" gorm:"type:text"`
+	EnvKeyVersion     string                             `json:"envKeyVersion" gorm:"size:64"`
 	Command           *commondb.JSONB[[]string]          `json:"command" gorm:"type:jsonb"`
 	Entrypoint        *commondb.JSONB[[]string]          `json:"entrypoint" gorm:"type:jsonb"`
 	Volumes           *commondb.JSONB[[]VolumeMount]     `json:"volumes" gorm:"type:jsonb"`
@@ -140,16 +142,18 @@ func (Release) TableName() string {
 type Task struct {
 	ID uuid.UUID `json:"id" gorm:"type:uuid;primaryKey"`
 	commondb.Model
-	ReleaseID    uuid.UUID                    `json:"releaseId" gorm:"type:uuid;index;not null"`
-	ServiceID    uuid.UUID                    `json:"serviceId" gorm:"type:uuid;index;not null"`
-	AgentID      string                       `json:"agentId" gorm:"size:128;index;not null"`
-	Type         TaskType                     `json:"type" gorm:"index;not null"`
-	Status       TaskStatus                   `json:"status" gorm:"index;not null"`
-	Payload      *commondb.JSONB[TaskPayload] `json:"payload" gorm:"type:jsonb"`
-	LastError    string                       `json:"lastError" gorm:"type:text"`
-	DispatchedAt *time.Time                   `json:"dispatchedAt" gorm:"type:timestamptz"`
-	StartedAt    *time.Time                   `json:"startedAt" gorm:"type:timestamptz"`
-	CompletedAt  *time.Time                   `json:"completedAt" gorm:"type:timestamptz"`
+	ReleaseID           uuid.UUID                    `json:"releaseId" gorm:"type:uuid;index;not null"`
+	ServiceID           uuid.UUID                    `json:"serviceId" gorm:"type:uuid;index;not null"`
+	AgentID             string                       `json:"agentId" gorm:"size:128;index;not null"`
+	Type                TaskType                     `json:"type" gorm:"index;not null"`
+	Status              TaskStatus                   `json:"status" gorm:"index;not null"`
+	Payload             *commondb.JSONB[TaskPayload] `json:"payload" gorm:"type:jsonb"`
+	SensitiveCiphertext string                       `json:"sensitiveCiphertext" gorm:"type:text"`
+	SensitiveKeyVersion string                       `json:"sensitiveKeyVersion" gorm:"size:64"`
+	LastError           string                       `json:"lastError" gorm:"type:text"`
+	DispatchedAt        *time.Time                   `json:"dispatchedAt" gorm:"type:timestamptz"`
+	StartedAt           *time.Time                   `json:"startedAt" gorm:"type:timestamptz"`
+	CompletedAt         *time.Time                   `json:"completedAt" gorm:"type:timestamptz"`
 }
 
 func (Task) TableName() string {
@@ -183,6 +187,11 @@ type TaskPayload struct {
 	PublishedPorts    []PublishedPort   `json:"publishedPorts,omitempty"`
 }
 
+type TaskSensitivePayload struct {
+	Env            map[string]string `json:"env,omitempty"`
+	RegistrySecret string            `json:"registrySecret,omitempty"`
+}
+
 type TaskAttempt struct {
 	ID uuid.UUID `json:"id" gorm:"type:uuid;primaryKey"`
 	commondb.Model
@@ -204,6 +213,7 @@ type AgentNode struct {
 	TokenHash       string                    `json:"tokenHash" gorm:"size:128;not null"`
 	Enabled         *bool                     `json:"enabled" gorm:"not null"`
 	Hostname        string                    `json:"hostname" gorm:"size:255"`
+	ReportedIP      string                    `json:"reportedIP" gorm:"size:64"`
 	Version         string                    `json:"version" gorm:"size:128"`
 	Online          *bool                     `json:"online" gorm:"not null"`
 	LastConnectedAt *time.Time                `json:"lastConnectedAt" gorm:"type:timestamptz"`

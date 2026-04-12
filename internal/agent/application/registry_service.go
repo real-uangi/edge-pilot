@@ -106,6 +106,10 @@ func (s *RegistryService) GetAgent(agentID string) (*dto.AgentOutput, error) {
 }
 
 func (s *RegistryService) MarkConnected(agentID string, hostname string, version string, capabilities []string) error {
+	return s.MarkConnectedWithIP(agentID, hostname, "", version, capabilities)
+}
+
+func (s *RegistryService) MarkConnectedWithIP(agentID string, hostname string, reportedIP string, version string, capabilities []string) error {
 	node, err := s.repo.Get(agentID)
 	if err != nil {
 		return err
@@ -116,6 +120,9 @@ func (s *RegistryService) MarkConnected(agentID string, hostname string, version
 	now := time.Now()
 	online := true
 	node.Hostname = hostname
+	if reportedIP != "" {
+		node.ReportedIP = reportedIP
+	}
 	node.Version = version
 	node.Online = &online
 	node.LastConnectedAt = &now
@@ -170,6 +177,7 @@ func (s *RegistryService) List() ([]dto.AgentOverview, error) {
 			ID:              nodes[i].ID,
 			Enabled:         nodes[i].Enabled,
 			Hostname:        nodes[i].Hostname,
+			IP:              nodes[i].ReportedIP,
 			Version:         nodes[i].Version,
 			Online:          nodes[i].Online,
 			LastHeartbeatAt: nodes[i].LastHeartbeatAt,
@@ -211,6 +219,7 @@ func toAgentOutput(node *model.AgentNode) dto.AgentOutput {
 		ID:              node.ID,
 		Enabled:         node.Enabled,
 		Hostname:        node.Hostname,
+		IP:              node.ReportedIP,
 		Version:         node.Version,
 		Online:          node.Online,
 		LastHeartbeatAt: node.LastHeartbeatAt,
@@ -228,6 +237,7 @@ func toAgentCredentialOutput(node *model.AgentNode, token string) dto.AgentCrede
 		Token:           token,
 		Enabled:         node.Enabled,
 		Hostname:        node.Hostname,
+		IP:              node.ReportedIP,
 		Version:         node.Version,
 		Online:          node.Online,
 		LastHeartbeatAt: node.LastHeartbeatAt,

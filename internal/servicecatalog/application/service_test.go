@@ -2,11 +2,14 @@ package application
 
 import (
 	"edge-pilot/internal/servicecatalog/domain"
+	"edge-pilot/internal/shared/config"
 	"edge-pilot/internal/shared/dto"
 	"edge-pilot/internal/shared/model"
+	"edge-pilot/internal/shared/secret"
 	"testing"
 
 	"github.com/google/uuid"
+	commondb "github.com/real-uangi/allingo/common/db"
 )
 
 func TestCreateRejectsDuplicateRouteOnSameAgent(t *testing.T) {
@@ -162,6 +165,84 @@ func TestCreateRejectsUnknownOrDisabledAgent(t *testing.T) {
 	}
 }
 
+func TestCreateEncryptsEnvAndGetDecryptsIt(t *testing.T) {
+	repo := newFakeServiceCatalogRepo()
+	svc := NewServiceWithPublisherAndCodec(repo, nil, nil, newServiceSecretCodec())
+
+	created, err := svc.Create(dto.UpsertServiceRequest{
+		Name:          "svc-a",
+		ServiceKey:    "svc-a",
+		AgentID:       "11111111-1111-1111-1111-111111111111",
+		ImageRepo:     "repo/app",
+		ContainerPort: 8080,
+		RouteHost:     "a.example.com",
+		Env:           map[string]string{"A": "1"},
+	})
+	if err != nil {
+		t.Fatalf("Create() error = %v", err)
+	}
+	stored := repo.byID[created.ID]
+	if stored == nil {
+		t.Fatal("expected stored service")
+	}
+	if stored.Env != nil {
+		t.Fatalf("expected plaintext env to be cleared, got %#v", stored.Env)
+	}
+	if stored.EnvCiphertext == "" || stored.EnvKeyVersion == "" {
+		t.Fatalf("expected encrypted env to be stored, got ciphertext=%q version=%q", stored.EnvCiphertext, stored.EnvKeyVersion)
+	}
+
+	output, err := svc.Get(created.ID)
+	if err != nil {
+		t.Fatalf("Get() error = %v", err)
+	}
+	if output.Env["A"] != "1" {
+		t.Fatalf("expected decrypted env, got %#v", output.Env)
+	}
+}
+
+func TestCreateRejectsNonEmptyEnvWithoutCodec(t *testing.T) {
+	repo := newFakeServiceCatalogRepo()
+	svc := NewService(repo)
+
+	if _, err := svc.Create(dto.UpsertServiceRequest{
+		Name:          "svc-a",
+		ServiceKey:    "svc-a",
+		AgentID:       "11111111-1111-1111-1111-111111111111",
+		ImageRepo:     "repo/app",
+		ContainerPort: 8080,
+		RouteHost:     "a.example.com",
+		Env:           map[string]string{"A": "1"},
+	}); err == nil {
+		t.Fatal("expected non-empty env to require codec")
+	}
+}
+
+func TestGetFallsBackToPlaintextEnvForLegacyData(t *testing.T) {
+	repo := newFakeServiceCatalogRepo()
+	svc := NewService(repo)
+	enabled := true
+	repo.byID[uuid.MustParse("11111111-1111-1111-1111-111111111111")] = &model.Service{
+		ID:            uuid.MustParse("11111111-1111-1111-1111-111111111111"),
+		ServiceKey:    "svc-a",
+		Name:          "svc-a",
+		AgentID:       "11111111-1111-1111-1111-111111111111",
+		ImageRepo:     "repo/app",
+		ContainerPort: 8080,
+		RouteHost:     "a.example.com",
+		Env:           mustServiceEnvJSONB(map[string]string{"LEGACY": "1"}),
+		Enabled:       &enabled,
+	}
+
+	output, err := svc.Get(uuid.MustParse("11111111-1111-1111-1111-111111111111"))
+	if err != nil {
+		t.Fatalf("Get() error = %v", err)
+	}
+	if output.Env["LEGACY"] != "1" {
+		t.Fatalf("expected plaintext env fallback, got %#v", output.Env)
+	}
+}
+
 type fakeServiceCatalogRepo struct {
 	byID  map[uuid.UUID]*model.Service
 	byKey map[string]*model.Service
@@ -250,3 +331,14 @@ func (f *fakeAgentLookup) GetAgent(id string) (*dto.AgentOutput, error) {
 var _ domain.Repository = (*fakeServiceCatalogRepo)(nil)
 var _ domain.ProxyConfigPublisher = (*fakeProxyPublisher)(nil)
 var _ domain.AgentLookup = (*fakeAgentLookup)(nil)
+
+func newServiceSecretCodec() *secret.Codec {
+	return secret.NewCodec(&config.ServiceSecretConfig{
+		MasterKey:  []byte("12345678901234567890123456789012"),
+		KeyVersion: "v1",
+	})
+}
+
+func mustServiceEnvJSONB(env map[string]string) *commondb.JSONB[map[string]string] {
+	return commondb.NewJSONB(env)
+}

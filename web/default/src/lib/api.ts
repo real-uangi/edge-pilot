@@ -43,6 +43,7 @@ export interface AgentRecord {
   id: string;
   enabled: boolean | null;
   hostname: string;
+  ip: string;
   version: string;
   online: boolean | null;
   lastHeartbeatAt: string | null;
@@ -106,6 +107,7 @@ export interface AgentOverview {
   id: string;
   enabled: boolean | null;
   hostname: string;
+  ip: string;
   version: string;
   online: boolean | null;
   lastHeartbeatAt: string | null;

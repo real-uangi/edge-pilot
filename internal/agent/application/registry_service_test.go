@@ -67,6 +67,59 @@ func TestRegistryServiceDisableRejectsAuthenticationAndScheduling(t *testing.T) 
 	}
 }
 
+func TestRegistryServiceMarkConnectedPersistsReportedIP(t *testing.T) {
+	repo := &fakeRegistryRepo{nodes: map[string]*model.AgentNode{}}
+	svc := NewRegistryService(config.LoadAgentAuthConfig(), repo)
+	created, err := svc.CreateAgent()
+	if err != nil {
+		t.Fatalf("CreateAgent() error = %v", err)
+	}
+
+	if err := svc.MarkConnectedWithIP(created.ID, "host-a", "10.0.0.8", "v1.2.3", []string{"docker"}); err != nil {
+		t.Fatalf("MarkConnectedWithIP() error = %v", err)
+	}
+
+	agent, err := svc.GetAgent(created.ID)
+	if err != nil {
+		t.Fatalf("GetAgent() error = %v", err)
+	}
+	if agent.IP != "10.0.0.8" {
+		t.Fatalf("expected reported ip to be returned, got %#v", agent)
+	}
+
+	list, err := svc.List()
+	if err != nil {
+		t.Fatalf("List() error = %v", err)
+	}
+	if len(list) != 1 || list[0].IP != "10.0.0.8" {
+		t.Fatalf("expected overview ip to be returned, got %#v", list)
+	}
+}
+
+func TestRegistryServiceMarkConnectedKeepsExistingIPWhenReportedIPIsEmpty(t *testing.T) {
+	repo := &fakeRegistryRepo{nodes: map[string]*model.AgentNode{}}
+	svc := NewRegistryService(config.LoadAgentAuthConfig(), repo)
+	created, err := svc.CreateAgent()
+	if err != nil {
+		t.Fatalf("CreateAgent() error = %v", err)
+	}
+
+	if err := svc.MarkConnectedWithIP(created.ID, "host-a", "10.0.0.8", "v1.2.3", []string{"docker"}); err != nil {
+		t.Fatalf("MarkConnectedWithIP() error = %v", err)
+	}
+	if err := svc.MarkConnectedWithIP(created.ID, "host-a", "", "v1.2.4", []string{"docker"}); err != nil {
+		t.Fatalf("MarkConnectedWithIP() with empty ip error = %v", err)
+	}
+
+	agent, err := svc.GetAgent(created.ID)
+	if err != nil {
+		t.Fatalf("GetAgent() error = %v", err)
+	}
+	if agent.IP != "10.0.0.8" {
+		t.Fatalf("expected existing ip to be preserved, got %#v", agent)
+	}
+}
+
 type fakeRegistryRepo struct {
 	nodes map[string]*model.AgentNode
 }

@@ -7,6 +7,7 @@ import (
 	"edge-pilot/internal/shared/config"
 	"edge-pilot/internal/shared/dto"
 	"edge-pilot/internal/shared/model"
+	"edge-pilot/internal/shared/secret"
 	"testing"
 	"time"
 
@@ -28,7 +29,11 @@ func TestStartQueuedReleaseInjectsRegistryCredentialIntoDeployTask(t *testing.T)
 
 	serviceCatalog := servicecatalogapp.NewService(serviceRepo)
 	registry := agentapp.NewRegistryService(config.LoadAgentAuthConfig(), agentRepo)
-	releaseService := NewServiceWithRegistryCredentials(releaseRepo, dispatcher, serviceCatalog, registry, resolver)
+	codec := secret.NewCodec(&config.ServiceSecretConfig{
+		MasterKey:  []byte("12345678901234567890123456789012"),
+		KeyVersion: "v1",
+	})
+	releaseService := NewServiceWithRegistryCredentialsAndCodec(releaseRepo, dispatcher, serviceCatalog, registry, resolver, codec)
 
 	enabled := true
 	dockerHealth := true
@@ -68,8 +73,18 @@ func TestStartQueuedReleaseInjectsRegistryCredentialIntoDeployTask(t *testing.T)
 		t.Fatalf("expected one dispatched task, got %d", len(dispatcher.tasks))
 	}
 	payload := dispatcher.tasks[0].Payload.Get()
-	if payload.RegistryHost != "ghcr.io" || payload.RegistryUsername != "octocat" || payload.RegistrySecret != "token-value" {
-		t.Fatalf("expected registry credential fields to be injected, got %#v", payload)
+	if payload.RegistryHost != "ghcr.io" || payload.RegistryUsername != "octocat" {
+		t.Fatalf("expected registry host fields to be injected, got %#v", payload)
+	}
+	if payload.RegistrySecret != "" {
+		t.Fatalf("expected registry secret to be removed from plaintext payload, got %#v", payload)
+	}
+	var sensitive model.TaskSensitivePayload
+	if err := codec.DecryptJSON(dispatcher.tasks[0].SensitiveCiphertext, dispatcher.tasks[0].SensitiveKeyVersion, &sensitive); err != nil {
+		t.Fatalf("DecryptJSON() error = %v", err)
+	}
+	if sensitive.RegistrySecret != "token-value" {
+		t.Fatalf("expected encrypted registry secret, got %#v", sensitive)
 	}
 }
 

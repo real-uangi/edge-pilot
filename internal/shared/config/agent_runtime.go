@@ -3,6 +3,7 @@ package config
 import (
 	"edge-pilot/internal/shared/buildinfo"
 	"fmt"
+	"net"
 	"os"
 	"strings"
 
@@ -16,6 +17,7 @@ type AgentRuntimeConfig struct {
 	ControlPlaneAddr       string
 	AgentVersion           string
 	Hostname               string
+	ReportedIP             string
 	DockerSocketPath       string
 	HTTPProbeTimeoutS      int
 	ProxyNetworkName       string
@@ -41,6 +43,7 @@ func LoadAgentRuntimeConfig() (*AgentRuntimeConfig, error) {
 		ControlPlaneAddr:       defaultString(os.Getenv("CONTROL_PLANE_GRPC_ADDR"), "127.0.0.1:9090"),
 		AgentVersion:           buildinfo.Version,
 		Hostname:               hostname,
+		ReportedIP:             detectReportedIP(defaultString(os.Getenv("CONTROL_PLANE_GRPC_ADDR"), "127.0.0.1:9090"), func(network string, address string) (net.Conn, error) { return net.Dial(network, address) }),
 		DockerSocketPath:       defaultString(os.Getenv("DOCKER_SOCKET_PATH"), "/var/run/docker.sock"),
 		HTTPProbeTimeoutS:      defaultInt(os.Getenv("HTTP_PROBE_TIMEOUT_SECONDS"), 5),
 		ProxyNetworkName:       defaultString(os.Getenv("PROXY_NETWORK_NAME"), "epNet"),
@@ -97,4 +100,24 @@ func defaultInt(raw string, fallback int) int {
 		return fallback
 	}
 	return v
+}
+
+func detectReportedIP(controlPlaneAddr string, dial func(network string, address string) (net.Conn, error)) string {
+	host, _, err := net.SplitHostPort(strings.TrimSpace(controlPlaneAddr))
+	if err != nil || strings.TrimSpace(host) == "" {
+		return ""
+	}
+	conn, err := dial("udp", net.JoinHostPort(host, "80"))
+	if err != nil {
+		return ""
+	}
+	defer conn.Close()
+	addr, ok := conn.LocalAddr().(*net.UDPAddr)
+	if !ok || addr == nil || addr.IP == nil {
+		return ""
+	}
+	if addr.IP.IsLoopback() || addr.IP.IsUnspecified() {
+		return ""
+	}
+	return addr.IP.String()
 }

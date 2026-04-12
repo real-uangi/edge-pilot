@@ -31,7 +31,7 @@ func TestConnectRejectsInvalidToken(t *testing.T) {
 		},
 	})
 
-	server := NewServer(NewSessionHub(), registry, nil, nil, nil)
+	server := NewServer(NewSessionHub(nil), registry, nil, nil, nil)
 	stream := &fakeStream{
 		recvMessages: []*grpcapi.AgentMessage{
 			{

@@ -3,10 +3,18 @@ package controlplane
 import (
 	"edge-pilot/internal/shared/grpcapi"
 	"edge-pilot/internal/shared/model"
+	"edge-pilot/internal/shared/secret"
+	"strings"
+
+	"github.com/real-uangi/allingo/common/business"
 )
 
-func taskToProto(task *model.Task) *grpcapi.TaskCommand {
+func taskToProto(task *model.Task, codec *secret.Codec) (*grpcapi.TaskCommand, error) {
 	payload := getPayload(task)
+	sensitive, err := getSensitivePayload(task, codec)
+	if err != nil {
+		return nil, err
+	}
 	return &grpcapi.TaskCommand{
 		TaskId:            task.ID.String(),
 		ReleaseId:         task.ReleaseID.String(),
@@ -18,7 +26,7 @@ func taskToProto(task *model.Task) *grpcapi.TaskCommand {
 		ImageTag:          payload.ImageTag,
 		RegistryHost:      payload.RegistryHost,
 		RegistryUsername:  payload.RegistryUsername,
-		RegistrySecret:    payload.RegistrySecret,
+		RegistrySecret:    firstNonEmpty(sensitive.RegistrySecret, payload.RegistrySecret),
 		CommitSha:         payload.CommitSHA,
 		TraceId:           payload.TraceID,
 		TargetSlot:        toProtoSlot(payload.TargetSlot),
@@ -31,12 +39,40 @@ func taskToProto(task *model.Task) *grpcapi.TaskCommand {
 		BackendName:       payload.BackendName,
 		ServerName:        payload.ServerName,
 		PreviousServer:    payload.PreviousServer,
-		Env:               payload.Env,
+		Env:               firstNonEmptyMap(sensitive.Env, payload.Env),
 		Command:           payload.Command,
 		Entrypoint:        payload.Entrypoint,
 		Volumes:           toProtoVolumes(payload.Volumes),
 		PublishedPorts:    toProtoPublishedPorts(payload.PublishedPorts),
+	}, nil
+}
+
+func getSensitivePayload(task *model.Task, codec *secret.Codec) (model.TaskSensitivePayload, error) {
+	if strings.TrimSpace(task.SensitiveCiphertext) == "" {
+		return model.TaskSensitivePayload{}, nil
 	}
+	if codec == nil {
+		return model.TaskSensitivePayload{}, business.NewErrorWithCode("service secret master key not configured", 500)
+	}
+	var sensitive model.TaskSensitivePayload
+	if err := codec.DecryptJSON(task.SensitiveCiphertext, task.SensitiveKeyVersion, &sensitive); err != nil {
+		return model.TaskSensitivePayload{}, err
+	}
+	return sensitive, nil
+}
+
+func firstNonEmpty(current string, fallback string) string {
+	if strings.TrimSpace(current) != "" {
+		return current
+	}
+	return fallback
+}
+
+func firstNonEmptyMap(current map[string]string, fallback map[string]string) map[string]string {
+	if len(current) > 0 {
+		return current
+	}
+	return fallback
 }
 
 func toProtoTaskType(taskType model.TaskType) grpcapi.TaskType {

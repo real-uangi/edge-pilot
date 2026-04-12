@@ -77,6 +77,7 @@ type ServiceDeploymentSpec struct {
 	RouteHost         string
 	RoutePathPrefix   string
 	Env               map[string]string
+	EnvEncrypted      bool
 	Command           []string
 	Entrypoint        []string
 	Volumes           []VolumeMount

@@ -7,6 +7,7 @@ import (
 	"edge-pilot/internal/shared/dto"
 	"edge-pilot/internal/shared/grpcapi"
 	"edge-pilot/internal/shared/model"
+	"edge-pilot/internal/shared/secret"
 	"strings"
 	"time"
 
@@ -21,6 +22,7 @@ type Service struct {
 	services      *servicecatalogapp.Service
 	agentRegistry *application.RegistryService
 	registryAuth  releasedomain.RegistryCredentialResolver
+	codec         *secret.Codec
 }
 
 func NewService(
@@ -29,7 +31,7 @@ func NewService(
 	services *servicecatalogapp.Service,
 	agentRegistry *application.RegistryService,
 ) *Service {
-	return NewServiceWithRegistryCredentials(repo, dispatcher, services, agentRegistry, nil)
+	return NewServiceWithRegistryCredentialsAndCodec(repo, dispatcher, services, agentRegistry, nil, nil)
 }
 
 func NewServiceWithRegistryCredentials(
@@ -38,6 +40,17 @@ func NewServiceWithRegistryCredentials(
 	services *servicecatalogapp.Service,
 	agentRegistry *application.RegistryService,
 	registryAuth releasedomain.RegistryCredentialResolver,
+) *Service {
+	return NewServiceWithRegistryCredentialsAndCodec(repo, dispatcher, services, agentRegistry, registryAuth, nil)
+}
+
+func NewServiceWithRegistryCredentialsAndCodec(
+	repo releasedomain.Repository,
+	dispatcher releasedomain.TaskDispatcher,
+	services *servicecatalogapp.Service,
+	agentRegistry *application.RegistryService,
+	registryAuth releasedomain.RegistryCredentialResolver,
+	codec *secret.Codec,
 ) *Service {
 	if registryAuth == nil {
 		registryAuth = noopRegistryCredentialResolver{}
@@ -48,6 +61,7 @@ func NewServiceWithRegistryCredentials(
 		services:      services,
 		agentRegistry: agentRegistry,
 		registryAuth:  registryAuth,
+		codec:         codec,
 	}
 }
 
@@ -146,12 +160,15 @@ func (s *Service) Start(id uuid.UUID, operator string) (*dto.ReleaseOutput, erro
 	if err != nil {
 		return nil, err
 	}
-	task := s.newDeployTask(release, spec, dto.CreateReleaseFromCIRequest{
+	task, err := s.newDeployTask(release, spec, dto.CreateReleaseFromCIRequest{
 		ImageRepo: release.ImageRepo,
 		ImageTag:  release.ImageTag,
 		CommitSHA: release.CommitSHA,
 		TraceID:   release.TraceID,
 	}, registryAuth)
+	if err != nil {
+		return nil, err
+	}
 	release.CurrentTaskID = &task.ID
 	release.Status = model.ReleaseStatusDispatching
 	if err := s.repo.CreateTask(task); err != nil {
@@ -215,7 +232,10 @@ func (s *Service) ConfirmSwitch(id uuid.UUID, operator string) (*dto.ReleaseOutp
 	if err != nil {
 		return nil, err
 	}
-	task := s.newSwitchTask(release, spec, model.TaskTypeSwitchTraffic)
+	task, err := s.newSwitchTask(release, spec, model.TaskTypeSwitchTraffic)
+	if err != nil {
+		return nil, err
+	}
 	if err := s.repo.CreateTask(task); err != nil {
 		return nil, err
 	}
@@ -252,7 +272,10 @@ func (s *Service) Rollback(id uuid.UUID, operator string) (*dto.ReleaseOutput, e
 	if err != nil {
 		return nil, err
 	}
-	task := s.newRollbackTask(release, spec)
+	task, err := s.newRollbackTask(release, spec)
+	if err != nil {
+		return nil, err
+	}
 	if err := s.repo.CreateTask(task); err != nil {
 		return nil, err
 	}
@@ -667,7 +690,7 @@ func (s *Service) updateTrafficFlags(serviceID uuid.UUID, liveSlot model.Slot, o
 	return nil
 }
 
-func (s *Service) newDeployTask(release *model.Release, spec *dto.ServiceDeploymentSpec, req dto.CreateReleaseFromCIRequest, registryAuth *releasedomain.ResolvedRegistryCredential) *model.Task {
+func (s *Service) newDeployTask(release *model.Release, spec *dto.ServiceDeploymentSpec, req dto.CreateReleaseFromCIRequest, registryAuth *releasedomain.ResolvedRegistryCredential) (*model.Task, error) {
 	payload := model.TaskPayload{
 		ServiceID:         spec.ID,
 		ServiceKey:        spec.ServiceKey,
@@ -685,29 +708,39 @@ func (s *Service) newDeployTask(release *model.Release, spec *dto.ServiceDeploym
 		BackendName:       servicecatalogapp.BackendName(spec.ID),
 		ServerName:        servicecatalogapp.ServerName(release.TargetSlot),
 		PreviousServer:    servicecatalogapp.ServerName(spec.CurrentLiveSlot),
-		Env:               spec.Env,
 		Command:           spec.Command,
 		Entrypoint:        spec.Entrypoint,
 		Volumes:           toModelVolumeMounts(spec.Volumes),
 		PublishedPorts:    toModelPublishedPorts(spec.PublishedPorts),
 	}
+	sensitive := model.TaskSensitivePayload{
+		Env: spec.Env,
+	}
 	if registryAuth != nil {
 		payload.RegistryHost = registryAuth.Host
 		payload.RegistryUsername = registryAuth.Username
-		payload.RegistrySecret = registryAuth.Secret
+		sensitive.RegistrySecret = registryAuth.Secret
 	}
+	ciphertext, keyVersion, plaintextSensitive, err := s.prepareTaskSensitive(spec, sensitive)
+	if err != nil {
+		return nil, err
+	}
+	payload.Env = plaintextSensitive.Env
+	payload.RegistrySecret = plaintextSensitive.RegistrySecret
 	return &model.Task{
-		ID:        uuid.New(),
-		ReleaseID: release.ID,
-		ServiceID: spec.ID,
-		AgentID:   spec.AgentID,
-		Type:      model.TaskTypeDeployGreen,
-		Status:    model.TaskStatusPending,
-		Payload:   commondb.NewJSONB(payload),
-	}
+		ID:                  uuid.New(),
+		ReleaseID:           release.ID,
+		ServiceID:           spec.ID,
+		AgentID:             spec.AgentID,
+		Type:                model.TaskTypeDeployGreen,
+		Status:              model.TaskStatusPending,
+		Payload:             commondb.NewJSONB(payload),
+		SensitiveCiphertext: ciphertext,
+		SensitiveKeyVersion: keyVersion,
+	}, nil
 }
 
-func (s *Service) newSwitchTask(release *model.Release, spec *dto.ServiceDeploymentSpec, taskType model.TaskType) *model.Task {
+func (s *Service) newSwitchTask(release *model.Release, spec *dto.ServiceDeploymentSpec, taskType model.TaskType) (*model.Task, error) {
 	payload := model.TaskPayload{
 		ServiceID:         spec.ID,
 		ServiceKey:        spec.ServiceKey,
@@ -725,24 +758,30 @@ func (s *Service) newSwitchTask(release *model.Release, spec *dto.ServiceDeploym
 		BackendName:       servicecatalogapp.BackendName(spec.ID),
 		ServerName:        servicecatalogapp.ServerName(release.TargetSlot),
 		PreviousServer:    servicecatalogapp.ServerName(release.PreviousLiveSlot),
-		Env:               spec.Env,
 		Command:           spec.Command,
 		Entrypoint:        spec.Entrypoint,
 		Volumes:           toModelVolumeMounts(spec.Volumes),
 		PublishedPorts:    toModelPublishedPorts(spec.PublishedPorts),
 	}
-	return &model.Task{
-		ID:        uuid.New(),
-		ReleaseID: release.ID,
-		ServiceID: spec.ID,
-		AgentID:   spec.AgentID,
-		Type:      taskType,
-		Status:    model.TaskStatusPending,
-		Payload:   commondb.NewJSONB(payload),
+	ciphertext, keyVersion, plaintextSensitive, err := s.prepareTaskSensitive(spec, model.TaskSensitivePayload{Env: spec.Env})
+	if err != nil {
+		return nil, err
 	}
+	payload.Env = plaintextSensitive.Env
+	return &model.Task{
+		ID:                  uuid.New(),
+		ReleaseID:           release.ID,
+		ServiceID:           spec.ID,
+		AgentID:             spec.AgentID,
+		Type:                taskType,
+		Status:              model.TaskStatusPending,
+		Payload:             commondb.NewJSONB(payload),
+		SensitiveCiphertext: ciphertext,
+		SensitiveKeyVersion: keyVersion,
+	}, nil
 }
 
-func (s *Service) newRollbackTask(release *model.Release, spec *dto.ServiceDeploymentSpec) *model.Task {
+func (s *Service) newRollbackTask(release *model.Release, spec *dto.ServiceDeploymentSpec) (*model.Task, error) {
 	payload := model.TaskPayload{
 		ServiceID:         spec.ID,
 		ServiceKey:        spec.ServiceKey,
@@ -757,21 +796,44 @@ func (s *Service) newRollbackTask(release *model.Release, spec *dto.ServiceDeplo
 		BackendName:       servicecatalogapp.BackendName(spec.ID),
 		ServerName:        servicecatalogapp.ServerName(release.PreviousLiveSlot),
 		PreviousServer:    servicecatalogapp.ServerName(spec.CurrentLiveSlot),
-		Env:               spec.Env,
 		Command:           spec.Command,
 		Entrypoint:        spec.Entrypoint,
 		Volumes:           toModelVolumeMounts(spec.Volumes),
 		PublishedPorts:    toModelPublishedPorts(spec.PublishedPorts),
 	}
-	return &model.Task{
-		ID:        uuid.New(),
-		ReleaseID: release.ID,
-		ServiceID: spec.ID,
-		AgentID:   spec.AgentID,
-		Type:      model.TaskTypeRollback,
-		Status:    model.TaskStatusPending,
-		Payload:   commondb.NewJSONB(payload),
+	ciphertext, keyVersion, plaintextSensitive, err := s.prepareTaskSensitive(spec, model.TaskSensitivePayload{Env: spec.Env})
+	if err != nil {
+		return nil, err
 	}
+	payload.Env = plaintextSensitive.Env
+	return &model.Task{
+		ID:                  uuid.New(),
+		ReleaseID:           release.ID,
+		ServiceID:           spec.ID,
+		AgentID:             spec.AgentID,
+		Type:                model.TaskTypeRollback,
+		Status:              model.TaskStatusPending,
+		Payload:             commondb.NewJSONB(payload),
+		SensitiveCiphertext: ciphertext,
+		SensitiveKeyVersion: keyVersion,
+	}, nil
+}
+
+func (s *Service) prepareTaskSensitive(spec *dto.ServiceDeploymentSpec, sensitive model.TaskSensitivePayload) (string, string, model.TaskSensitivePayload, error) {
+	if len(sensitive.Env) == 0 && strings.TrimSpace(sensitive.RegistrySecret) == "" {
+		return "", "", model.TaskSensitivePayload{}, nil
+	}
+	if s.codec == nil {
+		if !spec.EnvEncrypted && len(sensitive.Env) > 0 && strings.TrimSpace(sensitive.RegistrySecret) == "" {
+			return "", "", model.TaskSensitivePayload{Env: sensitive.Env}, nil
+		}
+		return "", "", model.TaskSensitivePayload{}, business.NewErrorWithCode("service secret master key not configured", 500)
+	}
+	ciphertext, keyVersion, err := s.codec.EncryptJSON(sensitive)
+	if err != nil {
+		return "", "", model.TaskSensitivePayload{}, err
+	}
+	return ciphertext, keyVersion, model.TaskSensitivePayload{}, nil
 }
 
 func toReleaseOutput(release *model.Release) dto.ReleaseOutput {

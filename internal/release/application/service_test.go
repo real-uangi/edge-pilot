@@ -9,6 +9,7 @@ import (
 	"edge-pilot/internal/shared/dto"
 	"edge-pilot/internal/shared/grpcapi"
 	"edge-pilot/internal/shared/model"
+	"edge-pilot/internal/shared/secret"
 	"sort"
 	"testing"
 	"time"
@@ -241,6 +242,132 @@ func TestStartQueuedReleaseDispatchesDeployTask(t *testing.T) {
 	payload := dispatcher.tasks[0].Payload.Get()
 	if payload.ImageRepo != "repo/override" {
 		t.Fatalf("expected queued image repo to be preserved, got %s", payload.ImageRepo)
+	}
+}
+
+func TestStartQueuedReleaseEncryptsSensitiveTaskPayload(t *testing.T) {
+	serviceRepo := &fakeServiceRepo{}
+	agentRepo := &fakeAgentRepo{nodes: map[string]*model.AgentNode{}}
+	releaseRepo := newFakeReleaseRepo()
+	dispatcher := &fakeDispatcher{}
+	codec := newReleaseServiceSecretCodec()
+
+	serviceCatalog := servicecatalogapp.NewService(serviceRepo)
+	registry := agentapp.NewRegistryService(config.LoadAgentAuthConfig(), agentRepo)
+	releaseService := NewServiceWithRegistryCredentialsAndCodec(releaseRepo, dispatcher, serviceCatalog, registry, nil, codec)
+
+	enabled := true
+	dockerHealth := true
+	online := true
+	now := time.Now()
+	service := &model.Service{
+		ID:                uuid.New(),
+		ServiceKey:        "svc-a",
+		Name:              "svc-a",
+		AgentID:           "agent-a",
+		ImageRepo:         "repo/app",
+		ContainerPort:     8080,
+		DockerHealthCheck: &dockerHealth,
+		RouteHost:         "svc-a.example.com",
+		Env:               commondb.NewJSONB(map[string]string{"A": "1"}),
+		Enabled:           &enabled,
+	}
+	serviceRepo.ensure()
+	serviceRepo.byID[service.ID] = service
+	serviceRepo.byKey[service.ServiceKey] = service
+	agentRepo.nodes["agent-a"] = &model.AgentNode{
+		ID:              "agent-a",
+		Enabled:         &enabled,
+		Online:          &online,
+		LastHeartbeatAt: &now,
+	}
+
+	queued, err := releaseService.CreateFromCI(dto.CreateReleaseFromCIRequest{
+		ServiceKey: "svc-a",
+		ImageTag:   "v1.0.0",
+		TraceID:    "trace-1",
+	})
+	if err != nil {
+		t.Fatalf("CreateFromCI() error = %v", err)
+	}
+	if _, err := releaseService.Start(queued.ID, "admin"); err != nil {
+		t.Fatalf("Start() error = %v", err)
+	}
+	if len(dispatcher.tasks) != 1 {
+		t.Fatalf("expected one dispatched task, got %d", len(dispatcher.tasks))
+	}
+	payload := dispatcher.tasks[0].Payload.Get()
+	if len(payload.Env) != 0 {
+		t.Fatalf("expected plaintext env to be removed from payload, got %#v", payload.Env)
+	}
+	if dispatcher.tasks[0].SensitiveCiphertext == "" || dispatcher.tasks[0].SensitiveKeyVersion == "" {
+		t.Fatalf("expected encrypted sensitive payload, got %#v", dispatcher.tasks[0])
+	}
+	var sensitive model.TaskSensitivePayload
+	if err := codec.DecryptJSON(dispatcher.tasks[0].SensitiveCiphertext, dispatcher.tasks[0].SensitiveKeyVersion, &sensitive); err != nil {
+		t.Fatalf("DecryptJSON() error = %v", err)
+	}
+	if sensitive.Env["A"] != "1" {
+		t.Fatalf("expected encrypted env payload, got %#v", sensitive)
+	}
+}
+
+func TestStartQueuedReleaseAllowsLegacyPlaintextEnvWithoutCodec(t *testing.T) {
+	serviceRepo := &fakeServiceRepo{}
+	agentRepo := &fakeAgentRepo{nodes: map[string]*model.AgentNode{}}
+	releaseRepo := newFakeReleaseRepo()
+	dispatcher := &fakeDispatcher{}
+
+	serviceCatalog := servicecatalogapp.NewService(serviceRepo)
+	registry := agentapp.NewRegistryService(config.LoadAgentAuthConfig(), agentRepo)
+	releaseService := NewService(releaseRepo, dispatcher, serviceCatalog, registry)
+
+	enabled := true
+	dockerHealth := true
+	online := true
+	now := time.Now()
+	service := &model.Service{
+		ID:                uuid.New(),
+		ServiceKey:        "svc-a",
+		Name:              "svc-a",
+		AgentID:           "agent-a",
+		ImageRepo:         "repo/app",
+		ContainerPort:     8080,
+		DockerHealthCheck: &dockerHealth,
+		RouteHost:         "svc-a.example.com",
+		Env:               commondb.NewJSONB(map[string]string{"LEGACY": "1"}),
+		Enabled:           &enabled,
+	}
+	serviceRepo.ensure()
+	serviceRepo.byID[service.ID] = service
+	serviceRepo.byKey[service.ServiceKey] = service
+	agentRepo.nodes["agent-a"] = &model.AgentNode{
+		ID:              "agent-a",
+		Enabled:         &enabled,
+		Online:          &online,
+		LastHeartbeatAt: &now,
+	}
+
+	queued, err := releaseService.CreateFromCI(dto.CreateReleaseFromCIRequest{
+		ServiceKey: "svc-a",
+		ImageTag:   "v1.0.0",
+		TraceID:    "trace-1",
+	})
+	if err != nil {
+		t.Fatalf("CreateFromCI() error = %v", err)
+	}
+	if _, err := releaseService.Start(queued.ID, "admin"); err != nil {
+		t.Fatalf("Start() error = %v", err)
+	}
+	if len(dispatcher.tasks) != 1 {
+		t.Fatalf("expected one dispatched task, got %d", len(dispatcher.tasks))
+	}
+	payload := dispatcher.tasks[0].Payload.Get()
+	if payload.Env["LEGACY"] != "1" {
+		t.Fatalf("expected legacy plaintext env fallback, got %#v", payload.Env)
+	}
+	if dispatcher.tasks[0].SensitiveCiphertext != "" || dispatcher.tasks[0].SensitiveKeyVersion != "" {
+		t.Fatalf("expected no sensitive ciphertext for legacy plaintext fallback, got %#v", dispatcher.tasks[0])
 	}
 }
 
@@ -1099,4 +1226,11 @@ func (d *fakeDispatcher) ReplayTask(agentID string, task *model.Task) (bool, err
 
 func mustJSONB(payload model.TaskPayload) *commondb.JSONB[model.TaskPayload] {
 	return commondb.NewJSONB(payload)
+}
+
+func newReleaseServiceSecretCodec() *secret.Codec {
+	return secret.NewCodec(&config.ServiceSecretConfig{
+		MasterKey:  []byte("12345678901234567890123456789012"),
+		KeyVersion: "v1",
+	})
 }

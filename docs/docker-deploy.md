@@ -109,6 +109,7 @@ docker run -d \
 ### 常用可选环境变量
 
 - `REGISTRY_SECRET_MASTER_KEY`：仅 control-plane 使用；base64 编码后的 32 字节主密钥，用于加密存储私有镜像仓库密码/令牌
+- `SERVICE_SECRET_MASTER_KEY`：仅 control-plane 使用；base64 编码后的 32 字节主密钥，用于加密存储服务环境变量以及发布任务中的敏感片段
 - `DOCKER_SOCKET_PATH`：默认 `/var/run/docker.sock`
 - `HTTP_PROBE_TIMEOUT_SECONDS`：默认 `5`
 - `PROXY_NETWORK_NAME`：默认 `epNet`
@@ -187,6 +188,7 @@ token 明文只会在创建和重置时返回一次。
 - 不需要访问宿主机 Docker
 - 不需要额外 Linux capabilities
 - 若需要平台内私有镜像登录能力，需要额外配置 `REGISTRY_SECRET_MASTER_KEY`
+- 若服务配置里会填写环境变量，需要额外配置 `SERVICE_SECRET_MASTER_KEY`
 
 ### agent
 

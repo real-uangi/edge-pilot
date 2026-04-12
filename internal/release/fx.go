@@ -11,6 +11,6 @@ var ControlPlaneModule = fx.Module(
 	"release",
 	fx.Provide(
 		infra.NewRepository,
-		application.NewServiceWithRegistryCredentials,
+		application.NewServiceWithRegistryCredentialsAndCodec,
 	),
 )
