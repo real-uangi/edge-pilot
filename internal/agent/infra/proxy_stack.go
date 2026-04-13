@@ -23,11 +23,31 @@ import (
 
 var containerIDPattern = regexp.MustCompile(`[0-9a-f]{12,64}`)
 
+type managedProxyRuntimeAPI interface {
+	SetServerAddress(context.Context, string, string, string, int) error
+	EnableServer(context.Context, string, string) error
+	DisableServer(context.Context, string, string) error
+	ShowStats(context.Context) ([]*grpcapi.BackendStatPoint, error)
+	run(context.Context, string) (string, error)
+}
+
+type managedProxyDataPlaneAPI interface {
+	ConfigurationVersion(context.Context) (string, error)
+	StartTransaction(context.Context, string) (string, error)
+	CommitTransaction(context.Context, string) error
+	AbortTransaction(context.Context, string) error
+	ReplaceFrontendInTransaction(context.Context, string, frontendSection) error
+	EnsureBackendInTransaction(context.Context, string, backendSection) error
+	EnsureServerInTransaction(context.Context, string, string, backendServer) error
+	ListBackends(context.Context) ([]string, error)
+	DeleteBackendInTransaction(context.Context, string, string) error
+}
+
 type ManagedProxyRuntime struct {
 	cfg       *config.AgentRuntimeConfig
 	docker    *DockerClient
-	runtime   *HAProxyRuntimeClient
-	dataplane *DataPlaneAPIClient
+	runtime   managedProxyRuntimeAPI
+	dataplane managedProxyDataPlaneAPI
 	logger    *log.StdLogger
 
 	mu                 sync.Mutex
@@ -331,9 +351,25 @@ func (m *ManagedProxyRuntime) bootstrapBaseFiles(ctx context.Context) error {
 
 func (m *ManagedProxyRuntime) reconcileLocked(ctx context.Context, snapshot *grpcapi.ProxyConfigSnapshot) error {
 	m.logger.Infof("reconciling proxy snapshot: agentId=%s services=%d", m.cfg.AgentID, len(snapshot.GetServices()))
-	if err := m.dataplane.ReplaceFrontend(ctx, m.frontendSection(snapshot)); err != nil {
+	version, err := m.dataplane.ConfigurationVersion(ctx)
+	if err != nil {
 		return err
 	}
+	transactionID, err := m.dataplane.StartTransaction(ctx, version)
+	if err != nil {
+		return err
+	}
+	committed := false
+	defer func() {
+		if committed {
+			return
+		}
+		abortCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		if abortErr := m.dataplane.AbortTransaction(abortCtx, transactionID); abortErr != nil {
+			m.logger.Errorf(abortErr, "aborting dataplane transaction failed: transactionId=%s", transactionID)
+		}
+	}()
 	for _, service := range snapshot.GetServices() {
 		backend := backendSection{
 			Name: service.GetBackendName(),
@@ -342,10 +378,10 @@ func (m *ManagedProxyRuntime) reconcileLocked(ctx context.Context, snapshot *grp
 				Algorithm: "roundrobin",
 			},
 		}
-		if err := m.dataplane.EnsureBackend(ctx, backend); err != nil {
+		if err := m.dataplane.EnsureBackendInTransaction(ctx, transactionID, backend); err != nil {
 			return err
 		}
-		if err := m.dataplane.EnsureServer(ctx, service.GetBackendName(), backendServer{
+		if err := m.dataplane.EnsureServerInTransaction(ctx, service.GetBackendName(), transactionID, backendServer{
 			Name:    service.GetBlueServerName(),
 			Address: application.ManagedContainerName(service.GetServiceKey(), grpcapi.Slot_SLOT_BLUE),
 			Port:    int(service.GetContainerPort()),
@@ -353,7 +389,7 @@ func (m *ManagedProxyRuntime) reconcileLocked(ctx context.Context, snapshot *grp
 		}); err != nil {
 			return err
 		}
-		if err := m.dataplane.EnsureServer(ctx, service.GetBackendName(), backendServer{
+		if err := m.dataplane.EnsureServerInTransaction(ctx, service.GetBackendName(), transactionID, backendServer{
 			Name:    service.GetGreenServerName(),
 			Address: application.ManagedContainerName(service.GetServiceKey(), grpcapi.Slot_SLOT_GREEN),
 			Port:    int(service.GetContainerPort()),
@@ -361,6 +397,9 @@ func (m *ManagedProxyRuntime) reconcileLocked(ctx context.Context, snapshot *grp
 		}); err != nil {
 			return err
 		}
+	}
+	if err := m.dataplane.ReplaceFrontendInTransaction(ctx, transactionID, m.frontendSection(snapshot)); err != nil {
+		return err
 	}
 	existing, err := m.dataplane.ListBackends(ctx)
 	if err != nil {
@@ -377,10 +416,14 @@ func (m *ManagedProxyRuntime) reconcileLocked(ctx context.Context, snapshot *grp
 			continue
 		}
 		m.logger.Infof("removing stale backend from dataplane: backend=%s", name)
-		if err := m.dataplane.DeleteBackend(ctx, name); err != nil {
+		if err := m.dataplane.DeleteBackendInTransaction(ctx, name, transactionID); err != nil {
 			return err
 		}
 	}
+	if err := m.dataplane.CommitTransaction(ctx, transactionID); err != nil {
+		return err
+	}
+	committed = true
 	for _, service := range snapshot.GetServices() {
 		if err := m.applyLiveSlot(ctx, service); err != nil {
 			return err
@@ -740,3 +783,5 @@ func lastIPv4(network *net.IPNet) net.IP {
 }
 
 var _ application.ProxyRuntime = (*ManagedProxyRuntime)(nil)
+var _ managedProxyRuntimeAPI = (*HAProxyRuntimeClient)(nil)
+var _ managedProxyDataPlaneAPI = (*DataPlaneAPIClient)(nil)
