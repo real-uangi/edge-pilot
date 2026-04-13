@@ -1,47 +1,73 @@
 name: Auto Tag Release
 
+on:
+  push:
+    branches:
+      - main
+
 permissions:
   contents: write
 
-on:
-  workflow_run:
-    workflows:
-      - Go Test
-    types:
-      - completed
-
 jobs:
-  tag:
-    if: >-
-      ${{
-        github.event.workflow_run.conclusion == 'success' &&
-        github.event.workflow_run.head_branch == 'main'
-      }}
-    runs-on: ubuntu-latest
-    concurrency:
-      group: auto-tag-main
-      cancel-in-progress: false
+  go-test:
+    runs-on: [ ubuntu-latest ]
     steps:
       - uses: actions/checkout@v6
         with:
           fetch-depth: 0
-          ref: ${{ github.event.workflow_run.head_sha }}
 
-      - name: Create next tag
-        env:
-          RELEASE_SHA: ${{ github.event.workflow_run.head_sha }}
+      - name: Set up Go
+        uses: actions/setup-go@v4
+        with:
+          go-version: '1.26'
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Enable pnpm
+        run: corepack enable
+
+      - name: Install frontend dependencies
+        run: pnpm --dir web/default install --frozen-lockfile
+
+      - name: Build frontend
+        run: pnpm --dir web/default build
+
+      - name: Test
+        run: go test -v ./...
+
+  create_tag:
+    runs-on: ubuntu-latest
+    needs: go-test
+    outputs:
+      next_tag: ${{ steps.tag.outputs.next_tag }}
+      release_sha: ${{ steps.tag.outputs.release_sha }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Compute next tag
+        id: tag
+        shell: bash
         run: |
           set -euo pipefail
 
+          RELEASE_SHA="${GITHUB_SHA}"
+          echo "release_sha=$RELEASE_SHA" >> "$GITHUB_OUTPUT"
+
           git fetch --force --tags
 
-          current_tag="$(git tag --points-at "$RELEASE_SHA" --list 'v*.*.*' | head -n 1)"
+          current_tag="$(git tag --points-at "$RELEASE_SHA" --list 'v*.*.*' | head -n 1 || true)"
           if [ -n "$current_tag" ]; then
-            echo "Commit already tagged with $current_tag, skipping."
+            echo "next_tag=$current_tag" >> "$GITHUB_OUTPUT"
             exit 0
           fi
 
-          last_tag="$(git tag --list 'v*.*.*' --sort=-v:refname | head -n 1)"
+          last_tag="$(git tag --list 'v*.*.*' --sort=-v:refname | head -n 1 || true)"
           if [ -z "$last_tag" ]; then
             next_tag="v0.1.0"
           else
@@ -50,9 +76,33 @@ jobs:
             next_tag="v${major}.${minor}.$((patch + 1))"
           fi
 
+          echo "next_tag=$next_tag" >> "$GITHUB_OUTPUT"
+
+      - name: Create and push tag
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          next_tag="${{ steps.tag.outputs.next_tag }}"
+          release_sha="${{ steps.tag.outputs.release_sha }}"
+
+          if git rev-parse "$next_tag" >/dev/null 2>&1; then
+            echo "Tag $next_tag already exists"
+            exit 0
+          fi
+
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
-          git tag -a "$next_tag" "$RELEASE_SHA" -m "Release $next_tag"
+          git tag -a "$next_tag" "$release_sha" -m "Release $next_tag"
           git push origin "$next_tag"
-          echo "Created $next_tag for $RELEASE_SHA"
+
+  publish:
+    needs:
+      - go-test
+      - create_tag
+    uses: ./.github/workflows/release.yml
+    with:
+      tag: ${{ needs.create_tag.outputs.next_tag }}
+      release_sha: ${{ needs.create_tag.outputs.release_sha }}
+    secrets: inherit

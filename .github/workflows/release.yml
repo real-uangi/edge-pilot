@@ -1,9 +1,14 @@
-name: release
+name: Release
 
 on:
-  push:
-    tags:
-      - "v*.*.*"
+  workflow_call:
+    inputs:
+      tag:
+        required: true
+        type: string
+      release_sha:
+        required: true
+        type: string
 
 permissions:
   contents: write
@@ -35,11 +40,11 @@ jobs:
       - name: Enable pnpm
         run: corepack enable
 
-      - name: Install frontend dependencies
-        run: pnpm --dir web/default install --frozen-lockfile
-
-      - name: Build frontend
-        run: pnpm --dir web/default build
+#      - name: Install frontend dependencies
+#        run: pnpm --dir web/default install --frozen-lockfile
+#
+#      - name: Build frontend
+#        run: pnpm --dir web/default build
 
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
