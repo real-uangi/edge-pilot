@@ -107,6 +107,7 @@ type Service struct {
 	CurrentLiveSlot         Slot                               `json:"currentLiveSlot"`
 	DockerHealthCheck       *bool                              `json:"dockerHealthCheck" gorm:"not null"`
 	HTTPHealthPath          string                             `json:"httpHealthPath" gorm:"size:255"`
+	HTTPHealthHeaders       *commondb.JSONB[map[string]string] `json:"httpHealthHeaders" gorm:"type:jsonb"`
 	HTTPExpectedCode        int                                `json:"httpExpectedCode"`
 	HTTPTimeoutSecond       int                                `json:"httpTimeoutSecond"`
 	StartupGraceSecond      int                                `json:"startupGraceSecond"`
@@ -215,6 +216,7 @@ type TaskPayload struct {
 	ContainerPort           int               `json:"containerPort"`
 	DockerHealthCheck       bool              `json:"dockerHealthCheck"`
 	HTTPHealthPath          string            `json:"httpHealthPath"`
+	HTTPHealthHeaders       map[string]string `json:"httpHealthHeaders,omitempty"`
 	HTTPExpectedCode        int               `json:"httpExpectedCode"`
 	HTTPTimeoutSecond       int               `json:"httpTimeoutSecond"`
 	StartupGraceSecond      int               `json:"startupGraceSecond"`

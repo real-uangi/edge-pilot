@@ -715,6 +715,7 @@ type TaskCommand struct {
 	HttpProbeTimeoutSecond  int32                  `protobuf:"varint,30,opt,name=http_probe_timeout_second,json=httpProbeTimeoutSecond,proto3" json:"http_probe_timeout_second,omitempty"`
 	HttpProbeIntervalSecond int32                  `protobuf:"varint,31,opt,name=http_probe_interval_second,json=httpProbeIntervalSecond,proto3" json:"http_probe_interval_second,omitempty"`
 	HttpSuccessThreshold    int32                  `protobuf:"varint,32,opt,name=http_success_threshold,json=httpSuccessThreshold,proto3" json:"http_success_threshold,omitempty"`
+	HttpHealthHeaders       map[string]string      `protobuf:"bytes,33,rep,name=http_health_headers,json=httpHealthHeaders,proto3" json:"http_health_headers,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
 	unknownFields           protoimpl.UnknownFields
 	sizeCache               protoimpl.SizeCache
 }
@@ -971,6 +972,13 @@ func (x *TaskCommand) GetHttpSuccessThreshold() int32 {
 		return x.HttpSuccessThreshold
 	}
 	return 0
+}
+
+func (x *TaskCommand) GetHttpHealthHeaders() map[string]string {
+	if x != nil {
+		return x.HttpHealthHeaders
+	}
+	return nil
 }
 
 type TaskUpdate struct {
@@ -1462,7 +1470,7 @@ const file_internal_shared_grpcapi_agent_control_proto_rawDesc = "" +
 	"\tread_only\x18\x03 \x01(\bR\breadOnly\"S\n" +
 	"\rPublishedPort\x12\x1b\n" +
 	"\thost_port\x18\x01 \x01(\x05R\bhostPort\x12%\n" +
-	"\x0econtainer_port\x18\x02 \x01(\x05R\rcontainerPort\"\x9f\v\n" +
+	"\x0econtainer_port\x18\x02 \x01(\x05R\rcontainerPort\"\xcc\f\n" +
 	"\vTaskCommand\x12\x17\n" +
 	"\atask_id\x18\x01 \x01(\tR\x06taskId\x12\x1d\n" +
 	"\n" +
@@ -1505,8 +1513,12 @@ const file_internal_shared_grpcapi_agent_control_proto_rawDesc = "" +
 	"\x14startup_grace_second\x18\x1d \x01(\x05R\x12startupGraceSecond\x129\n" +
 	"\x19http_probe_timeout_second\x18\x1e \x01(\x05R\x16httpProbeTimeoutSecond\x12;\n" +
 	"\x1ahttp_probe_interval_second\x18\x1f \x01(\x05R\x17httpProbeIntervalSecond\x124\n" +
-	"\x16http_success_threshold\x18  \x01(\x05R\x14httpSuccessThreshold\x1a6\n" +
+	"\x16http_success_threshold\x18  \x01(\x05R\x14httpSuccessThreshold\x12e\n" +
+	"\x13http_health_headers\x18! \x03(\v25.edgepilot.grpcapi.TaskCommand.HttpHealthHeadersEntryR\x11httpHealthHeaders\x1a6\n" +
 	"\bEnvEntry\x12\x10\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\x1aD\n" +
+	"\x16HttpHealthHeadersEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\xa4\x04\n" +
 	"\n" +
@@ -1592,7 +1604,7 @@ func file_internal_shared_grpcapi_agent_control_proto_rawDescGZIP() []byte {
 }
 
 var file_internal_shared_grpcapi_agent_control_proto_enumTypes = make([]protoimpl.EnumInfo, 3)
-var file_internal_shared_grpcapi_agent_control_proto_msgTypes = make([]protoimpl.MessageInfo, 15)
+var file_internal_shared_grpcapi_agent_control_proto_msgTypes = make([]protoimpl.MessageInfo, 16)
 var file_internal_shared_grpcapi_agent_control_proto_goTypes = []any{
 	(Slot)(0),                   // 0: edgepilot.grpcapi.Slot
 	(TaskType)(0),               // 1: edgepilot.grpcapi.TaskType
@@ -1611,7 +1623,8 @@ var file_internal_shared_grpcapi_agent_control_proto_goTypes = []any{
 	(*BackendStatPoint)(nil),    // 14: edgepilot.grpcapi.BackendStatPoint
 	(*StatsReport)(nil),         // 15: edgepilot.grpcapi.StatsReport
 	nil,                         // 16: edgepilot.grpcapi.TaskCommand.EnvEntry
-	nil,                         // 17: edgepilot.grpcapi.TaskUpdate.MetricsEntry
+	nil,                         // 17: edgepilot.grpcapi.TaskCommand.HttpHealthHeadersEntry
+	nil,                         // 18: edgepilot.grpcapi.TaskUpdate.MetricsEntry
 }
 var file_internal_shared_grpcapi_agent_control_proto_depIdxs = []int32{
 	5,  // 0: edgepilot.grpcapi.AgentMessage.hello:type_name -> edgepilot.grpcapi.HelloMessage
@@ -1627,19 +1640,20 @@ var file_internal_shared_grpcapi_agent_control_proto_depIdxs = []int32{
 	16, // 10: edgepilot.grpcapi.TaskCommand.env:type_name -> edgepilot.grpcapi.TaskCommand.EnvEntry
 	8,  // 11: edgepilot.grpcapi.TaskCommand.volumes:type_name -> edgepilot.grpcapi.VolumeMount
 	9,  // 12: edgepilot.grpcapi.TaskCommand.published_ports:type_name -> edgepilot.grpcapi.PublishedPort
-	2,  // 13: edgepilot.grpcapi.TaskUpdate.status:type_name -> edgepilot.grpcapi.TaskStatus
-	0,  // 14: edgepilot.grpcapi.TaskUpdate.slot:type_name -> edgepilot.grpcapi.Slot
-	17, // 15: edgepilot.grpcapi.TaskUpdate.metrics:type_name -> edgepilot.grpcapi.TaskUpdate.MetricsEntry
-	0,  // 16: edgepilot.grpcapi.ProxyServiceConfig.current_live_slot:type_name -> edgepilot.grpcapi.Slot
-	12, // 17: edgepilot.grpcapi.ProxyConfigSnapshot.services:type_name -> edgepilot.grpcapi.ProxyServiceConfig
-	14, // 18: edgepilot.grpcapi.StatsReport.services:type_name -> edgepilot.grpcapi.BackendStatPoint
-	3,  // 19: edgepilot.grpcapi.AgentControl.Connect:input_type -> edgepilot.grpcapi.AgentMessage
-	4,  // 20: edgepilot.grpcapi.AgentControl.Connect:output_type -> edgepilot.grpcapi.ControlMessage
-	20, // [20:21] is the sub-list for method output_type
-	19, // [19:20] is the sub-list for method input_type
-	19, // [19:19] is the sub-list for extension type_name
-	19, // [19:19] is the sub-list for extension extendee
-	0,  // [0:19] is the sub-list for field type_name
+	17, // 13: edgepilot.grpcapi.TaskCommand.http_health_headers:type_name -> edgepilot.grpcapi.TaskCommand.HttpHealthHeadersEntry
+	2,  // 14: edgepilot.grpcapi.TaskUpdate.status:type_name -> edgepilot.grpcapi.TaskStatus
+	0,  // 15: edgepilot.grpcapi.TaskUpdate.slot:type_name -> edgepilot.grpcapi.Slot
+	18, // 16: edgepilot.grpcapi.TaskUpdate.metrics:type_name -> edgepilot.grpcapi.TaskUpdate.MetricsEntry
+	0,  // 17: edgepilot.grpcapi.ProxyServiceConfig.current_live_slot:type_name -> edgepilot.grpcapi.Slot
+	12, // 18: edgepilot.grpcapi.ProxyConfigSnapshot.services:type_name -> edgepilot.grpcapi.ProxyServiceConfig
+	14, // 19: edgepilot.grpcapi.StatsReport.services:type_name -> edgepilot.grpcapi.BackendStatPoint
+	3,  // 20: edgepilot.grpcapi.AgentControl.Connect:input_type -> edgepilot.grpcapi.AgentMessage
+	4,  // 21: edgepilot.grpcapi.AgentControl.Connect:output_type -> edgepilot.grpcapi.ControlMessage
+	21, // [21:22] is the sub-list for method output_type
+	20, // [20:21] is the sub-list for method input_type
+	20, // [20:20] is the sub-list for extension type_name
+	20, // [20:20] is the sub-list for extension extendee
+	0,  // [0:20] is the sub-list for field type_name
 }
 
 func init() { file_internal_shared_grpcapi_agent_control_proto_init() }
@@ -1664,7 +1678,7 @@ func file_internal_shared_grpcapi_agent_control_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_internal_shared_grpcapi_agent_control_proto_rawDesc), len(file_internal_shared_grpcapi_agent_control_proto_rawDesc)),
 			NumEnums:      3,
-			NumMessages:   15,
+			NumMessages:   16,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

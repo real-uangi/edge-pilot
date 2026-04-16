@@ -108,6 +108,7 @@ message TaskCommand {
   int32 http_probe_timeout_second = 30;
   int32 http_probe_interval_second = 31;
   int32 http_success_threshold = 32;
+  map<string, string> http_health_headers = 33;
 }
 
 message TaskUpdate {

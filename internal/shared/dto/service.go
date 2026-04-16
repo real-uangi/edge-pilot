@@ -26,6 +26,7 @@ type UpsertServiceRequest struct {
 	ContainerPort           int               `json:"containerPort" binding:"required"`
 	DockerHealthCheck       *bool             `json:"dockerHealthCheck"`
 	HTTPHealthPath          string            `json:"httpHealthPath"`
+	HTTPHealthHeaders       map[string]string `json:"httpHealthHeaders"`
 	HTTPExpectedCode        int               `json:"httpExpectedCode"`
 	HTTPTimeoutSecond       int               `json:"httpTimeoutSecond"`
 	StartupGraceSecond      int               `json:"startupGraceSecond"`
@@ -52,6 +53,7 @@ type ServiceOutput struct {
 	CurrentLiveSlot         model.Slot        `json:"currentLiveSlot"`
 	DockerHealthCheck       *bool             `json:"dockerHealthCheck"`
 	HTTPHealthPath          string            `json:"httpHealthPath"`
+	HTTPHealthHeaders       map[string]string `json:"httpHealthHeaders"`
 	HTTPExpectedCode        int               `json:"httpExpectedCode"`
 	HTTPTimeoutSecond       int               `json:"httpTimeoutSecond"`
 	StartupGraceSecond      int               `json:"startupGraceSecond"`
@@ -80,6 +82,7 @@ type ServiceDeploymentSpec struct {
 	CurrentLiveSlot         model.Slot
 	DockerHealthCheck       bool
 	HTTPHealthPath          string
+	HTTPHealthHeaders       map[string]string
 	HTTPExpectedCode        int
 	HTTPTimeoutSecond       int
 	StartupGraceSecond      int

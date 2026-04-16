@@ -25,6 +25,7 @@ export interface ServiceRecord {
   currentLiveSlot: number;
   dockerHealthCheck: boolean | null;
   httpHealthPath: string;
+  httpHealthHeaders: Record<string, string>;
   httpExpectedCode: number;
   httpTimeoutSecond: number;
   startupGraceSecond: number;
@@ -168,6 +169,7 @@ export interface UpsertServiceInput {
   containerPort: number;
   dockerHealthCheck: boolean;
   httpHealthPath: string;
+  httpHealthHeaders: Record<string, string>;
   httpExpectedCode: number;
   httpTimeoutSecond: number;
   startupGraceSecond: number;

@@ -29,7 +29,7 @@ func TestExecuteDeployReusesHealthyManagedContainer(t *testing.T) {
 		},
 	}
 	executor := NewExecutor(&config.AgentRuntimeConfig{AgentID: "agent-a"}, docker, &fakeProxyRuntime{})
-	executor.httpProbe = func(string, string, int, int) error { return nil }
+	executor.httpProbe = func(string, string, map[string]string, int, int) error { return nil }
 
 	err := executor.Execute(context.Background(), newDeployTaskCommand("release-1"), func(update *grpcapi.TaskUpdate) error { return nil })
 	if err != nil {
@@ -63,7 +63,7 @@ func TestExecuteDeployPreservesCurrentReleaseContainerUntilHealthy(t *testing.T)
 		},
 	}
 	executor := NewExecutor(&config.AgentRuntimeConfig{AgentID: "agent-a"}, docker, &fakeProxyRuntime{})
-	executor.httpProbe = func(string, string, int, int) error { return nil }
+	executor.httpProbe = func(string, string, map[string]string, int, int) error { return nil }
 
 	err := executor.Execute(context.Background(), newDeployTaskCommand("release-2"), func(update *grpcapi.TaskUpdate) error { return nil })
 	if err != nil {
@@ -107,8 +107,10 @@ func TestExecuteDeployRetriesTransientHealthFailures(t *testing.T) {
 	}
 	executor := NewExecutor(&config.AgentRuntimeConfig{AgentID: "agent-a"}, docker, &fakeProxyRuntime{})
 	attempts := 0
-	executor.httpProbe = func(string, string, int, int) error {
+	var capturedHeaders map[string]string
+	executor.httpProbe = func(_ string, _ string, headers map[string]string, _ int, _ int) error {
 		attempts++
+		capturedHeaders = headers
 		if attempts == 1 {
 			return errors.New("first probe failed")
 		}
@@ -132,12 +134,16 @@ func TestExecuteDeployRetriesTransientHealthFailures(t *testing.T) {
 		HttpProbeTimeoutSecond:  1,
 		HttpProbeIntervalSecond: 1,
 		HttpSuccessThreshold:    1,
+		HttpHealthHeaders:       map[string]string{"X-Release-Trace": "trace-retry"},
 	}, func(update *grpcapi.TaskUpdate) error { return nil })
 	if err != nil {
 		t.Fatalf("Execute() error = %v", err)
 	}
 	if attempts < 2 {
 		t.Fatalf("expected at least two health probes, got %d", attempts)
+	}
+	if capturedHeaders["X-Release-Trace"] != "trace-retry" {
+		t.Fatalf("expected custom health headers, got %#v", capturedHeaders)
 	}
 }
 
@@ -151,7 +157,7 @@ func TestExecuteDeployCollectsLogsAndCleansFailedContainer(t *testing.T) {
 		},
 	}
 	executor := NewExecutor(&config.AgentRuntimeConfig{AgentID: "agent-a"}, docker, &fakeProxyRuntime{})
-	executor.httpProbe = func(string, string, int, int) error { return errors.New("probe failed") }
+	executor.httpProbe = func(string, string, map[string]string, int, int) error { return errors.New("probe failed") }
 
 	err := executor.Execute(context.Background(), &grpcapi.TaskCommand{
 		TaskId:                  "task-failed",

@@ -85,7 +85,7 @@ type Executor struct {
 	cfg       *config.AgentRuntimeConfig
 	docker    DockerRuntime
 	proxy     ProxyRuntime
-	httpProbe func(string, string, int, int) error
+	httpProbe func(string, string, map[string]string, int, int) error
 	logger    *log.StdLogger
 }
 
@@ -401,6 +401,7 @@ func (e *Executor) verifyHealth(ctx context.Context, task *grpcapi.TaskCommand, 
 	return e.httpProbe(
 		listenAddress,
 		defaultString(task.GetHttpHealthPath(), "/health"),
+		task.GetHttpHealthHeaders(),
 		defaultCode(task.GetHttpExpectedCode()),
 		defaultProbeTimeout(task.GetHttpProbeTimeoutSecond()),
 	)
@@ -632,11 +633,21 @@ func modelDefaultHTTPTimeout() int {
 	return model.DefaultHTTPTimeoutSecond
 }
 
-func probeHTTP(listenAddress string, path string, expectedCode int, timeoutSeconds int) error {
+func probeHTTP(listenAddress string, path string, headers map[string]string, expectedCode int, timeoutSeconds int) error {
 	client := &http.Client{
 		Timeout: time.Duration(timeoutSeconds) * time.Second,
 	}
-	resp, err := client.Get("http://" + listenAddress + path)
+	req, err := http.NewRequest(http.MethodGet, "http://"+listenAddress+path, nil)
+	if err != nil {
+		return err
+	}
+	for key, value := range headers {
+		if strings.TrimSpace(key) == "" || strings.TrimSpace(value) == "" {
+			continue
+		}
+		req.Header.Set(key, value)
+	}
+	resp, err := client.Do(req)
 	if err != nil {
 		return err
 	}

@@ -34,6 +34,7 @@ func taskToProto(task *model.Task, codec *secret.Codec) (*grpcapi.TaskCommand, e
 		ContainerPort:           int32(payload.ContainerPort),
 		DockerHealthCheck:       payload.DockerHealthCheck,
 		HttpHealthPath:          payload.HTTPHealthPath,
+		HttpHealthHeaders:       payload.HTTPHealthHeaders,
 		HttpExpectedCode:        int32(payload.HTTPExpectedCode),
 		HttpTimeoutSecond:       int32(payload.HTTPTimeoutSecond),
 		BackendName:             payload.BackendName,

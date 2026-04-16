@@ -855,6 +855,7 @@ func (s *Service) newDeployTask(release *model.Release, spec *dto.ServiceDeploym
 		ContainerPort:           spec.ContainerPort,
 		DockerHealthCheck:       spec.DockerHealthCheck,
 		HTTPHealthPath:          firstNonEmpty(spec.HTTPHealthPath, "/health"),
+		HTTPHealthHeaders:       cloneStringMap(spec.HTTPHealthHeaders),
 		HTTPExpectedCode:        defaultInt(spec.HTTPExpectedCode, model.DefaultHTTPExpectedCode),
 		HTTPTimeoutSecond:       defaultInt(spec.HTTPTimeoutSecond, model.DefaultHTTPTimeoutSecond),
 		StartupGraceSecond:      defaultInt(spec.StartupGraceSecond, model.DefaultStartupGraceSecond),
@@ -909,6 +910,7 @@ func (s *Service) newSwitchTask(release *model.Release, spec *dto.ServiceDeploym
 		ContainerPort:           spec.ContainerPort,
 		DockerHealthCheck:       spec.DockerHealthCheck,
 		HTTPHealthPath:          firstNonEmpty(spec.HTTPHealthPath, "/health"),
+		HTTPHealthHeaders:       cloneStringMap(spec.HTTPHealthHeaders),
 		HTTPExpectedCode:        defaultInt(spec.HTTPExpectedCode, model.DefaultHTTPExpectedCode),
 		HTTPTimeoutSecond:       defaultInt(spec.HTTPTimeoutSecond, model.DefaultHTTPTimeoutSecond),
 		StartupGraceSecond:      defaultInt(spec.StartupGraceSecond, model.DefaultStartupGraceSecond),
@@ -954,6 +956,7 @@ func (s *Service) newRollbackTask(release *model.Release, spec *dto.ServiceDeplo
 		ContainerPort:           spec.ContainerPort,
 		DockerHealthCheck:       spec.DockerHealthCheck,
 		HTTPHealthPath:          firstNonEmpty(spec.HTTPHealthPath, "/health"),
+		HTTPHealthHeaders:       cloneStringMap(spec.HTTPHealthHeaders),
 		HTTPExpectedCode:        defaultInt(spec.HTTPExpectedCode, model.DefaultHTTPExpectedCode),
 		HTTPTimeoutSecond:       defaultInt(spec.HTTPTimeoutSecond, model.DefaultHTTPTimeoutSecond),
 		StartupGraceSecond:      defaultInt(spec.StartupGraceSecond, model.DefaultStartupGraceSecond),
@@ -1144,6 +1147,17 @@ func getJSON[T any](value *commondb.JSONB[T]) T {
 		return zero
 	}
 	return value.Get()
+}
+
+func cloneStringMap(source map[string]string) map[string]string {
+	if len(source) == 0 {
+		return nil
+	}
+	cloned := make(map[string]string, len(source))
+	for key, value := range source {
+		cloned[key] = value
+	}
+	return cloned
 }
 
 func boolPointer(v bool) *bool {

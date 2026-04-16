@@ -218,6 +218,30 @@ func TestCreateRejectsNonEmptyEnvWithoutCodec(t *testing.T) {
 	}
 }
 
+func TestCreateNormalizesHTTPHealthHeaders(t *testing.T) {
+	repo := newFakeServiceCatalogRepo()
+	svc := NewService(repo)
+
+	created, err := svc.Create(dto.UpsertServiceRequest{
+		Name:              "svc-a",
+		ServiceKey:        "svc-a",
+		AgentID:           "11111111-1111-1111-1111-111111111111",
+		ImageRepo:         "repo/app",
+		ContainerPort:     8080,
+		RouteHost:         "a.example.com",
+		HTTPHealthHeaders: map[string]string{" X-Probe ": " token ", "": "ignored", "X-Empty": ""},
+	})
+	if err != nil {
+		t.Fatalf("Create() error = %v", err)
+	}
+	if created.HTTPHealthHeaders["X-Probe"] != "token" {
+		t.Fatalf("expected normalized header in output, got %#v", created.HTTPHealthHeaders)
+	}
+	if len(created.HTTPHealthHeaders) != 1 {
+		t.Fatalf("expected only valid headers to be retained, got %#v", created.HTTPHealthHeaders)
+	}
+}
+
 func TestGetFallsBackToPlaintextEnvForLegacyData(t *testing.T) {
 	repo := newFakeServiceCatalogRepo()
 	svc := NewService(repo)

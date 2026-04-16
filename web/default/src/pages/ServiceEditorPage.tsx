@@ -126,6 +126,11 @@ export function ServiceEditorPage() {
               <span className={styles.label}>HTTP 探活路径</span>
               <input className={styles.input} {...form.register("httpHealthPath")} />
             </label>
+            <label className={`${styles.field} ${styles.fieldWide}`}>
+              <span className={styles.label}>HTTP 探活 Header</span>
+              <textarea className={styles.textarea} {...form.register("httpHealthHeadersText")} />
+              <span className={styles.hint}>每行一个：`Header-Name: value`</span>
+            </label>
             <label className={styles.field}>
               <span className={styles.label}>预期状态码</span>
               <input className={styles.input} type="number" {...form.register("httpExpectedCode")} />
@@ -239,6 +244,10 @@ export function ServiceEditorPage() {
               <div className={styles.keyValue}>
                 <span className={styles.key}>连续成功</span>
                 <span className={styles.value}>{serviceQuery.data.httpSuccessThreshold} 次</span>
+              </div>
+              <div className={styles.keyValue}>
+                <span className={styles.key}>探活 Header</span>
+                <span className={styles.value}>{Object.keys(serviceQuery.data.httpHealthHeaders ?? {}).length} 项</span>
               </div>
               <div className={styles.keyValue}>
                 <span className={styles.key}>更新时间</span>

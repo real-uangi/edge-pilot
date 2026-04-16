@@ -19,6 +19,23 @@ function parseEnv(text: string): Record<string, string> {
   return result;
 }
 
+function parseHeaders(text: string): Record<string, string> {
+  const result: Record<string, string> = {};
+  for (const line of lineList(text)) {
+    const index = line.indexOf(":");
+    if (index <= 0) {
+      throw new Error(`Invalid header line: ${line}`);
+    }
+    const key = line.slice(0, index).trim();
+    const value = line.slice(index + 1).trim();
+    if (!key || !value) {
+      throw new Error(`Invalid header line: ${line}`);
+    }
+    result[key] = value;
+  }
+  return result;
+}
+
 function parseVolumes(text: string): Array<{ source: string; target: string; readOnly: boolean }> {
   return lineList(text).map((line) => {
     const parts = line.split(":").map((item) => item.trim());
@@ -63,6 +80,7 @@ export const serviceFormSchema = z.object({
   routeHost: z.string().min(1, "必填"),
   routePathPrefix: z.string().trim(),
   enabled: z.boolean(),
+  httpHealthHeadersText: z.string(),
   envText: z.string(),
   commandText: z.string(),
   entrypointText: z.string(),
@@ -82,6 +100,7 @@ export function toServicePayload(values: ServiceFormValues): UpsertServiceInput 
     containerPort: values.containerPort,
     dockerHealthCheck: values.dockerHealthCheck,
     httpHealthPath: values.httpHealthPath.trim(),
+    httpHealthHeaders: parseHeaders(values.httpHealthHeadersText),
     httpExpectedCode: values.httpExpectedCode,
     httpTimeoutSecond: values.httpTimeoutSecond,
     startupGraceSecond: values.startupGraceSecond,
@@ -117,6 +136,9 @@ export function toServiceFormDefaults(service?: ServiceRecord): ServiceFormInput
     routeHost: service?.routeHost ?? "",
     routePathPrefix: service?.routePathPrefix ?? "/",
     enabled: service?.enabled ?? true,
+    httpHealthHeadersText: Object.entries(service?.httpHealthHeaders ?? {})
+      .map(([key, value]) => `${key}: ${value}`)
+      .join("\n"),
     envText: Object.entries(service?.env ?? {})
       .map(([key, value]) => `${key}=${value}`)
       .join("\n"),

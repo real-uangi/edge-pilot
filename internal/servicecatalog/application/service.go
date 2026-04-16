@@ -220,6 +220,7 @@ func (s *Service) buildServiceEntity(id uuid.UUID, req dto.UpsertServiceRequest)
 	if err != nil {
 		return nil, err
 	}
+	httpHealthHeaders := normalizeHTTPHeaders(req.HTTPHealthHeaders)
 
 	return &model.Service{
 		ID:                      id,
@@ -230,6 +231,7 @@ func (s *Service) buildServiceEntity(id uuid.UUID, req dto.UpsertServiceRequest)
 		ContainerPort:           req.ContainerPort,
 		DockerHealthCheck:       dockerHealth,
 		HTTPHealthPath:          req.HTTPHealthPath,
+		HTTPHealthHeaders:       commondb.NewJSONB(httpHealthHeaders),
 		HTTPExpectedCode:        expectedCode,
 		HTTPTimeoutSecond:       timeoutSeconds,
 		StartupGraceSecond:      startupGraceSecond,
@@ -287,6 +289,7 @@ func (s *Service) toServiceOutput(service *model.Service) (dto.ServiceOutput, er
 		CurrentLiveSlot:         service.CurrentLiveSlot,
 		DockerHealthCheck:       service.DockerHealthCheck,
 		HTTPHealthPath:          service.HTTPHealthPath,
+		HTTPHealthHeaders:       getJSON(service.HTTPHealthHeaders),
 		HTTPExpectedCode:        service.HTTPExpectedCode,
 		HTTPTimeoutSecond:       service.HTTPTimeoutSecond,
 		StartupGraceSecond:      service.StartupGraceSecond,
@@ -321,6 +324,7 @@ func (s *Service) toDeploymentSpec(service *model.Service) (dto.ServiceDeploymen
 		CurrentLiveSlot:         service.CurrentLiveSlot,
 		DockerHealthCheck:       service.DockerHealthCheck != nil && *service.DockerHealthCheck,
 		HTTPHealthPath:          service.HTTPHealthPath,
+		HTTPHealthHeaders:       getJSON(service.HTTPHealthHeaders),
 		HTTPExpectedCode:        service.HTTPExpectedCode,
 		HTTPTimeoutSecond:       service.HTTPTimeoutSecond,
 		StartupGraceSecond:      service.StartupGraceSecond,
@@ -414,6 +418,25 @@ func toDTOPublishedPorts(items []model.PublishedPort) []dto.PublishedPort {
 
 func boolPointer(v bool) *bool {
 	return &v
+}
+
+func normalizeHTTPHeaders(headers map[string]string) map[string]string {
+	if len(headers) == 0 {
+		return nil
+	}
+	normalized := make(map[string]string, len(headers))
+	for key, value := range headers {
+		trimmedKey := strings.TrimSpace(key)
+		trimmedValue := strings.TrimSpace(value)
+		if trimmedKey == "" || trimmedValue == "" {
+			continue
+		}
+		normalized[trimmedKey] = trimmedValue
+	}
+	if len(normalized) == 0 {
+		return nil
+	}
+	return normalized
 }
 
 func validatePublishedPorts(items []model.PublishedPort) error {

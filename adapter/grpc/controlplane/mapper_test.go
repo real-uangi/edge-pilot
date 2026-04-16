@@ -39,6 +39,7 @@ func TestTaskToProtoPreservesFields(t *testing.T) {
 			ContainerPort:           8080,
 			DockerHealthCheck:       true,
 			HTTPHealthPath:          "/health",
+			HTTPHealthHeaders:       map[string]string{"X-Probe-Token": "abc"},
 			HTTPExpectedCode:        200,
 			HTTPTimeoutSecond:       90,
 			StartupGraceSecond:      15,
@@ -86,6 +87,9 @@ func TestTaskToProtoPreservesFields(t *testing.T) {
 	}
 	if pb.GetStartupGraceSecond() != 15 || pb.GetHttpProbeTimeoutSecond() != 2 || pb.GetHttpProbeIntervalSecond() != 1 || pb.GetHttpSuccessThreshold() != 2 {
 		t.Fatalf("unexpected health tuning fields: %#v", pb)
+	}
+	if pb.GetHttpHealthHeaders()["X-Probe-Token"] != "abc" {
+		t.Fatalf("unexpected health headers: %#v", pb.GetHttpHealthHeaders())
 	}
 	if pb.GetRegistryHost() != "ghcr.io" || pb.GetRegistryUsername() != "octocat" || pb.GetRegistrySecret() != "token-value" {
 		t.Fatalf("unexpected registry credentials: %#v", pb)
