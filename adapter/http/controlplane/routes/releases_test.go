@@ -36,6 +36,11 @@ func (f *fakeReleaseActions) Start(id uuid.UUID, operator string) (*dto.ReleaseO
 	return &dto.ReleaseOutput{ID: id}, nil
 }
 
+func (f *fakeReleaseActions) Retry(id uuid.UUID, operator string) (*dto.ReleaseOutput, error) {
+	f.lastOperator = operator
+	return &dto.ReleaseOutput{ID: id}, nil
+}
+
 func (f *fakeReleaseActions) Skip(id uuid.UUID, operator string) (*dto.ReleaseOutput, error) {
 	f.lastOperator = operator
 	return &dto.ReleaseOutput{ID: id}, nil
@@ -85,6 +90,46 @@ func TestAdminReleaseRoutesUseSessionUsernameAsOperator(t *testing.T) {
 
 	if recorder.Code != http.StatusOK {
 		t.Fatalf("start status = %d body=%s", recorder.Code, recorder.Body.String())
+	}
+	if fake.lastOperator != "admin" {
+		t.Fatalf("expected operator admin, got %q", fake.lastOperator)
+	}
+}
+
+func TestAdminReleaseRetryRouteUsesSessionUsernameAsOperator(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	cfg := &config.AdminAuthConfig{
+		Username:      "admin",
+		Password:      "secret",
+		SessionSecret: "session-secret",
+		SessionTTL:    time.Hour,
+		CookieName:    "ep_admin_session",
+	}
+	auth := adminauthapp.NewService(cfg)
+	token, _, err := auth.Login(dto.AdminLoginRequest{
+		Username: "admin",
+		Password: "secret",
+	})
+	if err != nil {
+		t.Fatalf("Login() error = %v", err)
+	}
+
+	engine := gin.New()
+	admin := engine.Group("/api/admin")
+	admin.Use(adaptermiddleware.RequireAdminSession(auth, cfg))
+	fake := &fakeReleaseActions{}
+	registerAdminReleaseRoutes(admin, fake)
+
+	releaseID := uuid.NewString()
+	req := httptest.NewRequest(http.MethodPost, "/api/admin/releases/"+releaseID+"/retry", strings.NewReader(`{"operator":"ignored"}`))
+	req.Header.Set("Content-Type", "application/json")
+	req.AddCookie(&http.Cookie{Name: cfg.CookieName, Value: token})
+	recorder := httptest.NewRecorder()
+	engine.ServeHTTP(recorder, req)
+
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("retry status = %d body=%s", recorder.Code, recorder.Body.String())
 	}
 	if fake.lastOperator != "admin" {
 		t.Fatalf("expected operator admin, got %q", fake.lastOperator)

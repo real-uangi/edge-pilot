@@ -41,6 +41,10 @@ type StartReleaseRequest struct {
 	Operator string `json:"operator"`
 }
 
+type RetryReleaseRequest struct {
+	Operator string `json:"operator"`
+}
+
 type SkipReleaseRequest struct {
 	Operator string `json:"operator"`
 }

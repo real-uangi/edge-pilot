@@ -20,6 +20,7 @@ type releaseAdminActions interface {
 	Get(id uuid.UUID) (*dto.ReleaseOutput, error)
 	ListTaskSnapshots(releaseID uuid.UUID) ([]dto.TaskSnapshot, error)
 	Start(id uuid.UUID, operator string) (*dto.ReleaseOutput, error)
+	Retry(id uuid.UUID, operator string) (*dto.ReleaseOutput, error)
 	Skip(id uuid.UUID, operator string) (*dto.ReleaseOutput, error)
 	ConfirmSwitch(id uuid.UUID, operator string) (*dto.ReleaseOutput, error)
 	Rollback(id uuid.UUID, operator string) (*dto.ReleaseOutput, error)
@@ -68,6 +69,24 @@ func registerAdminReleaseRoutes(admin *gin.RouterGroup, releases releaseAdminAct
 			return
 		}
 		output, err := releases.Start(id, adaptermiddleware.CurrentAdminUsername(c))
+		if err != nil {
+			c.Render(api.HandleErr(err))
+			return
+		}
+		c.Render(http.StatusOK, result.Ok(output))
+	})
+	admin.POST("/releases/:id/retry", func(c *gin.Context) {
+		id, err := uuid.Parse(c.Param("id"))
+		if err != nil {
+			c.Render(api.HandleErr(err))
+			return
+		}
+		var input dto.RetryReleaseRequest
+		if err := c.BindJSON(&input); err != nil && err.Error() != "EOF" {
+			c.Render(api.HandleErr(err))
+			return
+		}
+		output, err := releases.Retry(id, adaptermiddleware.CurrentAdminUsername(c))
 		if err != nil {
 			c.Render(api.HandleErr(err))
 			return

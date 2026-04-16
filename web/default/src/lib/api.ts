@@ -352,6 +352,12 @@ export const api = {
       body: "{}",
     });
   },
+  retryRelease(id: string) {
+    return request<ReleaseRecord>(`/api/admin/releases/${id}/retry`, {
+      method: "POST",
+      body: "{}",
+    });
+  },
 };
 
 export { ApiError };

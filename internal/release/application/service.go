@@ -199,6 +199,77 @@ func (s *Service) Start(id uuid.UUID, operator string) (*dto.ReleaseOutput, erro
 	return &output, nil
 }
 
+func (s *Service) Retry(id uuid.UUID, operator string) (*dto.ReleaseOutput, error) {
+	release, err := s.repo.GetRelease(id)
+	if err != nil {
+		return nil, err
+	}
+	if release == nil {
+		return nil, business.ErrNotFound
+	}
+	if release.Status != model.ReleaseStatusFailed {
+		return nil, business.NewErrorWithCode("release is not failed", 409)
+	}
+	active, err := s.repo.HasActiveRelease(release.ServiceID)
+	if err != nil {
+		return nil, err
+	}
+	if active {
+		return nil, business.NewErrorWithCode("service has active release", 409)
+	}
+	spec, err := s.services.GetSpecByID(release.ServiceID)
+	if err != nil {
+		return nil, err
+	}
+	if !spec.Enabled {
+		return nil, business.NewBadRequest("service 已禁用")
+	}
+	online, err := s.agentRegistry.IsOnline(spec.AgentID)
+	if err != nil {
+		return nil, err
+	}
+	if !online {
+		return nil, business.NewErrorWithCode("agent not online", 409)
+	}
+	release.AgentID = spec.AgentID
+	release.PreviousLiveSlot = spec.CurrentLiveSlot
+	release.TargetSlot = nextSlot(spec.CurrentLiveSlot)
+	release.SwitchConfirmed = boolPointer(false)
+	release.CompletedAt = nil
+	registryAuth, err := s.registryAuth.ResolveForImageRepo(release.ImageRepo)
+	if err != nil {
+		return nil, err
+	}
+	task, err := s.newDeployTask(release, spec, dto.CreateReleaseFromCIRequest{
+		ImageRepo: release.ImageRepo,
+		ImageTag:  release.ImageTag,
+		CommitSHA: release.CommitSHA,
+		TraceID:   release.TraceID,
+	}, registryAuth)
+	if err != nil {
+		return nil, err
+	}
+	release.CurrentTaskID = &task.ID
+	release.Status = model.ReleaseStatusDispatching
+	if err := s.repo.CreateTask(task); err != nil {
+		return nil, err
+	}
+	if err := s.repo.UpdateRelease(release); err != nil {
+		return nil, err
+	}
+	if err := s.repo.CreateAudit(newAudit("release", release.ID.String(), "release_retried", release.TraceID, operator)); err != nil {
+		return nil, err
+	}
+	if err := s.dispatch(task); err != nil {
+		return nil, err
+	}
+	output, err := s.enrichReleaseOutput(release)
+	if err != nil {
+		return nil, err
+	}
+	return &output, nil
+}
+
 func (s *Service) Skip(id uuid.UUID, operator string) (*dto.ReleaseOutput, error) {
 	release, err := s.repo.GetRelease(id)
 	if err != nil {

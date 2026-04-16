@@ -528,6 +528,175 @@ func TestStartQueuedReleaseRejectsOfflineAgentAndKeepsQueued(t *testing.T) {
 	}
 }
 
+func TestRetryFailedReleaseDispatchesDeployTask(t *testing.T) {
+	serviceRepo := &fakeServiceRepo{}
+	agentRepo := &fakeAgentRepo{nodes: map[string]*model.AgentNode{}}
+	releaseRepo := newFakeReleaseRepo()
+	dispatcher := &fakeDispatcher{}
+
+	serviceCatalog := servicecatalogapp.NewService(serviceRepo)
+	registry := agentapp.NewRegistryService(config.LoadAgentAuthConfig(), agentRepo)
+	releaseService := NewService(releaseRepo, dispatcher, serviceCatalog, registry)
+
+	enabled := true
+	dockerHealth := true
+	online := true
+	now := time.Now()
+	service := &model.Service{
+		ID:                uuid.New(),
+		ServiceKey:        "svc-a",
+		Name:              "svc-a",
+		AgentID:           "agent-a",
+		ImageRepo:         "repo/app",
+		ContainerPort:     8080,
+		CurrentLiveSlot:   model.SlotBlue,
+		DockerHealthCheck: &dockerHealth,
+		Enabled:           &enabled,
+	}
+	serviceRepo.ensure()
+	serviceRepo.byID[service.ID] = service
+	serviceRepo.byKey[service.ServiceKey] = service
+	agentRepo.nodes["agent-a"] = &model.AgentNode{
+		ID:              "agent-a",
+		Enabled:         &enabled,
+		Online:          &online,
+		LastHeartbeatAt: &now,
+	}
+
+	previousTaskID := uuid.New()
+	completedAt := now.Add(-time.Minute)
+	failed := &model.Release{
+		ID:               uuid.New(),
+		ServiceID:        service.ID,
+		AgentID:          "agent-obsolete",
+		ImageRepo:        "repo/app",
+		ImageTag:         "v1.0.0",
+		CommitSHA:        "commit-1",
+		TraceID:          "trace-1",
+		Status:           model.ReleaseStatusFailed,
+		TargetSlot:       model.SlotGreen,
+		PreviousLiveSlot: model.SlotBlue,
+		CurrentTaskID:    &previousTaskID,
+		CompletedAt:      &completedAt,
+	}
+	if err := releaseRepo.CreateRelease(failed); err != nil {
+		t.Fatalf("CreateRelease() error = %v", err)
+	}
+
+	service.CurrentLiveSlot = model.SlotGreen
+
+	retried, err := releaseService.Retry(failed.ID, "admin")
+	if err != nil {
+		t.Fatalf("Retry() error = %v", err)
+	}
+	if retried.ID != failed.ID {
+		t.Fatalf("expected retry to reuse release id %s, got %s", failed.ID, retried.ID)
+	}
+	if retried.Status != model.ReleaseStatusDispatching {
+		t.Fatalf("expected dispatching status after retry, got %v", retried.Status)
+	}
+	if retried.CompletedAt != nil {
+		t.Fatalf("expected completedAt reset after retry")
+	}
+	if retried.CurrentTaskID == nil {
+		t.Fatalf("expected retry to create deploy task")
+	}
+	if *retried.CurrentTaskID == previousTaskID {
+		t.Fatalf("expected retry task id to change")
+	}
+	if retried.PreviousLiveSlot != model.SlotGreen {
+		t.Fatalf("expected refreshed previous live slot, got %v", retried.PreviousLiveSlot)
+	}
+	if retried.TargetSlot != model.SlotBlue {
+		t.Fatalf("expected refreshed target slot, got %v", retried.TargetSlot)
+	}
+	if len(releaseRepo.releases) != 1 {
+		t.Fatalf("expected retry to reuse existing release record")
+	}
+	if len(dispatcher.tasks) != 1 {
+		t.Fatalf("expected one dispatched task, got %d", len(dispatcher.tasks))
+	}
+	task := releaseRepo.tasks[*retried.CurrentTaskID]
+	if task == nil {
+		t.Fatalf("expected persisted retry task")
+	}
+	if task.ReleaseID != failed.ID {
+		t.Fatalf("expected task to belong to retried release, got %s", task.ReleaseID)
+	}
+	if task.Type != model.TaskTypeDeployGreen {
+		t.Fatalf("expected deploy task on retry, got %v", task.Type)
+	}
+	if len(releaseRepo.audits) == 0 || releaseRepo.audits[len(releaseRepo.audits)-1].EventType != "release_retried" {
+		t.Fatalf("expected release_retried audit, got %#v", releaseRepo.audits)
+	}
+}
+
+func TestRetryRejectsNonFailedRelease(t *testing.T) {
+	serviceRepo := &fakeServiceRepo{}
+	agentRepo := &fakeAgentRepo{}
+	releaseRepo := newFakeReleaseRepo()
+	dispatcher := &fakeDispatcher{}
+
+	serviceCatalog := servicecatalogapp.NewService(serviceRepo)
+	registry := agentapp.NewRegistryService(config.LoadAgentAuthConfig(), agentRepo)
+	releaseService := NewService(releaseRepo, dispatcher, serviceCatalog, registry)
+
+	release := &model.Release{
+		ID:        uuid.New(),
+		ServiceID: uuid.New(),
+		Status:    model.ReleaseStatusQueued,
+	}
+	if err := releaseRepo.CreateRelease(release); err != nil {
+		t.Fatalf("CreateRelease() error = %v", err)
+	}
+
+	if _, err := releaseService.Retry(release.ID, "admin"); err == nil {
+		t.Fatalf("expected retry to reject non-failed release")
+	}
+	if len(releaseRepo.tasks) != 0 {
+		t.Fatalf("expected no task created when retry is rejected")
+	}
+}
+
+func TestRetryRejectsWhenAnotherReleaseIsActive(t *testing.T) {
+	serviceRepo := &fakeServiceRepo{}
+	agentRepo := &fakeAgentRepo{}
+	releaseRepo := newFakeReleaseRepo()
+	dispatcher := &fakeDispatcher{}
+
+	serviceCatalog := servicecatalogapp.NewService(serviceRepo)
+	registry := agentapp.NewRegistryService(config.LoadAgentAuthConfig(), agentRepo)
+	releaseService := NewService(releaseRepo, dispatcher, serviceCatalog, registry)
+
+	serviceID := uuid.New()
+	failed := &model.Release{
+		ID:        uuid.New(),
+		ServiceID: serviceID,
+		Status:    model.ReleaseStatusFailed,
+	}
+	active := &model.Release{
+		ID:        uuid.New(),
+		ServiceID: serviceID,
+		Status:    model.ReleaseStatusDeploying,
+	}
+	if err := releaseRepo.CreateRelease(failed); err != nil {
+		t.Fatalf("CreateRelease() failed error = %v", err)
+	}
+	if err := releaseRepo.CreateRelease(active); err != nil {
+		t.Fatalf("CreateRelease() active error = %v", err)
+	}
+
+	if _, err := releaseService.Retry(failed.ID, "admin"); err == nil {
+		t.Fatalf("expected retry to fail when another release is active")
+	}
+	if len(releaseRepo.tasks) != 0 {
+		t.Fatalf("expected no task created when retry is rejected by active release")
+	}
+	if releaseRepo.releases[failed.ID].Status != model.ReleaseStatusFailed {
+		t.Fatalf("expected failed release status to remain unchanged")
+	}
+}
+
 func TestSkipQueuedReleaseMarksSkipped(t *testing.T) {
 	serviceRepo := &fakeServiceRepo{}
 	agentRepo := &fakeAgentRepo{}

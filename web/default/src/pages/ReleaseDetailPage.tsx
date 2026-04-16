@@ -66,6 +66,10 @@ export function ReleaseDetailPage() {
     mutationFn: () => api.rollbackRelease(id!),
     onSuccess: invalidate,
   });
+  const retryMutation = useMutation({
+    mutationFn: () => api.retryRelease(id!),
+    onSuccess: invalidate,
+  });
 
   if (detailQuery.isPending) {
     return <div className={styles.page}>正在加载发布单…</div>;
@@ -77,7 +81,13 @@ export function ReleaseDetailPage() {
   const { release, tasks } = detailQuery.data;
   const agent = agentsQuery.data?.find((item) => item.id === release.agentId);
   const actionError =
-    getErrorMessage(startMutation.error ?? skipMutation.error ?? confirmMutation.error ?? rollbackMutation.error);
+    getErrorMessage(
+      startMutation.error ??
+        skipMutation.error ??
+        confirmMutation.error ??
+        rollbackMutation.error ??
+        retryMutation.error,
+    );
 
   return (
     <div className={styles.page}>
@@ -125,10 +135,24 @@ export function ReleaseDetailPage() {
           >
             回滚
           </button>
+          <button
+            className={styles.ghostButton}
+            disabled={release.status !== 7 || retryMutation.isPending}
+            onClick={() => confirmAction("确认重试这个发布单？", () => retryMutation.mutate())}
+            type="button"
+          >
+            重试
+          </button>
         </div>
       </section>
 
-      {[startMutation.isError, skipMutation.isError, confirmMutation.isError, rollbackMutation.isError].some(Boolean) ? (
+      [
+        startMutation.isError,
+        skipMutation.isError,
+        confirmMutation.isError,
+        rollbackMutation.isError,
+        retryMutation.isError,
+      ].some(Boolean) ? (
         <div className={styles.error}>{actionError}</div>
       ) : null}
 

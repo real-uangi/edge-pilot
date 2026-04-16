@@ -237,6 +237,68 @@ func TestExecuteTrafficSwitchCleansOnlyCurrentAgentManagedContainers(t *testing.
 	}
 }
 
+func TestReconcileManagedContainersOnStartupConservativeScan(t *testing.T) {
+	docker := &fakeDockerRuntime{
+		managedItems: []*ManagedContainer{
+			{
+				ContainerRuntime: ContainerRuntime{ContainerID: "keep-running"},
+				Name:             ManagedContainerName("svc-a", grpcapi.Slot_SLOT_GREEN),
+				Managed:          true,
+				AgentID:          "agent-a",
+				ServiceKey:       "svc-a",
+				ReleaseID:        "release-keep",
+				Slot:             grpcapi.Slot_SLOT_GREEN,
+				State:            "running",
+			},
+			{
+				ContainerRuntime: ContainerRuntime{ContainerID: "remove-terminal"},
+				Name:             ManagedContainerName("svc-a", grpcapi.Slot_SLOT_BLUE),
+				Managed:          true,
+				AgentID:          "agent-a",
+				ServiceKey:       "svc-a",
+				ReleaseID:        "release-terminal",
+				Slot:             grpcapi.Slot_SLOT_BLUE,
+				State:            "exited",
+			},
+			{
+				ContainerRuntime: ContainerRuntime{ContainerID: "remove-invalid-slot"},
+				Name:             "ep-svc-a-invalid",
+				Managed:          true,
+				AgentID:          "agent-a",
+				ServiceKey:       "svc-a",
+				ReleaseID:        "release-invalid",
+				Slot:             grpcapi.Slot_SLOT_UNSPECIFIED,
+				State:            "running",
+			},
+			{
+				ContainerRuntime: ContainerRuntime{ContainerID: "remove-missing-release"},
+				Name:             "ep-svc-a-missing-release",
+				Managed:          true,
+				AgentID:          "agent-a",
+				ServiceKey:       "svc-a",
+				ReleaseID:        "",
+				Slot:             grpcapi.Slot_SLOT_GREEN,
+				State:            "running",
+			},
+		},
+		removeErrByID: map[string]error{
+			"remove-terminal": errors.New("docker remove failed"),
+		},
+	}
+	executor := NewExecutor(&config.AgentRuntimeConfig{AgentID: "agent-a"}, docker, &fakeProxyRuntime{})
+
+	stats, err := executor.ReconcileManagedContainersOnStartup(context.Background(), "agent-a")
+	if err != nil {
+		t.Fatalf("ReconcileManagedContainersOnStartup() error = %v", err)
+	}
+	if stats.Scanned != 4 || stats.Preserved != 1 || stats.Removed != 2 || stats.Failed != 1 {
+		t.Fatalf("unexpected stats: %#v", stats)
+	}
+	if len(docker.removedIDs) != 3 {
+		t.Fatalf("expected removal attempts to continue after failure, got %#v", docker.removedIDs)
+	}
+}
+
 type fakeDockerRuntime struct {
 	foundByName   map[string]*ManagedContainer
 	managedItems  []*ManagedContainer
@@ -244,6 +306,7 @@ type fakeDockerRuntime struct {
 	inspectCalls  map[string]int
 	listenByID    map[string]string
 	logsByID      map[string]string
+	removeErrByID map[string]error
 	deployedTasks []*grpcapi.TaskCommand
 	removedIDs    []string
 }
@@ -291,13 +354,19 @@ func (f *fakeDockerRuntime) ReadContainerLogs(ctx context.Context, containerID s
 
 func (f *fakeDockerRuntime) RemoveContainer(ctx context.Context, containerID string) error {
 	f.removedIDs = append(f.removedIDs, containerID)
+	if err, ok := f.removeErrByID[containerID]; ok {
+		return err
+	}
 	return nil
 }
 
 func (f *fakeDockerRuntime) ListManagedContainers(ctx context.Context, agentID string, serviceKey string) ([]*ManagedContainer, error) {
 	out := make([]*ManagedContainer, 0, len(f.managedItems))
 	for _, item := range f.managedItems {
-		if item == nil || !item.Managed || item.AgentID != agentID || item.ServiceKey != serviceKey {
+		if item == nil || !item.Managed || item.AgentID != agentID {
+			continue
+		}
+		if serviceKey != "" && item.ServiceKey != serviceKey {
 			continue
 		}
 		out = append(out, item)

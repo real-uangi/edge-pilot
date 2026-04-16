@@ -412,6 +412,7 @@ func (c *DockerClient) ListManagedContainers(ctx context.Context, agentID string
 		return nil, err
 	}
 	out := make([]*application.ManagedContainer, 0, len(items))
+	expectedServiceKey := strings.TrimSpace(serviceKey)
 	for _, item := range items {
 		if item.Labels[application.ManagedLabelKey] != application.ManagedLabelValue {
 			continue
@@ -419,7 +420,7 @@ func (c *DockerClient) ListManagedContainers(ctx context.Context, agentID string
 		if item.Labels[application.ManagedLabelAgentID] != agentID {
 			continue
 		}
-		if item.Labels[application.ManagedLabelServiceKey] != serviceKey {
+		if expectedServiceKey != "" && item.Labels[application.ManagedLabelServiceKey] != expectedServiceKey {
 			continue
 		}
 		out = append(out, summaryToManagedContainer(item))

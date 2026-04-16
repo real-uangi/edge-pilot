@@ -10,6 +10,8 @@ import (
 	"net/http"
 	"strings"
 	"time"
+
+	"github.com/real-uangi/allingo/common/log"
 )
 
 const (
@@ -70,6 +72,13 @@ type TaskFailureDiagnostic struct {
 	CleanupCompleted bool
 }
 
+type StartupManagedContainerScanStats struct {
+	Scanned   int
+	Removed   int
+	Preserved int
+	Failed    int
+}
+
 var ErrProxyNotReady = errors.New("proxy stack not ready")
 
 type Executor struct {
@@ -77,6 +86,7 @@ type Executor struct {
 	docker    DockerRuntime
 	proxy     ProxyRuntime
 	httpProbe func(string, string, int, int) error
+	logger    *log.StdLogger
 }
 
 type TaskExecutionError struct {
@@ -99,6 +109,7 @@ func NewExecutor(cfg *config.AgentRuntimeConfig, docker DockerRuntime, proxy Pro
 		docker:    docker,
 		proxy:     proxy,
 		httpProbe: probeHTTP,
+		logger:    log.NewStdLogger("agent.executor"),
 	}
 }
 
@@ -475,6 +486,32 @@ func (e *Executor) cleanupManagedContainers(ctx context.Context, task *grpcapi.T
 	return removed, nil
 }
 
+func (e *Executor) ReconcileManagedContainersOnStartup(ctx context.Context, agentID string) (StartupManagedContainerScanStats, error) {
+	stats := StartupManagedContainerScanStats{}
+	items, err := e.docker.ListManagedContainers(ctx, agentID, "")
+	if err != nil {
+		return stats, err
+	}
+	for _, item := range items {
+		if item == nil {
+			continue
+		}
+		stats.Scanned++
+		if !shouldRemoveOnStartupScan(item) {
+			stats.Preserved++
+			continue
+		}
+		if err := e.docker.RemoveContainer(ctx, item.ContainerID); err != nil {
+			stats.Failed++
+			e.logger.Errorf(err, "startup managed container cleanup failed: agentId=%s containerId=%s serviceKey=%s releaseId=%s slot=%s state=%s", agentID, item.ContainerID, item.ServiceKey, item.ReleaseID, item.Slot.String(), item.State)
+			continue
+		}
+		stats.Removed++
+	}
+	e.logger.Infof("startup managed container scan completed: agentId=%s scanned=%d removed=%d preserved=%d failed=%d", agentID, stats.Scanned, stats.Removed, stats.Preserved, stats.Failed)
+	return stats, nil
+}
+
 func normalizeHealthConfig(task *grpcapi.TaskCommand) {
 	if task.GetHttpHealthPath() == "" {
 		task.HttpHealthPath = "/health"
@@ -504,6 +541,40 @@ func defaultString(value string, fallback string) string {
 		return fallback
 	}
 	return value
+}
+
+func shouldRemoveOnStartupScan(item *ManagedContainer) bool {
+	if item == nil {
+		return false
+	}
+	if isTerminalContainerState(item.State) {
+		return true
+	}
+	return !managedContainerLabelsValid(item)
+}
+
+func isTerminalContainerState(state string) bool {
+	switch strings.ToLower(strings.TrimSpace(state)) {
+	case "exited", "dead", "removing":
+		return true
+	default:
+		return false
+	}
+}
+
+func managedContainerLabelsValid(item *ManagedContainer) bool {
+	if item == nil {
+		return false
+	}
+	if strings.TrimSpace(item.ServiceKey) == "" || strings.TrimSpace(item.ReleaseID) == "" {
+		return false
+	}
+	switch item.Slot {
+	case grpcapi.Slot_SLOT_BLUE, grpcapi.Slot_SLOT_GREEN:
+		return true
+	default:
+		return false
+	}
 }
 
 func defaultCode(value int32) int {
