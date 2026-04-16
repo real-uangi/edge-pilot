@@ -2,6 +2,8 @@ package infra
 
 import (
 	"context"
+	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -36,10 +38,15 @@ func TestDataPlaneClientStartTransactionUsesVersionQuery(t *testing.T) {
 func TestDataPlaneClientTransactionWritesIncludeTransactionID(t *testing.T) {
 	var requests []recordedRequest
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, err := io.ReadAll(r.Body)
+		if err != nil {
+			t.Fatalf("ReadAll() error = %v", err)
+		}
 		requests = append(requests, recordedRequest{
 			method: r.Method,
 			path:   r.URL.Path,
 			query:  r.URL.Query(),
+			body:   string(body),
 		})
 		w.WriteHeader(http.StatusOK)
 	}))
@@ -50,7 +57,14 @@ func TestDataPlaneClientTransactionWritesIncludeTransactionID(t *testing.T) {
 	if err := client.EnsureBackendInTransaction(ctx, "tx-1", backendSection{Name: "be-api", Mode: "http"}); err != nil {
 		t.Fatalf("EnsureBackendInTransaction() error = %v", err)
 	}
-	if err := client.EnsureServerInTransaction(ctx, "be-api", "tx-1", backendServer{Name: "blue", Address: "svc", Port: 8080}); err != nil {
+	if err := client.EnsureServerInTransaction(ctx, "be-api", "tx-1", backendServer{
+		Name:      "blue",
+		Address:   "svc",
+		Port:      8080,
+		Check:     "enabled",
+		Resolvers: managedProxyResolversName,
+		InitAddr:  managedProxyInitAddrFallback,
+	}); err != nil {
 		t.Fatalf("EnsureServerInTransaction() error = %v", err)
 	}
 	if err := client.ReplaceFrontendInTransaction(ctx, "tx-1", frontendSection{Name: "ep_http", Mode: "http"}); err != nil {
@@ -71,6 +85,7 @@ func TestDataPlaneClientTransactionWritesIncludeTransactionID(t *testing.T) {
 	}
 	assertTransactionRequest(t, requests[0], http.MethodPut, "/v3/services/haproxy/configuration/backends/be-api", "tx-1", false)
 	assertTransactionRequest(t, requests[1], http.MethodPut, "/v3/services/haproxy/configuration/backends/be-api/servers/blue", "tx-1", false)
+	assertServerPayload(t, requests[1], managedProxyResolversName, managedProxyInitAddrFallback)
 	assertTransactionRequest(t, requests[2], http.MethodPut, "/v3/services/haproxy/configuration/frontends/ep_http", "tx-1", true)
 	assertTransactionRequest(t, requests[3], http.MethodDelete, "/v3/services/haproxy/configuration/backends/stale-api", "tx-1", false)
 	assertTransactionLifecycleRequest(t, requests[4], http.MethodPut, "/v3/services/haproxy/transactions/tx-1")
@@ -80,10 +95,15 @@ func TestDataPlaneClientTransactionWritesIncludeTransactionID(t *testing.T) {
 func TestDataPlaneClientEnsureBackendInTransactionCreatesWhenMissing(t *testing.T) {
 	var requests []recordedRequest
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, err := io.ReadAll(r.Body)
+		if err != nil {
+			t.Fatalf("ReadAll() error = %v", err)
+		}
 		requests = append(requests, recordedRequest{
 			method: r.Method,
 			path:   r.URL.Path,
 			query:  r.URL.Query(),
+			body:   string(body),
 		})
 		if r.Method == http.MethodPut {
 			w.WriteHeader(http.StatusNotFound)
@@ -102,6 +122,20 @@ func TestDataPlaneClientEnsureBackendInTransactionCreatesWhenMissing(t *testing.
 	}
 	assertTransactionRequest(t, requests[0], http.MethodPut, "/v3/services/haproxy/configuration/backends/be-new", "tx-9", false)
 	assertTransactionRequest(t, requests[1], http.MethodPost, "/v3/services/haproxy/configuration/backends", "tx-9", false)
+}
+
+func assertServerPayload(t *testing.T, request recordedRequest, resolvers string, initAddr string) {
+	t.Helper()
+	var payload map[string]any
+	if err := json.Unmarshal([]byte(request.body), &payload); err != nil {
+		t.Fatalf("Unmarshal() error = %v", err)
+	}
+	if got := payload["resolvers"]; got != resolvers {
+		t.Fatalf("expected resolvers %q, got %#v", resolvers, got)
+	}
+	if got := payload["init_addr"]; got != initAddr {
+		t.Fatalf("expected init_addr %q, got %#v", initAddr, got)
+	}
 }
 
 func assertTransactionRequest(t *testing.T, request recordedRequest, method string, path string, transactionID string, fullSection bool) {
@@ -146,4 +180,5 @@ type recordedRequest struct {
 	method string
 	path   string
 	query  url.Values
+	body   string
 }

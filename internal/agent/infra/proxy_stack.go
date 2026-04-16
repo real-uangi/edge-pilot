@@ -2,10 +2,12 @@ package infra
 
 import (
 	"context"
+	"crypto/sha256"
 	"edge-pilot/internal/agent/application"
 	servicecatalogapp "edge-pilot/internal/servicecatalog/application"
 	"edge-pilot/internal/shared/config"
 	"edge-pilot/internal/shared/grpcapi"
+	"encoding/hex"
 	"fmt"
 	"net"
 	"os"
@@ -22,6 +24,9 @@ import (
 )
 
 var containerIDPattern = regexp.MustCompile(`[0-9a-f]{12,64}`)
+
+const managedProxyResolversName = "ep_dns"
+const managedProxyInitAddrFallback = "last,libc,none"
 
 type managedProxyRuntimeAPI interface {
 	SetServerAddress(context.Context, string, string, string, int) error
@@ -277,7 +282,7 @@ func (m *ManagedProxyRuntime) prepareLocked(ctx context.Context, startup bool) (
 			return false, err
 		}
 	}
-	if proxyInspect != nil && !proxyInspect.State.Running {
+	if proxyInspect == nil || proxyInspectNeedsBootstrapRefresh(proxyInspect, m.bootstrapFilesHash()) || !proxyInspect.State.Running {
 		if err := m.bootstrapBaseFiles(ctx); err != nil {
 			m.prepared = false
 			m.lastPrepareError = err.Error()
@@ -341,12 +346,8 @@ func (m *ManagedProxyRuntime) pullProxyImagesLocked(ctx context.Context) error {
 }
 
 func (m *ManagedProxyRuntime) bootstrapBaseFiles(ctx context.Context) error {
-	files := map[string]string{
-		"haproxy.cfg":      m.baseHAProxyConfig(),
-		"dataplaneapi.yml": m.dataPlaneConfig(),
-	}
 	m.logger.Infof("bootstrapping proxy config files: container=%s", m.cfg.ProxyContainerName)
-	return m.docker.writeVolumeFiles(ctx, m.cfg.ProxyHelperImage, m.cfg.HAProxyConfigVolume, files)
+	return m.docker.writeVolumeFiles(ctx, m.cfg.ProxyHelperImage, m.cfg.HAProxyConfigVolume, m.bootstrapFiles())
 }
 
 func (m *ManagedProxyRuntime) reconcileLocked(ctx context.Context, snapshot *grpcapi.ProxyConfigSnapshot) error {
@@ -382,18 +383,22 @@ func (m *ManagedProxyRuntime) reconcileLocked(ctx context.Context, snapshot *grp
 			return err
 		}
 		if err := m.dataplane.EnsureServerInTransaction(ctx, service.GetBackendName(), transactionID, backendServer{
-			Name:    service.GetBlueServerName(),
-			Address: application.ManagedContainerName(service.GetServiceKey(), grpcapi.Slot_SLOT_BLUE),
-			Port:    int(service.GetContainerPort()),
-			Check:   "enabled",
+			Name:      service.GetBlueServerName(),
+			Address:   application.ManagedContainerName(service.GetServiceKey(), grpcapi.Slot_SLOT_BLUE),
+			Port:      int(service.GetContainerPort()),
+			Check:     "enabled",
+			Resolvers: managedProxyResolversName,
+			InitAddr:  managedProxyInitAddrFallback,
 		}); err != nil {
 			return err
 		}
 		if err := m.dataplane.EnsureServerInTransaction(ctx, service.GetBackendName(), transactionID, backendServer{
-			Name:    service.GetGreenServerName(),
-			Address: application.ManagedContainerName(service.GetServiceKey(), grpcapi.Slot_SLOT_GREEN),
-			Port:    int(service.GetContainerPort()),
-			Check:   "enabled",
+			Name:      service.GetGreenServerName(),
+			Address:   application.ManagedContainerName(service.GetServiceKey(), grpcapi.Slot_SLOT_GREEN),
+			Port:      int(service.GetContainerPort()),
+			Check:     "enabled",
+			Resolvers: managedProxyResolversName,
+			InitAddr:  managedProxyInitAddrFallback,
 		}); err != nil {
 			return err
 		}
@@ -546,9 +551,10 @@ func (m *ManagedProxyRuntime) proxySpec() managedContainerSpec {
 		Name:  m.cfg.ProxyContainerName,
 		Image: m.cfg.HAProxyImage,
 		Labels: map[string]string{
-			proxyStackLabelKey:     "true",
-			proxyStackRoleLabelKey: "proxy",
-			proxyStackAgentLabel:   m.cfg.AgentID,
+			proxyStackLabelKey:          "true",
+			proxyStackRoleLabelKey:      "proxy",
+			proxyStackAgentLabel:        m.cfg.AgentID,
+			proxyStackBootstrapLabelKey: m.bootstrapFilesHash(),
 		},
 		Binds: []string{
 			m.cfg.HAProxyConfigVolume + ":/usr/local/etc/haproxy",
@@ -658,6 +664,33 @@ func snapshotHash(snapshot *grpcapi.ProxyConfigSnapshot) string {
 	return fmt.Sprintf("%x", raw)
 }
 
+func (m *ManagedProxyRuntime) bootstrapFiles() map[string]string {
+	return map[string]string{
+		"haproxy.cfg":      m.baseHAProxyConfig(),
+		"dataplaneapi.yml": m.dataPlaneConfig(),
+	}
+}
+
+func (m *ManagedProxyRuntime) bootstrapFilesHash() string {
+	files := m.bootstrapFiles()
+	keys := mapKeys(files)
+	sum := sha256.New()
+	for _, name := range keys {
+		_, _ = sum.Write([]byte(name))
+		_, _ = sum.Write([]byte{'\n'})
+		_, _ = sum.Write([]byte(files[name]))
+		_, _ = sum.Write([]byte{'\n'})
+	}
+	return hex.EncodeToString(sum.Sum(nil))
+}
+
+func proxyInspectNeedsBootstrapRefresh(inspect *dockerContainerInspect, expectedHash string) bool {
+	if inspect == nil {
+		return true
+	}
+	return strings.TrimSpace(inspect.Config.Labels[proxyStackBootstrapLabelKey]) != strings.TrimSpace(expectedHash)
+}
+
 func (m *ManagedProxyRuntime) baseHAProxyConfig() string {
 	return fmt.Sprintf(`global
   log stdout format raw local0
@@ -677,6 +710,19 @@ defaults
   timeout client 30s
   timeout server 30s
 
+resolvers %s
+  parse-resolv-conf
+  accepted_payload_size 8192
+  resolve_retries 3
+  timeout resolve 1s
+  timeout retry 1s
+  hold other 30s
+  hold refused 30s
+  hold nx 30s
+  hold timeout 30s
+  hold valid 10s
+  hold obsolete 30s
+
 frontend %s
   bind *:%d
   mode http
@@ -685,7 +731,7 @@ frontend %s
 backend %s
   mode http
   http-request return status 503 content-type text/plain string no-route
-`, m.cfg.HAProxyRuntimePort, m.cfg.DataPlaneAPIUsername, m.cfg.DataPlaneAPIPassword, servicecatalogapp.SharedFrontendName, servicecatalogapp.SharedFrontendBindPort, servicecatalogapp.SharedDefaultBackend, servicecatalogapp.SharedDefaultBackend)
+`, m.cfg.HAProxyRuntimePort, m.cfg.DataPlaneAPIUsername, m.cfg.DataPlaneAPIPassword, managedProxyResolversName, servicecatalogapp.SharedFrontendName, servicecatalogapp.SharedFrontendBindPort, servicecatalogapp.SharedDefaultBackend, servicecatalogapp.SharedDefaultBackend)
 }
 
 func (m *ManagedProxyRuntime) dataPlaneConfig() string {

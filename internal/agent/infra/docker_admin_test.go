@@ -91,6 +91,30 @@ func TestDataPlaneConfigEnablesMasterRuntime(t *testing.T) {
 	}
 }
 
+func TestProxySpecIncludesBootstrapHashLabel(t *testing.T) {
+	runtime := &ManagedProxyRuntime{
+		cfg: &config.AgentRuntimeConfig{
+			AgentID:              "81ad661e-cf19-4bab-afa4-9d00826774c2",
+			HAProxyImage:         "haproxytech/haproxy-debian:s6-3.4",
+			ProxyContainerName:   "edge-pilot-haproxy",
+			ProxyNetworkName:     "epNet",
+			ProxyIPAddress:       "172.29.0.233",
+			HAProxyRuntimePort:   19999,
+			DataPlaneAPIPort:     5555,
+			DataPlaneAPIUsername: "admin",
+			DataPlaneAPIPassword: "secret",
+		},
+	}
+
+	spec := runtime.proxySpec()
+	if strings.TrimSpace(spec.Labels[proxyStackBootstrapLabelKey]) == "" {
+		t.Fatal("expected proxy spec to include bootstrap hash label")
+	}
+	if spec.Labels[proxyStackBootstrapLabelKey] != runtime.bootstrapFilesHash() {
+		t.Fatal("expected proxy spec bootstrap hash label to match current bootstrap files")
+	}
+}
+
 func TestBaseHAProxyConfigAvoidsKnownStartupWarnings(t *testing.T) {
 	runtime := &ManagedProxyRuntime{
 		cfg: &config.AgentRuntimeConfig{
@@ -109,5 +133,8 @@ func TestBaseHAProxyConfigAvoidsKnownStartupWarnings(t *testing.T) {
 	}
 	if !strings.Contains(configText, "user root") || !strings.Contains(configText, "group root") {
 		t.Fatal("expected haproxy bootstrap config to make root execution explicit")
+	}
+	if !strings.Contains(configText, "resolvers "+managedProxyResolversName) || !strings.Contains(configText, "parse-resolv-conf") {
+		t.Fatal("expected haproxy bootstrap config to define docker dns resolvers")
 	}
 }

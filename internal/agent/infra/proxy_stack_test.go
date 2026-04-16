@@ -173,6 +173,73 @@ func TestReconcileLockedPreservesPrimaryErrorWhenAbortFails(t *testing.T) {
 	}
 }
 
+func TestReconcileLockedPrecreatesServersWithResolversForEmptyInstances(t *testing.T) {
+	callLog := make([]string, 0, 16)
+	dataplane := &fakeManagedProxyDataplane{
+		version: "12",
+		txID:    "tx-6",
+		backends: []string{
+			"ep_default",
+		},
+		callLog: &callLog,
+	}
+	runtime := &fakeManagedProxyRuntime{callLog: &callLog}
+	proxy := newTestManagedProxyRuntime(dataplane, runtime)
+
+	if err := proxy.reconcileLocked(context.Background(), testProxySnapshotWithService(grpcapi.Slot_SLOT_UNSPECIFIED)); err != nil {
+		t.Fatalf("reconcileLocked() error = %v", err)
+	}
+
+	if len(dataplane.serverConfigs) != 2 {
+		t.Fatalf("expected 2 precreated servers, got %d", len(dataplane.serverConfigs))
+	}
+	for _, server := range dataplane.serverConfigs {
+		if server.Resolvers != managedProxyResolversName {
+			t.Fatalf("expected resolvers %q, got %q", managedProxyResolversName, server.Resolvers)
+		}
+		if server.InitAddr != managedProxyInitAddrFallback {
+			t.Fatalf("expected init_addr %q, got %q", managedProxyInitAddrFallback, server.InitAddr)
+		}
+	}
+	expected := []string{
+		"version",
+		"start-transaction:12",
+		"ensure-backend:be-api@tx-6",
+		"ensure-server:be-api/blue@tx-6",
+		"ensure-server:be-api/green@tx-6",
+		"replace-frontend:ep_http@tx-6",
+		"list-backends",
+		"commit:tx-6",
+		"disable:be-api/blue",
+		"disable:be-api/green",
+	}
+	if !reflect.DeepEqual(callLog, expected) {
+		t.Fatalf("unexpected call order: %#v", callLog)
+	}
+}
+
+func TestProxyInspectNeedsBootstrapRefresh(t *testing.T) {
+	runtime := newTestManagedProxyRuntime(&fakeManagedProxyDataplane{}, &fakeManagedProxyRuntime{})
+	expectedHash := runtime.bootstrapFilesHash()
+
+	if !proxyInspectNeedsBootstrapRefresh(nil, expectedHash) {
+		t.Fatal("expected nil inspect to require bootstrap refresh")
+	}
+
+	inspect := &dockerContainerInspect{}
+	inspect.Config.Labels = map[string]string{
+		proxyStackBootstrapLabelKey: expectedHash,
+	}
+	if proxyInspectNeedsBootstrapRefresh(inspect, expectedHash) {
+		t.Fatal("expected matching bootstrap hash to skip refresh")
+	}
+
+	inspect.Config.Labels[proxyStackBootstrapLabelKey] = "outdated"
+	if !proxyInspectNeedsBootstrapRefresh(inspect, expectedHash) {
+		t.Fatal("expected mismatched bootstrap hash to require refresh")
+	}
+}
+
 func newTestManagedProxyRuntime(dataplane managedProxyDataPlaneAPI, runtime managedProxyRuntimeAPI) *ManagedProxyRuntime {
 	return &ManagedProxyRuntime{
 		cfg: &config.AgentRuntimeConfig{
@@ -216,13 +283,14 @@ func testProxySnapshotWithoutServices() *grpcapi.ProxyConfigSnapshot {
 }
 
 type fakeManagedProxyDataplane struct {
-	version    string
-	txID       string
-	backends   []string
-	replaceErr error
-	commitErr  error
-	abortErr   error
-	callLog    *[]string
+	version       string
+	txID          string
+	backends      []string
+	replaceErr    error
+	commitErr     error
+	abortErr      error
+	callLog       *[]string
+	serverConfigs []backendServer
 }
 
 func (f *fakeManagedProxyDataplane) ConfigurationVersion(context.Context) (string, error) {
@@ -257,6 +325,7 @@ func (f *fakeManagedProxyDataplane) EnsureBackendInTransaction(_ context.Context
 
 func (f *fakeManagedProxyDataplane) EnsureServerInTransaction(_ context.Context, backendName string, transactionID string, server backendServer) error {
 	*f.callLog = append(*f.callLog, "ensure-server:"+backendName+"/"+server.Name+"@"+transactionID)
+	f.serverConfigs = append(f.serverConfigs, server)
 	return nil
 }
 

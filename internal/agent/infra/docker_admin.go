@@ -17,10 +17,11 @@ import (
 )
 
 const (
-	proxyStackLabelKey     = "ep.stack"
-	proxyStackRoleLabelKey = "ep.stack.role"
-	proxyStackAgentLabel   = "ep.agent_id"
-	proxyStackSpecLabelKey = "ep.stack.spec_hash"
+	proxyStackLabelKey          = "ep.stack"
+	proxyStackRoleLabelKey      = "ep.stack.role"
+	proxyStackAgentLabel        = "ep.agent_id"
+	proxyStackSpecLabelKey      = "ep.stack.spec_hash"
+	proxyStackBootstrapLabelKey = "ep.stack.bootstrap_hash"
 )
 
 type managedContainerSpec struct {

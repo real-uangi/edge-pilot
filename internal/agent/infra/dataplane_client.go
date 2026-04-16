@@ -64,10 +64,12 @@ type backendBalance struct {
 }
 
 type backendServer struct {
-	Name    string `json:"name"`
-	Address string `json:"address"`
-	Port    int    `json:"port"`
-	Check   string `json:"check,omitempty"`
+	Name      string `json:"name"`
+	Address   string `json:"address"`
+	Port      int    `json:"port"`
+	Check     string `json:"check,omitempty"`
+	Resolvers string `json:"resolvers,omitempty"`
+	InitAddr  string `json:"init_addr,omitempty"`
 }
 
 func newDataPlaneAPIClient(resolveURL func() string, resolveUser func() string, resolvePass func() string) *DataPlaneAPIClient {
