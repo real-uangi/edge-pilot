@@ -146,7 +146,7 @@ export function ReleaseDetailPage() {
         </div>
       </section>
 
-      [
+      {[
         startMutation.isError,
         skipMutation.isError,
         confirmMutation.isError,
