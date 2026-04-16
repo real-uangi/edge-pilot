@@ -27,6 +27,10 @@ export interface ServiceRecord {
   httpHealthPath: string;
   httpExpectedCode: number;
   httpTimeoutSecond: number;
+  startupGraceSecond: number;
+  httpProbeTimeoutSecond: number;
+  httpProbeIntervalSecond: number;
+  httpSuccessThreshold: number;
   routeHost: string;
   routePathPrefix: string;
   env: Record<string, string>;
@@ -93,6 +97,10 @@ export interface TaskSnapshot {
   type: number;
   status: number;
   lastError: string;
+  lastStep: string;
+  dockerHealth: string;
+  failureLogs: string;
+  cleanupCompleted: boolean | null;
   dispatchedAt: string | null;
   startedAt: string | null;
   completedAt: string | null;
@@ -162,6 +170,10 @@ export interface UpsertServiceInput {
   httpHealthPath: string;
   httpExpectedCode: number;
   httpTimeoutSecond: number;
+  startupGraceSecond: number;
+  httpProbeTimeoutSecond: number;
+  httpProbeIntervalSecond: number;
+  httpSuccessThreshold: number;
   routeHost: string;
   routePathPrefix: string;
   env: Record<string, string>;

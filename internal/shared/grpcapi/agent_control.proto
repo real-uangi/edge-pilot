@@ -104,6 +104,10 @@ message TaskCommand {
   repeated string entrypoint = 26;
   repeated VolumeMount volumes = 27;
   repeated PublishedPort published_ports = 28;
+  int32 startup_grace_second = 29;
+  int32 http_probe_timeout_second = 30;
+  int32 http_probe_interval_second = 31;
+  int32 http_success_threshold = 32;
 }
 
 message TaskUpdate {
@@ -116,6 +120,9 @@ message TaskUpdate {
   Slot slot = 7;
   string server_name = 8;
   map<string, int64> metrics = 9;
+  string docker_health = 10;
+  string failure_logs = 11;
+  bool cleanup_completed = 12;
 }
 
 message ProxyServiceConfig {

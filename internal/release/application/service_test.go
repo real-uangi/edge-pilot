@@ -3,6 +3,7 @@ package application
 import (
 	agentapp "edge-pilot/internal/agent/application"
 	agentdomain "edge-pilot/internal/agent/domain"
+	releasedomain "edge-pilot/internal/release/domain"
 	servicecatalogapp "edge-pilot/internal/servicecatalog/application"
 	servicecatalogdomain "edge-pilot/internal/servicecatalog/domain"
 	"edge-pilot/internal/shared/config"
@@ -675,6 +676,7 @@ func TestHandleTaskUpdateMovesReleaseToReadyToSwitch(t *testing.T) {
 		TraceID:         "trace-1",
 		Status:          model.ReleaseStatusDeploying,
 		TargetSlot:      model.SlotGreen,
+		CurrentTaskID:   &taskID,
 		SwitchConfirmed: &switchConfirmed,
 	}
 	releaseRepo.tasks[taskID] = &model.Task{
@@ -824,10 +826,11 @@ func TestFailStaleTasksMarksReleaseFailed(t *testing.T) {
 		AgentID:   "agent-a",
 		Type:      model.TaskTypeDeployGreen,
 		Status:    model.TaskStatusRunning,
+		Payload:   mustJSONB(model.TaskPayload{HTTPTimeoutSecond: 90, StartupGraceSecond: 15}),
 	}
 	releaseRepo.taskUpdatedAt[taskID] = staleAt
 
-	if err := releaseService.FailStaleTasks(time.Now().Add(-10 * time.Minute)); err != nil {
+	if err := releaseService.FailStaleTasks(time.Now()); err != nil {
 		t.Fatalf("FailStaleTasks() error = %v", err)
 	}
 	if releaseRepo.tasks[taskID].Status != model.TaskStatusTimedOut {
@@ -835,6 +838,116 @@ func TestFailStaleTasksMarksReleaseFailed(t *testing.T) {
 	}
 	if releaseRepo.releases[releaseID].Status != model.ReleaseStatusFailed {
 		t.Fatalf("expected failed release, got %v", releaseRepo.releases[releaseID].Status)
+	}
+}
+
+func TestHandleTaskUpdateIgnoresLateSucceededUpdateAfterTimeout(t *testing.T) {
+	serviceRepo := &fakeServiceRepo{}
+	agentRepo := &fakeAgentRepo{nodes: map[string]*model.AgentNode{}}
+	releaseRepo := newFakeReleaseRepo()
+	dispatcher := &fakeDispatcher{}
+
+	serviceCatalog := servicecatalogapp.NewService(serviceRepo)
+	registry := agentapp.NewRegistryService(config.LoadAgentAuthConfig(), agentRepo)
+	releaseService := NewService(releaseRepo, dispatcher, serviceCatalog, registry)
+
+	releaseID := uuid.New()
+	serviceID := uuid.New()
+	taskID := uuid.New()
+	switchConfirmed := false
+	now := time.Now()
+	releaseRepo.releases[releaseID] = &model.Release{
+		ID:              releaseID,
+		ServiceID:       serviceID,
+		AgentID:         "agent-a",
+		TraceID:         "trace-late",
+		Status:          model.ReleaseStatusFailed,
+		CurrentTaskID:   &taskID,
+		SwitchConfirmed: &switchConfirmed,
+		CompletedAt:     &now,
+	}
+	releaseRepo.tasks[taskID] = &model.Task{
+		ID:          taskID,
+		ReleaseID:   releaseID,
+		ServiceID:   serviceID,
+		AgentID:     "agent-a",
+		Type:        model.TaskTypeDeployGreen,
+		Status:      model.TaskStatusTimedOut,
+		CompletedAt: &now,
+	}
+
+	if err := releaseService.HandleTaskUpdate("agent-a", &grpcapi.TaskUpdate{
+		TaskId: taskID.String(),
+		Status: grpcapi.TaskStatus_TASK_STATUS_SUCCEEDED,
+		Step:   "healthy",
+	}); err != nil {
+		t.Fatalf("HandleTaskUpdate() error = %v", err)
+	}
+	if releaseRepo.releases[releaseID].Status != model.ReleaseStatusFailed {
+		t.Fatalf("expected failed release to remain terminal, got %v", releaseRepo.releases[releaseID].Status)
+	}
+	if len(releaseRepo.audits) == 0 || releaseRepo.audits[len(releaseRepo.audits)-1].EventType != "late_task_update_ignored" {
+		t.Fatalf("expected late_task_update_ignored audit, got %#v", releaseRepo.audits)
+	}
+}
+
+func TestStartQueuedReleaseDefersDispatchWhenAgentSessionDrops(t *testing.T) {
+	serviceRepo := &fakeServiceRepo{}
+	agentRepo := &fakeAgentRepo{nodes: map[string]*model.AgentNode{}}
+	releaseRepo := newFakeReleaseRepo()
+	dispatcher := &fakeDispatcher{dispatchErr: releasedomain.ErrAgentOffline}
+
+	serviceCatalog := servicecatalogapp.NewService(serviceRepo)
+	registry := agentapp.NewRegistryService(config.LoadAgentAuthConfig(), agentRepo)
+	releaseService := NewService(releaseRepo, dispatcher, serviceCatalog, registry)
+
+	enabled := true
+	dockerHealth := true
+	online := true
+	now := time.Now()
+	service := &model.Service{
+		ID:                uuid.New(),
+		ServiceKey:        "svc-a",
+		Name:              "svc-a",
+		AgentID:           "agent-a",
+		ImageRepo:         "repo/app",
+		ContainerPort:     8080,
+		DockerHealthCheck: &dockerHealth,
+		Enabled:           &enabled,
+	}
+	serviceRepo.ensure()
+	serviceRepo.byID[service.ID] = service
+	serviceRepo.byKey[service.ServiceKey] = service
+	agentRepo.nodes["agent-a"] = &model.AgentNode{
+		ID:              "agent-a",
+		Enabled:         &enabled,
+		Online:          &online,
+		LastHeartbeatAt: &now,
+	}
+
+	queued, err := releaseService.CreateFromCI(dto.CreateReleaseFromCIRequest{
+		ServiceKey: "svc-a",
+		ImageTag:   "v1.0.0",
+	})
+	if err != nil {
+		t.Fatalf("CreateFromCI() error = %v", err)
+	}
+	if _, err := releaseService.Start(queued.ID, "admin"); err != nil {
+		t.Fatalf("Start() error = %v", err)
+	}
+	task := releaseRepo.tasks[*releaseRepo.releases[queued.ID].CurrentTaskID]
+	if task == nil || task.Status != model.TaskStatusPending || task.LastStep != "dispatch_deferred" {
+		t.Fatalf("expected deferred task to stay pending, got %#v", task)
+	}
+	foundDeferredAudit := false
+	for _, item := range releaseRepo.audits {
+		if item.EventType == "dispatch_deferred" {
+			foundDeferredAudit = true
+			break
+		}
+	}
+	if !foundDeferredAudit {
+		t.Fatalf("expected dispatch_deferred audit, got %#v", releaseRepo.audits)
 	}
 }
 
@@ -1158,7 +1271,7 @@ func (r *fakeReleaseRepo) ListRecoverableTasksByAgent(agentID string) ([]model.T
 	return out, nil
 }
 
-func (r *fakeReleaseRepo) ListStaleTasks(before time.Time) ([]model.Task, error) {
+func (r *fakeReleaseRepo) ListActiveTasks() ([]model.Task, error) {
 	out := make([]model.Task, 0)
 	for _, task := range r.tasks {
 		release := r.releases[task.ReleaseID]
@@ -1168,9 +1281,11 @@ func (r *fakeReleaseRepo) ListStaleTasks(before time.Time) ([]model.Task, error)
 		if !(task.Status == model.TaskStatusPending || task.Status == model.TaskStatusDispatched || task.Status == model.TaskStatusRunning) {
 			continue
 		}
-		if updatedAt, ok := r.taskUpdatedAt[task.ID]; ok && updatedAt.Before(before) {
-			out = append(out, *task)
+		copyTask := *task
+		if updatedAt, ok := r.taskUpdatedAt[task.ID]; ok {
+			copyTask.UpdatedAt = updatedAt
 		}
+		out = append(out, copyTask)
 	}
 	return out, nil
 }
@@ -1217,12 +1332,13 @@ func (r *fakeReleaseRepo) CreateAudit(log *model.AuditLog) error {
 type fakeDispatcher struct {
 	tasks         []*model.Task
 	replayedTasks []*model.Task
+	dispatchErr   error
 }
 
 func (d *fakeDispatcher) DispatchTask(agentID string, task *model.Task) error {
 	copyTask := *task
 	d.tasks = append(d.tasks, &copyTask)
-	return nil
+	return d.dispatchErr
 }
 
 func (d *fakeDispatcher) ReplayTask(agentID string, task *model.Task) (bool, error) {

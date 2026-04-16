@@ -196,17 +196,26 @@ func (c *Client) handleTask(ctx context.Context, task *grpcapi.TaskCommand, outb
 	if err != nil {
 		c.logger.Errorf(err, "task execution failed: agentId=%s taskId=%s type=%s", c.cfg.AgentID, task.GetTaskId(), task.GetType().String())
 		step := "execution_failed"
+		var diagnostic *agentapp.TaskFailureDiagnostic
 		if execErr, ok := err.(*agentapp.TaskExecutionError); ok && execErr.Step != "" {
 			step = execErr.Step
+			diagnostic = execErr.Diagnostic
+		}
+		update := &grpcapi.TaskUpdate{
+			TaskId:       task.GetTaskId(),
+			Status:       grpcapi.TaskStatus_TASK_STATUS_FAILED,
+			Step:         step,
+			ErrorMessage: err.Error(),
+		}
+		if diagnostic != nil {
+			update.ContainerId = diagnostic.ContainerID
+			update.DockerHealth = diagnostic.DockerHealth
+			update.FailureLogs = diagnostic.FailureLogs
+			update.CleanupCompleted = diagnostic.CleanupCompleted
 		}
 		outbound <- &grpcapi.AgentMessage{
 			Payload: &grpcapi.AgentMessage_TaskUpdate{
-				TaskUpdate: &grpcapi.TaskUpdate{
-					TaskId:       task.GetTaskId(),
-					Status:       grpcapi.TaskStatus_TASK_STATUS_FAILED,
-					Step:         step,
-					ErrorMessage: err.Error(),
-				},
+				TaskUpdate: update,
 			},
 		}
 		return

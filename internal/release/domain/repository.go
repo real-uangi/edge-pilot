@@ -2,6 +2,7 @@ package domain
 
 import (
 	"edge-pilot/internal/shared/model"
+	"errors"
 	"time"
 
 	"github.com/google/uuid"
@@ -20,13 +21,15 @@ type Repository interface {
 	GetTask(uuid.UUID) (*model.Task, error)
 	ListTasksByRelease(uuid.UUID) ([]model.Task, error)
 	ListRecoverableTasksByAgent(string) ([]model.Task, error)
-	ListStaleTasks(time.Time) ([]model.Task, error)
+	ListActiveTasks() ([]model.Task, error)
 	CreateTaskAttempt(*model.TaskAttempt) error
 	UpsertRuntimeInstance(*model.RuntimeInstance) error
 	GetRuntimeInstanceByServiceAndSlot(uuid.UUID, model.Slot) (*model.RuntimeInstance, error)
 	ListRuntimeInstancesByService(uuid.UUID) ([]model.RuntimeInstance, error)
 	CreateAudit(*model.AuditLog) error
 }
+
+var ErrAgentOffline = errors.New("agent offline")
 
 type TaskDispatcher interface {
 	DispatchTask(agentID string, task *model.Task) error

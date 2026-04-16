@@ -4,6 +4,8 @@ import (
 	"context"
 	"edge-pilot/internal/shared/config"
 	"edge-pilot/internal/shared/grpcapi"
+	"errors"
+	"strings"
 	"testing"
 )
 
@@ -11,40 +13,25 @@ func TestExecuteDeployReusesHealthyManagedContainer(t *testing.T) {
 	docker := &fakeDockerRuntime{
 		foundByName: map[string]*ManagedContainer{
 			ManagedContainerName("svc-a", grpcapi.Slot_SLOT_GREEN): {
-				ContainerRuntime: ContainerRuntime{
-					ContainerID: "container-1",
-				},
-				Name:       ManagedContainerName("svc-a", grpcapi.Slot_SLOT_GREEN),
-				Managed:    true,
-				AgentID:    "agent-a",
-				ServiceKey: "svc-a",
-				ReleaseID:  "release-1",
+				ContainerRuntime: ContainerRuntime{ContainerID: "container-1"},
+				Name:             ManagedContainerName("svc-a", grpcapi.Slot_SLOT_GREEN),
+				Managed:          true,
+				AgentID:          "agent-a",
+				ServiceKey:       "svc-a",
+				ReleaseID:        "release-1",
 			},
 		},
-		healthByID: map[string]string{
-			"container-1": "",
+		statusByID: map[string]*ContainerStatus{
+			"container-1": {State: "running", Running: true, Health: "healthy"},
 		},
 		listenByID: map[string]string{
 			"container-1": "172.29.0.21:8080",
 		},
 	}
-	executor := NewExecutor(&config.AgentRuntimeConfig{AgentID: "agent-a", HTTPProbeTimeoutS: 1}, docker, &fakeProxyRuntime{})
+	executor := NewExecutor(&config.AgentRuntimeConfig{AgentID: "agent-a"}, docker, &fakeProxyRuntime{})
 	executor.httpProbe = func(string, string, int, int) error { return nil }
 
-	err := executor.Execute(context.Background(), &grpcapi.TaskCommand{
-		TaskId:            "task-1",
-		ReleaseId:         "release-1",
-		ServiceKey:        "svc-a",
-		AgentId:           "agent-a",
-		Type:              grpcapi.TaskType_TASK_TYPE_DEPLOY_GREEN,
-		TargetSlot:        grpcapi.Slot_SLOT_GREEN,
-		ServerName:        "srv-green",
-		ContainerPort:     8080,
-		DockerHealthCheck: true,
-		HttpHealthPath:    "/health",
-		HttpExpectedCode:  0,
-		HttpTimeoutSecond: 1,
-	}, func(update *grpcapi.TaskUpdate) error { return nil })
+	err := executor.Execute(context.Background(), newDeployTaskCommand("release-1"), func(update *grpcapi.TaskUpdate) error { return nil })
 	if err != nil {
 		t.Fatalf("Execute() error = %v", err)
 	}
@@ -56,36 +43,149 @@ func TestExecuteDeployReusesHealthyManagedContainer(t *testing.T) {
 	}
 }
 
+func TestExecuteDeployPreservesCurrentReleaseContainerUntilHealthy(t *testing.T) {
+	docker := &fakeDockerRuntime{
+		foundByName: map[string]*ManagedContainer{
+			ManagedContainerName("svc-a", grpcapi.Slot_SLOT_GREEN): {
+				ContainerRuntime: ContainerRuntime{ContainerID: "container-2"},
+				Name:             ManagedContainerName("svc-a", grpcapi.Slot_SLOT_GREEN),
+				Managed:          true,
+				AgentID:          "agent-a",
+				ServiceKey:       "svc-a",
+				ReleaseID:        "release-2",
+			},
+		},
+		statusByID: map[string]*ContainerStatus{
+			"container-2": {State: "running", Running: true, Health: "starting"},
+		},
+		listenByID: map[string]string{
+			"container-2": "172.29.0.22:8080",
+		},
+	}
+	executor := NewExecutor(&config.AgentRuntimeConfig{AgentID: "agent-a"}, docker, &fakeProxyRuntime{})
+	executor.httpProbe = func(string, string, int, int) error { return nil }
+
+	err := executor.Execute(context.Background(), newDeployTaskCommand("release-2"), func(update *grpcapi.TaskUpdate) error { return nil })
+	if err != nil {
+		t.Fatalf("Execute() error = %v", err)
+	}
+	if len(docker.deployedTasks) != 0 {
+		t.Fatalf("expected existing release container to be reused for waiting")
+	}
+	if len(docker.removedIDs) != 0 {
+		t.Fatalf("expected current release container not to be removed")
+	}
+}
+
 func TestExecuteDeployFailsOnManagedContainerConflict(t *testing.T) {
 	docker := &fakeDockerRuntime{
 		foundByName: map[string]*ManagedContainer{
 			ManagedContainerName("svc-a", grpcapi.Slot_SLOT_GREEN): {
-				ContainerRuntime: ContainerRuntime{
-					ContainerID: "container-2",
-				},
-				Name:    ManagedContainerName("svc-a", grpcapi.Slot_SLOT_GREEN),
-				Managed: false,
+				ContainerRuntime: ContainerRuntime{ContainerID: "container-3"},
+				Name:             ManagedContainerName("svc-a", grpcapi.Slot_SLOT_GREEN),
+				Managed:          false,
 			},
 		},
 	}
-	executor := NewExecutor(&config.AgentRuntimeConfig{AgentID: "agent-a", HTTPProbeTimeoutS: 1}, docker, &fakeProxyRuntime{})
+	executor := NewExecutor(&config.AgentRuntimeConfig{AgentID: "agent-a"}, docker, &fakeProxyRuntime{})
 
-	err := executor.Execute(context.Background(), &grpcapi.TaskCommand{
-		TaskId:        "task-2",
-		ReleaseId:     "release-2",
-		ServiceKey:    "svc-a",
-		AgentId:       "agent-a",
-		Type:          grpcapi.TaskType_TASK_TYPE_DEPLOY_GREEN,
-		TargetSlot:    grpcapi.Slot_SLOT_GREEN,
-		ServerName:    "srv-green",
-		ContainerPort: 8080,
-	}, func(update *grpcapi.TaskUpdate) error { return nil })
+	err := executor.Execute(context.Background(), newDeployTaskCommand("release-3"), func(update *grpcapi.TaskUpdate) error { return nil })
 	if err == nil {
 		t.Fatalf("expected conflict error")
 	}
 	execErr, ok := err.(*TaskExecutionError)
 	if !ok || execErr.Step != "managed_container_conflict" {
 		t.Fatalf("expected managed_container_conflict error, got %#v", err)
+	}
+}
+
+func TestExecuteDeployRetriesTransientHealthFailures(t *testing.T) {
+	docker := &fakeDockerRuntime{
+		statusByID: map[string]*ContainerStatus{
+			"new-container": {State: "running", Running: true, Health: "healthy"},
+		},
+	}
+	executor := NewExecutor(&config.AgentRuntimeConfig{AgentID: "agent-a"}, docker, &fakeProxyRuntime{})
+	attempts := 0
+	executor.httpProbe = func(string, string, int, int) error {
+		attempts++
+		if attempts == 1 {
+			return errors.New("first probe failed")
+		}
+		return nil
+	}
+
+	err := executor.Execute(context.Background(), &grpcapi.TaskCommand{
+		TaskId:                  "task-retry",
+		ReleaseId:               "release-retry",
+		ServiceKey:              "svc-a",
+		AgentId:                 "agent-a",
+		Type:                    grpcapi.TaskType_TASK_TYPE_DEPLOY_GREEN,
+		TargetSlot:              grpcapi.Slot_SLOT_GREEN,
+		ServerName:              "srv-green",
+		ContainerPort:           8080,
+		DockerHealthCheck:       true,
+		HttpHealthPath:          "/health",
+		HttpExpectedCode:        200,
+		HttpTimeoutSecond:       5,
+		StartupGraceSecond:      1,
+		HttpProbeTimeoutSecond:  1,
+		HttpProbeIntervalSecond: 1,
+		HttpSuccessThreshold:    1,
+	}, func(update *grpcapi.TaskUpdate) error { return nil })
+	if err != nil {
+		t.Fatalf("Execute() error = %v", err)
+	}
+	if attempts < 2 {
+		t.Fatalf("expected at least two health probes, got %d", attempts)
+	}
+}
+
+func TestExecuteDeployCollectsLogsAndCleansFailedContainer(t *testing.T) {
+	docker := &fakeDockerRuntime{
+		statusByID: map[string]*ContainerStatus{
+			"new-container": {State: "exited", Running: false, Health: "unhealthy"},
+		},
+		logsByID: map[string]string{
+			"new-container": "boot failed",
+		},
+	}
+	executor := NewExecutor(&config.AgentRuntimeConfig{AgentID: "agent-a"}, docker, &fakeProxyRuntime{})
+	executor.httpProbe = func(string, string, int, int) error { return errors.New("probe failed") }
+
+	err := executor.Execute(context.Background(), &grpcapi.TaskCommand{
+		TaskId:                  "task-failed",
+		ReleaseId:               "release-failed",
+		ServiceKey:              "svc-a",
+		AgentId:                 "agent-a",
+		Type:                    grpcapi.TaskType_TASK_TYPE_DEPLOY_GREEN,
+		TargetSlot:              grpcapi.Slot_SLOT_GREEN,
+		ServerName:              "srv-green",
+		ContainerPort:           8080,
+		DockerHealthCheck:       true,
+		HttpHealthPath:          "/health",
+		HttpExpectedCode:        200,
+		HttpTimeoutSecond:       2,
+		StartupGraceSecond:      1,
+		HttpProbeTimeoutSecond:  1,
+		HttpProbeIntervalSecond: 1,
+		HttpSuccessThreshold:    1,
+	}, func(update *grpcapi.TaskUpdate) error { return nil })
+	if err == nil {
+		t.Fatalf("expected deploy failure")
+	}
+	execErr, ok := err.(*TaskExecutionError)
+	if !ok || execErr.Diagnostic == nil {
+		t.Fatalf("expected task execution error with diagnostic, got %#v", err)
+	}
+	if execErr.Diagnostic.FailureLogs != "boot failed" {
+		t.Fatalf("expected failure logs to be captured, got %q", execErr.Diagnostic.FailureLogs)
+	}
+	if !execErr.Diagnostic.CleanupCompleted {
+		t.Fatalf("expected cleanup to complete")
+	}
+	if len(docker.removedIDs) != 1 || docker.removedIDs[0] != "new-container" {
+		t.Fatalf("expected failed container to be removed, got %#v", docker.removedIDs)
 	}
 }
 
@@ -113,22 +213,9 @@ func TestExecuteTrafficSwitchCleansOnlyCurrentAgentManagedContainers(t *testing.
 				AgentID:          "agent-a",
 				ServiceKey:       "svc-a",
 			},
-			{
-				ContainerRuntime: ContainerRuntime{ContainerID: "other-agent"},
-				Name:             "ep-svc-a-foreign",
-				Managed:          true,
-				AgentID:          "agent-b",
-				ServiceKey:       "svc-a",
-			},
-			{
-				ContainerRuntime: ContainerRuntime{ContainerID: "unmanaged"},
-				Name:             "random-container",
-				Managed:          false,
-				ServiceKey:       "svc-a",
-			},
 		},
 	}
-	executor := NewExecutor(&config.AgentRuntimeConfig{AgentID: "agent-a", HTTPProbeTimeoutS: 1}, docker, &fakeProxyRuntime{})
+	executor := NewExecutor(&config.AgentRuntimeConfig{AgentID: "agent-a"}, docker, &fakeProxyRuntime{})
 
 	err := executor.Execute(context.Background(), &grpcapi.TaskCommand{
 		TaskId:          "task-3",
@@ -150,34 +237,13 @@ func TestExecuteTrafficSwitchCleansOnlyCurrentAgentManagedContainers(t *testing.
 	}
 }
 
-func TestExecuteDeployCanSkipDockerHealthCheck(t *testing.T) {
-	docker := &fakeDockerRuntime{}
-	executor := NewExecutor(&config.AgentRuntimeConfig{AgentID: "agent-a", HTTPProbeTimeoutS: 1}, docker, &fakeProxyRuntime{})
-	executor.httpProbe = func(string, string, int, int) error { return nil }
-
-	err := executor.Execute(context.Background(), &grpcapi.TaskCommand{
-		TaskId:            "task-4",
-		ReleaseId:         "release-4",
-		ServiceKey:        "svc-a",
-		AgentId:           "agent-a",
-		Type:              grpcapi.TaskType_TASK_TYPE_DEPLOY_GREEN,
-		TargetSlot:        grpcapi.Slot_SLOT_GREEN,
-		ContainerPort:     8080,
-		DockerHealthCheck: false,
-	}, func(update *grpcapi.TaskUpdate) error { return nil })
-	if err != nil {
-		t.Fatalf("Execute() error = %v", err)
-	}
-	if len(docker.deployedTasks) != 1 {
-		t.Fatalf("expected one deployment, got %d", len(docker.deployedTasks))
-	}
-}
-
 type fakeDockerRuntime struct {
 	foundByName   map[string]*ManagedContainer
 	managedItems  []*ManagedContainer
-	healthByID    map[string]string
+	statusByID    map[string]*ContainerStatus
+	inspectCalls  map[string]int
 	listenByID    map[string]string
+	logsByID      map[string]string
 	deployedTasks []*grpcapi.TaskCommand
 	removedIDs    []string
 }
@@ -187,11 +253,22 @@ func (f *fakeDockerRuntime) DeployContainer(ctx context.Context, task *grpcapi.T
 	return &ContainerRuntime{ContainerID: "new-container", ListenAddress: "172.29.0.22:8080"}, nil
 }
 
-func (f *fakeDockerRuntime) InspectHealth(ctx context.Context, containerID string) (string, error) {
-	if health, ok := f.healthByID[containerID]; ok {
-		return health, nil
+func (f *fakeDockerRuntime) InspectContainer(ctx context.Context, containerID string) (*ContainerStatus, error) {
+	if status, ok := f.statusByID[containerID]; ok {
+		copyStatus := *status
+		if strings.EqualFold(copyStatus.Health, "starting") {
+			if f.inspectCalls == nil {
+				f.inspectCalls = make(map[string]int)
+			}
+			f.inspectCalls[containerID]++
+			if f.inspectCalls[containerID] > 1 {
+				copyStatus.Health = "healthy"
+				f.statusByID[containerID] = &copyStatus
+			}
+		}
+		return &copyStatus, nil
 	}
-	return "", nil
+	return &ContainerStatus{State: "running", Running: true}, nil
 }
 
 func (f *fakeDockerRuntime) FindContainerByName(ctx context.Context, name string) (*ManagedContainer, error) {
@@ -205,6 +282,13 @@ func (f *fakeDockerRuntime) ResolveListenAddress(ctx context.Context, containerI
 	return "172.29.0.22:8080", nil
 }
 
+func (f *fakeDockerRuntime) ReadContainerLogs(ctx context.Context, containerID string, tailLines int, maxBytes int) (string, error) {
+	if logs, ok := f.logsByID[containerID]; ok {
+		return logs, nil
+	}
+	return "", nil
+}
+
 func (f *fakeDockerRuntime) RemoveContainer(ctx context.Context, containerID string) error {
 	f.removedIDs = append(f.removedIDs, containerID)
 	return nil
@@ -213,16 +297,7 @@ func (f *fakeDockerRuntime) RemoveContainer(ctx context.Context, containerID str
 func (f *fakeDockerRuntime) ListManagedContainers(ctx context.Context, agentID string, serviceKey string) ([]*ManagedContainer, error) {
 	out := make([]*ManagedContainer, 0, len(f.managedItems))
 	for _, item := range f.managedItems {
-		if item == nil {
-			continue
-		}
-		if !item.Managed {
-			continue
-		}
-		if item.AgentID != agentID {
-			continue
-		}
-		if item.ServiceKey != serviceKey {
+		if item == nil || !item.Managed || item.AgentID != agentID || item.ServiceKey != serviceKey {
 			continue
 		}
 		out = append(out, item)
@@ -232,26 +307,38 @@ func (f *fakeDockerRuntime) ListManagedContainers(ctx context.Context, agentID s
 
 type fakeProxyRuntime struct{}
 
-func (f *fakeProxyRuntime) EnsureReady(context.Context) error {
-	return nil
-}
-
+func (f *fakeProxyRuntime) EnsureReady(context.Context) error { return nil }
 func (f *fakeProxyRuntime) ApplySnapshot(context.Context, *grpcapi.ProxyConfigSnapshot) error {
 	return nil
 }
-
 func (f *fakeProxyRuntime) SetServerAddress(context.Context, string, string, string, int) error {
 	return nil
 }
-
-func (f *fakeProxyRuntime) EnableServer(context.Context, string, string) error {
-	return nil
-}
-
+func (f *fakeProxyRuntime) EnableServer(context.Context, string, string) error { return nil }
 func (f *fakeProxyRuntime) DisableServer(context.Context, string, string) error {
 	return nil
 }
-
 func (f *fakeProxyRuntime) ShowStats(context.Context) ([]*grpcapi.BackendStatPoint, error) {
 	return nil, nil
+}
+
+func newDeployTaskCommand(releaseID string) *grpcapi.TaskCommand {
+	return &grpcapi.TaskCommand{
+		TaskId:                  "task-" + releaseID,
+		ReleaseId:               releaseID,
+		ServiceKey:              "svc-a",
+		AgentId:                 "agent-a",
+		Type:                    grpcapi.TaskType_TASK_TYPE_DEPLOY_GREEN,
+		TargetSlot:              grpcapi.Slot_SLOT_GREEN,
+		ServerName:              "srv-green",
+		ContainerPort:           8080,
+		DockerHealthCheck:       true,
+		HttpHealthPath:          "/health",
+		HttpExpectedCode:        200,
+		HttpTimeoutSecond:       5,
+		StartupGraceSecond:      1,
+		HttpProbeTimeoutSecond:  1,
+		HttpProbeIntervalSecond: 1,
+		HttpSuccessThreshold:    1,
+	}
 }

@@ -12,7 +12,6 @@ import (
 
 const (
 	offlineAfter = 15 * time.Second
-	taskTimeout  = 10 * time.Minute
 	scanInterval = 5 * time.Second
 )
 
@@ -69,5 +68,5 @@ func (s *RecoveryScheduler) tick() error {
 			return err
 		}
 	}
-	return s.releases.FailStaleTasks(time.Now().Add(-taskTimeout))
+	return s.releases.FailStaleTasks(time.Now())
 }

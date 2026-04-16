@@ -1,6 +1,7 @@
 package controlplane
 
 import (
+	releasedomain "edge-pilot/internal/release/domain"
 	servicecatalogapp "edge-pilot/internal/servicecatalog/application"
 	servicecatalogdomain "edge-pilot/internal/servicecatalog/domain"
 	"edge-pilot/internal/shared/grpcapi"
@@ -27,7 +28,7 @@ func (p *ProxyConfigPublisher) PublishAgent(agentID string) error {
 	}
 	snapshot := buildProxyConfigSnapshot(agentID, services)
 	if err := p.hub.DispatchProxyConfig(agentID, snapshot); err != nil {
-		if errors.Is(err, ErrAgentOffline) {
+		if errors.Is(err, releasedomain.ErrAgentOffline) {
 			return nil
 		}
 		return err

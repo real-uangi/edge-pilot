@@ -54,11 +54,15 @@ type RollbackRequest struct {
 }
 
 type TaskSnapshot struct {
-	ID           uuid.UUID        `json:"id"`
-	Type         model.TaskType   `json:"type"`
-	Status       model.TaskStatus `json:"status"`
-	LastError    string           `json:"lastError"`
-	DispatchedAt *time.Time       `json:"dispatchedAt"`
-	StartedAt    *time.Time       `json:"startedAt"`
-	CompletedAt  *time.Time       `json:"completedAt"`
+	ID               uuid.UUID        `json:"id"`
+	Type             model.TaskType   `json:"type"`
+	Status           model.TaskStatus `json:"status"`
+	LastError        string           `json:"lastError"`
+	LastStep         string           `json:"lastStep"`
+	DockerHealth     string           `json:"dockerHealth"`
+	FailureLogs      string           `json:"failureLogs"`
+	CleanupCompleted *bool            `json:"cleanupCompleted"`
+	DispatchedAt     *time.Time       `json:"dispatchedAt"`
+	StartedAt        *time.Time       `json:"startedAt"`
+	CompletedAt      *time.Time       `json:"completedAt"`
 }

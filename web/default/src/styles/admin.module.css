@@ -342,6 +342,44 @@
   grid-template-columns: 1.4fr 1fr;
 }
 
+.logGrid {
+  display: grid;
+  gap: 10px;
+}
+
+.logCard {
+  border-radius: 12px;
+  background: #f7f7f7;
+  padding: 12px 14px;
+}
+
+.logSummary {
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.logMeta {
+  display: grid;
+  gap: 4px;
+  margin-top: 10px;
+  color: var(--ep-body);
+  font-size: 12px;
+}
+
+.logBlock {
+  margin: 10px 0 0;
+  padding: 12px;
+  border-radius: 8px;
+  background: #000000;
+  color: #ffffff;
+  font-size: 12px;
+  line-height: 1.45;
+  overflow-x: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
 @media (max-width: 980px) {
   .cardGrid,
   .fieldGrid,

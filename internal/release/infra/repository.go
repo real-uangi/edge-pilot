@@ -140,15 +140,15 @@ func (r *repository) ListRecoverableTasksByAgent(agentID string) ([]model.Task, 
 	return tasks, nil
 }
 
-func (r *repository) ListStaleTasks(before time.Time) ([]model.Task, error) {
+func (r *repository) ListActiveTasks() ([]model.Task, error) {
 	var tasks []model.Task
 	if err := r.conn.Model(&model.Task{}).
 		Joins("JOIN ep_release ON ep_release.current_task_id = ep_task.id").
-		Where("ep_task.status IN ? AND ep_task.updated_at < ?", []model.TaskStatus{
+		Where("ep_task.status IN ?", []model.TaskStatus{
 			model.TaskStatusPending,
 			model.TaskStatusDispatched,
 			model.TaskStatusRunning,
-		}, before).
+		}).
 		Order("ep_task.updated_at asc").
 		Find(&tasks).Error; err != nil {
 		return nil, err

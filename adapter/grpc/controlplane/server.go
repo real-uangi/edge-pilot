@@ -5,12 +5,12 @@ import (
 	agentapp "edge-pilot/internal/agent/application"
 	observabilityapp "edge-pilot/internal/observability/application"
 	releaseapp "edge-pilot/internal/release/application"
+	releasedomain "edge-pilot/internal/release/domain"
 	servicecatalogdomain "edge-pilot/internal/servicecatalog/domain"
 	"edge-pilot/internal/shared/grpcapi"
 	"edge-pilot/internal/shared/model"
 	"edge-pilot/internal/shared/secret"
 	"errors"
-	"fmt"
 	"net"
 	"os"
 	"sync"
@@ -27,8 +27,6 @@ type sessionHub struct {
 	sessions map[string]*agentSession
 	codec    *secret.Codec
 }
-
-var ErrAgentOffline = errors.New("agent offline")
 
 type agentSession struct {
 	mu       sync.Mutex
@@ -74,7 +72,7 @@ func (h *sessionHub) DispatchTask(agentID string, task *model.Task) error {
 	session, ok := h.sessions[agentID]
 	h.mu.RUnlock()
 	if !ok {
-		return ErrAgentOffline
+		return releasedomain.ErrAgentOffline
 	}
 	protoTask, err := taskToProto(task, h.codec)
 	if err != nil {
@@ -92,7 +90,7 @@ func (h *sessionHub) ReplayTask(agentID string, task *model.Task) (bool, error) 
 	session, ok := h.sessions[agentID]
 	h.mu.RUnlock()
 	if !ok {
-		return false, ErrAgentOffline
+		return false, releasedomain.ErrAgentOffline
 	}
 	if !session.markReplay(task.ID.String()) {
 		return false, nil
@@ -116,7 +114,7 @@ func (h *sessionHub) DispatchProxyConfig(agentID string, snapshot *grpcapi.Proxy
 	session, ok := h.sessions[agentID]
 	h.mu.RUnlock()
 	if !ok {
-		return ErrAgentOffline
+		return releasedomain.ErrAgentOffline
 	}
 	return session.send(&grpcapi.ControlMessage{
 		Payload: &grpcapi.ControlMessage_ProxyConfig{
@@ -201,7 +199,7 @@ func (s *Server) Connect(stream grpcapi.AgentControl_ConnectServer) (err error) 
 		return err
 	}
 	if s.proxyConfigs != nil {
-		if err := s.proxyConfigs.PublishAgent(hello.GetAgentId()); err != nil && !errors.Is(err, ErrAgentOffline) {
+		if err := s.proxyConfigs.PublishAgent(hello.GetAgentId()); err != nil && !errors.Is(err, releasedomain.ErrAgentOffline) {
 			return err
 		}
 	}
@@ -288,7 +286,7 @@ func (s *agentSession) send(message *grpcapi.ControlMessage) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.closed {
-		return fmt.Errorf("agent %s session closed", s.agentID)
+		return releasedomain.ErrAgentOffline
 	}
 	s.sendCh <- message
 	return nil

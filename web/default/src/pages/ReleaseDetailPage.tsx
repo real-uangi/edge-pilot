@@ -20,6 +20,13 @@ function confirmAction(message: string, action: () => void) {
   }
 }
 
+function cleanupLabel(value: boolean | null) {
+  if (value == null) {
+    return "—";
+  }
+  return value ? "已清理" : "未清理";
+}
+
 export function ReleaseDetailPage() {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -172,6 +179,9 @@ export function ReleaseDetailPage() {
               <tr>
                 <th>任务</th>
                 <th>状态</th>
+                <th>阶段</th>
+                <th>Docker 状态</th>
+                <th>清理</th>
                 <th>错误</th>
                 <th>派发时间</th>
                 <th>开始时间</th>
@@ -188,6 +198,9 @@ export function ReleaseDetailPage() {
                       tone={taskStatusTone(task.status)}
                     />
                   </td>
+                  <td>{task.lastStep || "—"}</td>
+                  <td>{task.dockerHealth || "—"}</td>
+                  <td>{cleanupLabel(task.cleanupCompleted)}</td>
                   <td>{task.lastError || "—"}</td>
                   <td>{formatDateTime(task.dispatchedAt)}</td>
                   <td>{formatDateTime(task.startedAt)}</td>
@@ -197,6 +210,24 @@ export function ReleaseDetailPage() {
             </tbody>
           </table>
         </div>
+        {tasks.some((task) => task.failureLogs) ? (
+          <div className={styles.logGrid}>
+            {tasks
+              .filter((task) => task.failureLogs)
+              .map((task) => (
+                <details className={styles.logCard} key={task.id}>
+                  <summary className={styles.logSummary}>
+                    {taskTypeLabel(task.type)} · {task.lastStep || taskStatusLabel(task.status)}
+                  </summary>
+                  <div className={styles.logMeta}>
+                    <span>{task.lastError || "无错误摘要"}</span>
+                    <span>{task.dockerHealth || "无 Docker 摘要"}</span>
+                  </div>
+                  <pre className={styles.logBlock}>{task.failureLogs}</pre>
+                </details>
+              ))}
+          </div>
+        ) : null}
       </section>
     </div>
   );

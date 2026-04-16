@@ -4,6 +4,7 @@ import (
 	"context"
 	"edge-pilot/internal/shared/config"
 	"edge-pilot/internal/shared/grpcapi"
+	"edge-pilot/internal/shared/model"
 	"errors"
 	"fmt"
 	"net/http"
@@ -11,11 +12,21 @@ import (
 	"time"
 )
 
+const (
+	defaultLogTailLines   = 200
+	defaultLogMaxBytes    = 64 * 1024
+	stepHealthCheckFailed = "health_check_failed"
+	stepStartupGrace      = "startup_grace_started"
+	stepHealthProbeRetry  = "health_probe_retry"
+	stepContainerWaiting  = "container_reused_waiting"
+)
+
 type DockerRuntime interface {
 	DeployContainer(context.Context, *grpcapi.TaskCommand) (*ContainerRuntime, error)
-	InspectHealth(context.Context, string) (string, error)
+	InspectContainer(context.Context, string) (*ContainerStatus, error)
 	FindContainerByName(context.Context, string) (*ManagedContainer, error)
 	ResolveListenAddress(context.Context, string, int) (string, error)
+	ReadContainerLogs(context.Context, string, int, int) (string, error)
 	RemoveContainer(context.Context, string) error
 	ListManagedContainers(context.Context, string, string) ([]*ManagedContainer, error)
 }
@@ -34,6 +45,31 @@ type ContainerRuntime struct {
 	ListenAddress string
 }
 
+type ContainerStatus struct {
+	State   string
+	Health  string
+	Running bool
+}
+
+func (s *ContainerStatus) Terminal() bool {
+	if s == nil {
+		return false
+	}
+	switch strings.ToLower(strings.TrimSpace(s.State)) {
+	case "exited", "dead", "removing":
+		return true
+	default:
+		return false
+	}
+}
+
+type TaskFailureDiagnostic struct {
+	ContainerID      string
+	DockerHealth     string
+	FailureLogs      string
+	CleanupCompleted bool
+}
+
 var ErrProxyNotReady = errors.New("proxy stack not ready")
 
 type Executor struct {
@@ -44,8 +80,9 @@ type Executor struct {
 }
 
 type TaskExecutionError struct {
-	Step string
-	Err  error
+	Step       string
+	Err        error
+	Diagnostic *TaskFailureDiagnostic
 }
 
 func (e *TaskExecutionError) Error() string {
@@ -98,11 +135,13 @@ func (e *Executor) executeDeploy(ctx context.Context, task *grpcapi.TaskCommand,
 	if err := e.proxy.EnsureReady(ctx); err != nil {
 		return &TaskExecutionError{Step: "proxy_stack_not_ready", Err: err}
 	}
-	runtime, reused, err := e.ensureDeployContainer(ctx, task)
+	normalizeHealthConfig(task)
+	runtime, decision, err := e.ensureDeployContainer(ctx, task)
 	if err != nil {
 		return err
 	}
-	if reused {
+	switch decision {
+	case deployDecisionReuseHealthy:
 		return report(&grpcapi.TaskUpdate{
 			TaskId:        task.GetTaskId(),
 			Status:        grpcapi.TaskStatus_TASK_STATUS_SUCCEEDED,
@@ -112,28 +151,38 @@ func (e *Executor) executeDeploy(ctx context.Context, task *grpcapi.TaskCommand,
 			Slot:          task.GetTargetSlot(),
 			ServerName:    task.GetServerName(),
 		})
-	}
-	runtime, err = e.docker.DeployContainer(ctx, task)
-	if err != nil {
-		return err
-	}
-	if err := report(&grpcapi.TaskUpdate{
-		TaskId:        task.GetTaskId(),
-		Status:        grpcapi.TaskStatus_TASK_STATUS_RUNNING,
-		Step:          "container_started",
-		ContainerId:   runtime.ContainerID,
-		ListenAddress: runtime.ListenAddress,
-		Slot:          task.GetTargetSlot(),
-		ServerName:    task.GetServerName(),
-	}); err != nil {
-		return err
+	case deployDecisionWaitExisting:
+		if err := report(&grpcapi.TaskUpdate{
+			TaskId:        task.GetTaskId(),
+			Status:        grpcapi.TaskStatus_TASK_STATUS_RUNNING,
+			Step:          stepContainerWaiting,
+			ContainerId:   runtime.ContainerID,
+			ListenAddress: runtime.ListenAddress,
+			Slot:          task.GetTargetSlot(),
+			ServerName:    task.GetServerName(),
+		}); err != nil {
+			return err
+		}
+	default:
+		runtime, err = e.docker.DeployContainer(ctx, task)
+		if err != nil {
+			return err
+		}
+		if err := report(&grpcapi.TaskUpdate{
+			TaskId:        task.GetTaskId(),
+			Status:        grpcapi.TaskStatus_TASK_STATUS_RUNNING,
+			Step:          "container_started",
+			ContainerId:   runtime.ContainerID,
+			ListenAddress: runtime.ListenAddress,
+			Slot:          task.GetTargetSlot(),
+			ServerName:    task.GetServerName(),
+		}); err != nil {
+			return err
+		}
 	}
 
-	if task.GetHttpTimeoutSecond() <= 0 {
-		task.HttpTimeoutSecond = int32(e.cfg.HTTPProbeTimeoutS)
-	}
-	if err := e.waitForHealth(ctx, task, runtime); err != nil {
-		return err
+	if err := e.waitForHealth(ctx, task, runtime, report); err != nil {
+		return e.wrapTaskFailure(ctx, runtime, err)
 	}
 	return report(&grpcapi.TaskUpdate{
 		TaskId:        task.GetTaskId(),
@@ -184,73 +233,213 @@ func (e *Executor) executeTrafficSwitch(ctx context.Context, task *grpcapi.TaskC
 	})
 }
 
-func (e *Executor) ensureDeployContainer(ctx context.Context, task *grpcapi.TaskCommand) (*ContainerRuntime, bool, error) {
+type deployDecision int
+
+const (
+	deployDecisionStartNew deployDecision = iota + 1
+	deployDecisionReuseHealthy
+	deployDecisionWaitExisting
+)
+
+func (e *Executor) ensureDeployContainer(ctx context.Context, task *grpcapi.TaskCommand) (*ContainerRuntime, deployDecision, error) {
 	name := ManagedContainerName(task.GetServiceKey(), task.GetTargetSlot())
 	existing, err := e.docker.FindContainerByName(ctx, name)
 	if err != nil {
-		return nil, false, err
+		return nil, deployDecisionStartNew, err
 	}
 	if existing == nil {
-		return nil, false, nil
+		return nil, deployDecisionStartNew, nil
 	}
 	if !existing.Managed || existing.AgentID != task.GetAgentId() {
-		return nil, false, &TaskExecutionError{
+		return nil, deployDecisionStartNew, &TaskExecutionError{
 			Step: "managed_container_conflict",
 			Err:  fmt.Errorf("managed container conflict: %s exists but is not owned by agent %s", name, task.GetAgentId()),
 		}
 	}
+
+	status, statusErr := e.docker.InspectContainer(ctx, existing.ContainerID)
+	if statusErr != nil {
+		return nil, deployDecisionStartNew, statusErr
+	}
+	if status != nil && status.Terminal() {
+		if err := e.docker.RemoveContainer(ctx, existing.ContainerID); err != nil {
+			return nil, deployDecisionStartNew, err
+		}
+		return nil, deployDecisionStartNew, nil
+	}
+
+	listenAddress, err := e.docker.ResolveListenAddress(ctx, existing.ContainerID, int(task.GetContainerPort()))
+	if err != nil {
+		listenAddress = ""
+	}
+	runtime := &ContainerRuntime{
+		ContainerID:   existing.ContainerID,
+		ListenAddress: listenAddress,
+	}
 	if existing.ReleaseID == task.GetReleaseId() {
-		listenAddress, err := e.docker.ResolveListenAddress(ctx, existing.ContainerID, int(task.GetContainerPort()))
-		if err == nil {
-			if err := e.verifyHealth(ctx, task, existing.ContainerID, listenAddress); err == nil {
-				return &ContainerRuntime{
-					ContainerID:   existing.ContainerID,
-					ListenAddress: listenAddress,
-				}, true, nil
+		if listenAddress != "" {
+			if err := e.verifyHealth(ctx, task, status, listenAddress); err == nil {
+				return runtime, deployDecisionReuseHealthy, nil
 			}
+		}
+		if status != nil && status.Running {
+			return runtime, deployDecisionWaitExisting, nil
 		}
 	}
 	if err := e.docker.RemoveContainer(ctx, existing.ContainerID); err != nil {
-		return nil, false, err
+		return nil, deployDecisionStartNew, err
 	}
-	return nil, false, nil
+	return nil, deployDecisionStartNew, nil
 }
 
-func (e *Executor) waitForHealth(ctx context.Context, task *grpcapi.TaskCommand, runtime *ContainerRuntime) error {
-	if task.GetHttpHealthPath() == "" {
-		task.HttpHealthPath = "/health"
-	}
-	if task.GetHttpExpectedCode() == 0 {
-		task.HttpExpectedCode = http.StatusOK
-	}
+func (e *Executor) waitForHealth(ctx context.Context, task *grpcapi.TaskCommand, runtime *ContainerRuntime, report func(*grpcapi.TaskUpdate) error) error {
 	deadline := time.Now().Add(time.Duration(task.GetHttpTimeoutSecond()) * time.Second)
-	for {
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		default:
-		}
-		if err := e.verifyHealth(ctx, task, runtime.ContainerID, runtime.ListenAddress); err == nil {
-			return nil
-		}
-		if time.Now().After(deadline) {
-			return fmt.Errorf("health check timeout for task %s", task.GetTaskId())
-		}
-		time.Sleep(time.Second)
-	}
-}
+	probeInterval := time.Duration(defaultProbeInterval(task.GetHttpProbeIntervalSecond())) * time.Second
+	successThreshold := int(defaultSuccessThreshold(task.GetHttpSuccessThreshold()))
+	startupGrace := time.Duration(defaultStartupGrace(task.GetStartupGraceSecond())) * time.Second
 
-func (e *Executor) verifyHealth(ctx context.Context, task *grpcapi.TaskCommand, containerID string, listenAddress string) error {
-	if task.GetDockerHealthCheck() {
-		health, err := e.docker.InspectHealth(ctx, containerID)
-		if err != nil {
+	if startupGrace > 0 {
+		if err := report(&grpcapi.TaskUpdate{
+			TaskId:      task.GetTaskId(),
+			Status:      grpcapi.TaskStatus_TASK_STATUS_RUNNING,
+			Step:        stepStartupGrace,
+			ContainerId: runtime.ContainerID,
+		}); err != nil {
 			return err
 		}
-		if health != "" && health != "healthy" {
-			return errors.New("docker health not ready")
+		graceDeadline := time.Now().Add(startupGrace)
+		for time.Now().Before(graceDeadline) {
+			status, err := e.docker.InspectContainer(ctx, runtime.ContainerID)
+			if err != nil {
+				return err
+			}
+			if status != nil && status.Terminal() {
+				return fmt.Errorf("container entered terminal state during startup grace: %s", summarizeContainerStatus(status))
+			}
+			if err := sleepWithContext(ctx, minDuration(probeInterval, time.Until(graceDeadline))); err != nil {
+				return err
+			}
 		}
 	}
-	return e.httpProbe(listenAddress, defaultString(task.GetHttpHealthPath(), "/health"), defaultCode(task.GetHttpExpectedCode()), defaultTimeout(task.GetHttpTimeoutSecond(), e.cfg.HTTPProbeTimeoutS))
+
+	var lastErr error
+	consecutiveSuccess := 0
+	retryReported := false
+	for {
+		if ctx.Err() != nil {
+			return ctx.Err()
+		}
+		status, err := e.docker.InspectContainer(ctx, runtime.ContainerID)
+		if err != nil {
+			lastErr = err
+		} else if status != nil && status.Terminal() {
+			return fmt.Errorf("container entered terminal state: %s", summarizeContainerStatus(status))
+		} else {
+			if strings.TrimSpace(runtime.ListenAddress) == "" {
+				listenAddress, resolveErr := e.docker.ResolveListenAddress(ctx, runtime.ContainerID, int(task.GetContainerPort()))
+				if resolveErr != nil {
+					lastErr = resolveErr
+				} else {
+					runtime.ListenAddress = listenAddress
+				}
+			}
+			if strings.TrimSpace(runtime.ListenAddress) != "" {
+				if healthErr := e.verifyHealth(ctx, task, status, runtime.ListenAddress); healthErr == nil {
+					consecutiveSuccess++
+					if consecutiveSuccess >= successThreshold {
+						return nil
+					}
+					lastErr = nil
+				} else {
+					lastErr = healthErr
+					consecutiveSuccess = 0
+					if !retryReported {
+						retryReported = true
+						if reportErr := report(&grpcapi.TaskUpdate{
+							TaskId:       task.GetTaskId(),
+							Status:       grpcapi.TaskStatus_TASK_STATUS_RUNNING,
+							Step:         stepHealthProbeRetry,
+							ContainerId:  runtime.ContainerID,
+							ErrorMessage: healthErr.Error(),
+						}); reportErr != nil {
+							return reportErr
+						}
+					}
+				}
+			}
+		}
+		if time.Now().After(deadline) {
+			if lastErr == nil {
+				lastErr = fmt.Errorf("health check timeout for task %s", task.GetTaskId())
+			}
+			return fmt.Errorf("health check timeout for task %s: %w", task.GetTaskId(), lastErr)
+		}
+		if err := sleepWithContext(ctx, probeInterval); err != nil {
+			return err
+		}
+	}
+}
+
+func (e *Executor) verifyHealth(ctx context.Context, task *grpcapi.TaskCommand, status *ContainerStatus, listenAddress string) error {
+	if task.GetDockerHealthCheck() && status != nil {
+		health := strings.TrimSpace(status.Health)
+		if health != "" && !strings.EqualFold(health, "healthy") {
+			return fmt.Errorf("docker health not ready: %s", health)
+		}
+	}
+	return e.httpProbe(
+		listenAddress,
+		defaultString(task.GetHttpHealthPath(), "/health"),
+		defaultCode(task.GetHttpExpectedCode()),
+		defaultProbeTimeout(task.GetHttpProbeTimeoutSecond()),
+	)
+}
+
+func (e *Executor) wrapTaskFailure(ctx context.Context, runtime *ContainerRuntime, err error) error {
+	execErr, ok := err.(*TaskExecutionError)
+	if ok {
+		if execErr.Diagnostic != nil || strings.TrimSpace(runtimeID(runtime)) == "" {
+			return execErr
+		}
+	}
+	diagnostic, cleanupErr := e.collectFailureDiagnostic(ctx, runtime)
+	if cleanupErr != nil {
+		err = fmt.Errorf("%w; cleanup failed: %v", err, cleanupErr)
+	}
+	step := stepHealthCheckFailed
+	if ok && strings.TrimSpace(execErr.Step) != "" {
+		step = execErr.Step
+	}
+	return &TaskExecutionError{
+		Step:       step,
+		Err:        err,
+		Diagnostic: diagnostic,
+	}
+}
+
+func (e *Executor) collectFailureDiagnostic(ctx context.Context, runtime *ContainerRuntime) (*TaskFailureDiagnostic, error) {
+	containerID := runtimeID(runtime)
+	if containerID == "" {
+		return nil, nil
+	}
+	diagnostic := &TaskFailureDiagnostic{
+		ContainerID: containerID,
+	}
+	status, statusErr := e.docker.InspectContainer(ctx, containerID)
+	if statusErr == nil {
+		diagnostic.DockerHealth = summarizeContainerStatus(status)
+	} else {
+		diagnostic.DockerHealth = statusErr.Error()
+	}
+	logs, logsErr := e.docker.ReadContainerLogs(ctx, containerID, defaultLogTailLines, defaultLogMaxBytes)
+	if logsErr != nil {
+		diagnostic.FailureLogs = "log_capture_failed: " + logsErr.Error()
+	} else {
+		diagnostic.FailureLogs = logs
+	}
+	cleanupErr := e.docker.RemoveContainer(ctx, containerID)
+	diagnostic.CleanupCompleted = cleanupErr == nil
+	return diagnostic, cleanupErr
 }
 
 func (e *Executor) cleanupManagedContainers(ctx context.Context, task *grpcapi.TaskCommand) (int, error) {
@@ -286,6 +475,30 @@ func (e *Executor) cleanupManagedContainers(ctx context.Context, task *grpcapi.T
 	return removed, nil
 }
 
+func normalizeHealthConfig(task *grpcapi.TaskCommand) {
+	if task.GetHttpHealthPath() == "" {
+		task.HttpHealthPath = "/health"
+	}
+	if task.GetHttpExpectedCode() == 0 {
+		task.HttpExpectedCode = http.StatusOK
+	}
+	if task.GetHttpTimeoutSecond() <= 0 {
+		task.HttpTimeoutSecond = int32(modelDefaultHTTPTimeout())
+	}
+	if task.GetStartupGraceSecond() <= 0 {
+		task.StartupGraceSecond = int32(modelDefaultStartupGrace())
+	}
+	if task.GetHttpProbeTimeoutSecond() <= 0 {
+		task.HttpProbeTimeoutSecond = int32(modelDefaultProbeTimeout())
+	}
+	if task.GetHttpProbeIntervalSecond() <= 0 {
+		task.HttpProbeIntervalSecond = int32(modelDefaultProbeInterval())
+	}
+	if task.GetHttpSuccessThreshold() <= 0 {
+		task.HttpSuccessThreshold = int32(modelDefaultSuccessThreshold())
+	}
+}
+
 func defaultString(value string, fallback string) string {
 	if strings.TrimSpace(value) == "" {
 		return fallback
@@ -300,11 +513,52 @@ func defaultCode(value int32) int {
 	return int(value)
 }
 
-func defaultTimeout(value int32, fallback int) int {
+func defaultStartupGrace(value int32) int {
 	if value > 0 {
 		return int(value)
 	}
-	return fallback
+	return modelDefaultStartupGrace()
+}
+
+func defaultProbeTimeout(value int32) int {
+	if value > 0 {
+		return int(value)
+	}
+	return modelDefaultProbeTimeout()
+}
+
+func defaultProbeInterval(value int32) int {
+	if value > 0 {
+		return int(value)
+	}
+	return modelDefaultProbeInterval()
+}
+
+func defaultSuccessThreshold(value int32) int {
+	if value > 0 {
+		return int(value)
+	}
+	return modelDefaultSuccessThreshold()
+}
+
+func modelDefaultStartupGrace() int {
+	return model.DefaultStartupGraceSecond
+}
+
+func modelDefaultProbeTimeout() int {
+	return model.DefaultHTTPProbeTimeoutSecond
+}
+
+func modelDefaultProbeInterval() int {
+	return model.DefaultHTTPProbeIntervalSecond
+}
+
+func modelDefaultSuccessThreshold() int {
+	return model.DefaultHTTPSuccessThreshold
+}
+
+func modelDefaultHTTPTimeout() int {
+	return model.DefaultHTTPTimeoutSecond
 }
 
 func probeHTTP(listenAddress string, path string, expectedCode int, timeoutSeconds int) error {
@@ -320,4 +574,50 @@ func probeHTTP(listenAddress string, path string, expectedCode int, timeoutSecon
 		return fmt.Errorf("unexpected health status: %d", resp.StatusCode)
 	}
 	return nil
+}
+
+func summarizeContainerStatus(status *ContainerStatus) string {
+	if status == nil {
+		return ""
+	}
+	parts := make([]string, 0, 3)
+	if strings.TrimSpace(status.State) != "" {
+		parts = append(parts, "state="+status.State)
+	}
+	if strings.TrimSpace(status.Health) != "" {
+		parts = append(parts, "health="+status.Health)
+	}
+	parts = append(parts, fmt.Sprintf("running=%t", status.Running))
+	return strings.Join(parts, " ")
+}
+
+func sleepWithContext(ctx context.Context, duration time.Duration) error {
+	if duration <= 0 {
+		return nil
+	}
+	timer := time.NewTimer(duration)
+	defer timer.Stop()
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-timer.C:
+		return nil
+	}
+}
+
+func minDuration(left time.Duration, right time.Duration) time.Duration {
+	if right <= 0 {
+		return left
+	}
+	if left < right {
+		return left
+	}
+	return right
+}
+
+func runtimeID(runtime *ContainerRuntime) string {
+	if runtime == nil {
+		return ""
+	}
+	return strings.TrimSpace(runtime.ContainerID)
 }

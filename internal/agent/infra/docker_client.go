@@ -7,6 +7,7 @@ import (
 	"edge-pilot/internal/shared/config"
 	"edge-pilot/internal/shared/grpcapi"
 	"encoding/base64"
+	"encoding/binary"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -270,8 +271,40 @@ func consumeDockerPullStream(r io.Reader) error {
 	}
 }
 
-func (c *DockerClient) InspectHealth(ctx context.Context, containerID string) (string, error) {
+func (c *DockerClient) InspectContainer(ctx context.Context, containerID string) (*application.ContainerStatus, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "http://docker/containers/"+containerID+"/json", nil)
+	if err != nil {
+		return nil, err
+	}
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode >= 300 {
+		return nil, fmt.Errorf("docker inspect failed: %s", resp.Status)
+	}
+	var inspectResp dockerInspectResponse
+	if err := json.NewDecoder(resp.Body).Decode(&inspectResp); err != nil {
+		return nil, err
+	}
+	status := &application.ContainerStatus{
+		State:   inspectResp.State.Status,
+		Running: inspectResp.State.Running,
+	}
+	if inspectResp.State.Health != nil {
+		status.Health = inspectResp.State.Health.Status
+	}
+	return status, nil
+}
+
+func (c *DockerClient) ReadContainerLogs(ctx context.Context, containerID string, tailLines int, maxBytes int) (string, error) {
+	logURL := fmt.Sprintf(
+		"http://docker/containers/%s/logs?stdout=1&stderr=1&tail=%d",
+		url.PathEscape(containerID),
+		tailLines,
+	)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, logURL, nil)
 	if err != nil {
 		return "", err
 	}
@@ -281,19 +314,18 @@ func (c *DockerClient) InspectHealth(ctx context.Context, containerID string) (s
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode >= 300 {
-		return "", fmt.Errorf("docker inspect failed: %s", resp.Status)
+		body, _ := io.ReadAll(resp.Body)
+		return "", fmt.Errorf("docker logs failed: %s %s", resp.Status, strings.TrimSpace(string(body)))
 	}
-	var inspectResp dockerInspectResponse
-	if err := json.NewDecoder(resp.Body).Decode(&inspectResp); err != nil {
+	data, err := io.ReadAll(resp.Body)
+	if err != nil {
 		return "", err
 	}
-	if inspectResp.State.Health == nil {
-		if inspectResp.State.Running {
-			return "", nil
-		}
-		return inspectResp.State.Status, nil
+	decoded := decodeDockerLogStream(data)
+	if maxBytes > 0 && len(decoded) > maxBytes {
+		decoded = decoded[len(decoded)-maxBytes:]
 	}
-	return inspectResp.State.Health.Status, nil
+	return strings.TrimSpace(decoded), nil
 }
 
 func (c *DockerClient) FindContainerByName(ctx context.Context, name string) (*application.ManagedContainer, error) {
@@ -552,4 +584,30 @@ func parseSlot(value string) grpcapi.Slot {
 	default:
 		return grpcapi.Slot_SLOT_UNSPECIFIED
 	}
+}
+
+func decodeDockerLogStream(data []byte) string {
+	if len(data) < 8 {
+		return string(data)
+	}
+	var builder strings.Builder
+	offset := 0
+	framed := false
+	for offset+8 <= len(data) {
+		size := int(binary.BigEndian.Uint32(data[offset+4 : offset+8]))
+		next := offset + 8 + size
+		if size < 0 || next > len(data) {
+			break
+		}
+		builder.Write(data[offset+8 : next])
+		offset = next
+		framed = true
+	}
+	if !framed {
+		return string(data)
+	}
+	if offset < len(data) {
+		builder.Write(data[offset:])
+	}
+	return builder.String()
 }

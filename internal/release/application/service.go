@@ -8,6 +8,8 @@ import (
 	"edge-pilot/internal/shared/grpcapi"
 	"edge-pilot/internal/shared/model"
 	"edge-pilot/internal/shared/secret"
+	"errors"
+	"fmt"
 	"strings"
 	"time"
 
@@ -24,6 +26,13 @@ type Service struct {
 	registryAuth  releasedomain.RegistryCredentialResolver
 	codec         *secret.Codec
 }
+
+const (
+	deployImagePullBudget = 5 * time.Minute
+	deployTimeoutBuffer   = 30 * time.Second
+	switchTaskTimeout     = 1 * time.Minute
+	cleanupTaskTimeout    = 1 * time.Minute
+)
 
 func NewService(
 	repo releasedomain.Repository,
@@ -335,13 +344,17 @@ func (s *Service) ListTaskSnapshots(releaseID uuid.UUID) ([]dto.TaskSnapshot, er
 	out := make([]dto.TaskSnapshot, 0, len(tasks))
 	for i := range tasks {
 		out = append(out, dto.TaskSnapshot{
-			ID:           tasks[i].ID,
-			Type:         tasks[i].Type,
-			Status:       tasks[i].Status,
-			LastError:    tasks[i].LastError,
-			DispatchedAt: tasks[i].DispatchedAt,
-			StartedAt:    tasks[i].StartedAt,
-			CompletedAt:  tasks[i].CompletedAt,
+			ID:               tasks[i].ID,
+			Type:             tasks[i].Type,
+			Status:           tasks[i].Status,
+			LastError:        tasks[i].LastError,
+			LastStep:         tasks[i].LastStep,
+			DockerHealth:     tasks[i].DockerHealth,
+			FailureLogs:      tasks[i].FailureLogs,
+			CleanupCompleted: tasks[i].CleanupCompleted,
+			DispatchedAt:     tasks[i].DispatchedAt,
+			StartedAt:        tasks[i].StartedAt,
+			CompletedAt:      tasks[i].CompletedAt,
 		})
 	}
 	return out, nil
@@ -366,30 +379,48 @@ func (s *Service) HandleTaskUpdate(agentID string, update *grpcapi.TaskUpdate) e
 	if release == nil {
 		return business.ErrNotFound
 	}
+	if release.CurrentTaskID == nil || *release.CurrentTaskID != task.ID {
+		return s.recordLateTaskUpdate(release, task, update, "not_current_task")
+	}
+	if task.Status.IsTerminal() || release.Status.IsTerminal() {
+		return s.recordLateTaskUpdate(release, task, update, "task_or_release_terminal")
+	}
 	now := time.Now()
 	switch update.GetStatus() {
 	case grpcapi.TaskStatus_TASK_STATUS_RUNNING:
+		previousStatus := task.Status
+		previousStep := task.LastStep
 		task.Status = model.TaskStatusRunning
+		task.LastStep = update.GetStep()
 		if task.StartedAt == nil {
 			task.StartedAt = &now
+		}
+		if task.Type == model.TaskTypeDeployGreen && release.Status == model.ReleaseStatusDispatching {
+			release.Status = model.ReleaseStatusDeploying
+			if err := s.repo.UpdateRelease(release); err != nil {
+				return err
+			}
 		}
 		if err := s.repo.UpdateTask(task); err != nil {
 			return err
 		}
-		if err := s.repo.CreateTaskAttempt(&model.TaskAttempt{
-			ID:        uuid.New(),
-			TaskID:    task.ID,
-			AgentID:   agentID,
-			Status:    model.TaskStatusRunning,
-			Message:   update.GetStep(),
-			StartedAt: &now,
-		}); err != nil {
-			return err
+		if previousStatus != model.TaskStatusRunning || previousStep != update.GetStep() {
+			if err := s.repo.CreateTaskAttempt(&model.TaskAttempt{
+				ID:        uuid.New(),
+				TaskID:    task.ID,
+				AgentID:   agentID,
+				Status:    model.TaskStatusRunning,
+				Message:   update.GetStep(),
+				StartedAt: &now,
+			}); err != nil {
+				return err
+			}
 		}
 		return s.recordRunningAudit(release, task, update)
 	case grpcapi.TaskStatus_TASK_STATUS_SUCCEEDED:
 		task.Status = model.TaskStatusSucceeded
 		task.CompletedAt = &now
+		task.LastStep = update.GetStep()
 		if err := s.repo.UpdateTask(task); err != nil {
 			return err
 		}
@@ -408,6 +439,10 @@ func (s *Service) HandleTaskUpdate(agentID string, update *grpcapi.TaskUpdate) e
 		task.Status = model.TaskStatusFailed
 		task.CompletedAt = &now
 		task.LastError = update.GetErrorMessage()
+		task.LastStep = update.GetStep()
+		task.DockerHealth = update.GetDockerHealth()
+		task.FailureLogs = update.GetFailureLogs()
+		task.CleanupCompleted = boolPointer(update.GetCleanupCompleted())
 		release.Status = model.ReleaseStatusFailed
 		release.CompletedAt = &now
 		if err := s.repo.UpdateTask(task); err != nil {
@@ -428,6 +463,21 @@ func (s *Service) HandleTaskUpdate(agentID string, update *grpcapi.TaskUpdate) e
 		}
 		if update.GetStep() == "managed_container_conflict" {
 			return s.repo.CreateAudit(newAudit("release", release.ID.String(), "managed_container_conflict", release.TraceID, update.GetErrorMessage()))
+		}
+		if update.GetStep() == "health_check_failed" {
+			if err := s.repo.CreateAudit(newAudit("release", release.ID.String(), "health_check_failed", release.TraceID, coalesceNonEmpty(update.GetDockerHealth(), update.GetErrorMessage()))); err != nil {
+				return err
+			}
+		}
+		if strings.TrimSpace(update.GetFailureLogs()) != "" {
+			if err := s.repo.CreateAudit(newAudit("release", release.ID.String(), "failure_logs_uploaded", release.TraceID, truncateForAudit(update.GetFailureLogs()))); err != nil {
+				return err
+			}
+		}
+		if update.GetCleanupCompleted() {
+			if err := s.repo.CreateAudit(newAudit("release", release.ID.String(), "failed_container_cleaned", release.TraceID, task.ID.String())); err != nil {
+				return err
+			}
 		}
 		return s.repo.CreateAudit(newAudit("release", release.ID.String(), "task_failed", release.TraceID, update.GetErrorMessage()))
 	default:
@@ -507,17 +557,19 @@ func (s *Service) RecoverAgentTasks(agentID string, runningTaskIDs []string) err
 	return nil
 }
 
-func (s *Service) FailStaleTasks(before time.Time) error {
-	tasks, err := s.repo.ListStaleTasks(before)
+func (s *Service) FailStaleTasks(now time.Time) error {
+	tasks, err := s.repo.ListActiveTasks()
 	if err != nil {
 		return err
 	}
 	if len(tasks) == 0 {
 		return nil
 	}
-	now := time.Now()
 	for i := range tasks {
 		task := tasks[i]
+		if !taskTimedOut(&task, now) {
+			continue
+		}
 		release, err := s.repo.GetRelease(task.ReleaseID)
 		if err != nil {
 			return err
@@ -525,9 +577,16 @@ func (s *Service) FailStaleTasks(before time.Time) error {
 		if release == nil {
 			continue
 		}
+		if release.CurrentTaskID == nil || *release.CurrentTaskID != task.ID {
+			continue
+		}
+		if task.Status.IsTerminal() || release.Status.IsTerminal() {
+			continue
+		}
 		task.Status = model.TaskStatusTimedOut
 		task.CompletedAt = &now
 		task.LastError = "task timed out"
+		task.LastStep = "task_timed_out"
 		if err := s.repo.UpdateTask(&task); err != nil {
 			return err
 		}
@@ -565,6 +624,7 @@ func (s *Service) dispatch(task *model.Task) error {
 	now := time.Now()
 	task.Status = model.TaskStatusDispatched
 	task.DispatchedAt = &now
+	task.LastStep = "dispatched"
 	if err := s.repo.UpdateTask(task); err != nil {
 		return err
 	}
@@ -578,7 +638,28 @@ func (s *Service) dispatch(task *model.Task) error {
 	}); err != nil {
 		return err
 	}
-	return s.dispatcher.DispatchTask(task.AgentID, task)
+	if err := s.dispatcher.DispatchTask(task.AgentID, task); err != nil {
+		if !errors.Is(err, releasedomain.ErrAgentOffline) {
+			return err
+		}
+		task.Status = model.TaskStatusPending
+		task.DispatchedAt = nil
+		task.LastStep = "dispatch_deferred"
+		if updateErr := s.repo.UpdateTask(task); updateErr != nil {
+			return updateErr
+		}
+		release, getErr := s.repo.GetRelease(task.ReleaseID)
+		if getErr != nil {
+			return getErr
+		}
+		if release != nil {
+			if auditErr := s.repo.CreateAudit(newAudit("release", release.ID.String(), "dispatch_deferred", release.TraceID, task.ID.String())); auditErr != nil {
+				return auditErr
+			}
+		}
+		return nil
+	}
+	return nil
 }
 
 func (s *Service) recordRunningAudit(release *model.Release, task *model.Task, update *grpcapi.TaskUpdate) error {
@@ -591,6 +672,10 @@ func (s *Service) recordRunningAudit(release *model.Release, task *model.Task, u
 		return s.repo.CreateAudit(newAudit("release", release.ID.String(), "cleanup_pruned", release.TraceID, step))
 	case step == "cleanup_failed":
 		return s.repo.CreateAudit(newAudit("release", release.ID.String(), "cleanup_failed", release.TraceID, coalesceNonEmpty(update.GetErrorMessage(), step)))
+	case step == "startup_grace_started":
+		return s.repo.CreateAudit(newAudit("release", release.ID.String(), "startup_grace_started", release.TraceID, step))
+	case step == "health_probe_retry":
+		return s.repo.CreateAudit(newAudit("release", release.ID.String(), "health_probe_retry", release.TraceID, coalesceNonEmpty(update.GetErrorMessage(), step)))
 	default:
 		return nil
 	}
@@ -662,10 +747,8 @@ func (s *Service) updateTrafficFlags(serviceID uuid.UUID, liveSlot model.Slot, o
 		return err
 	}
 	if current != nil {
-		healthy := true
 		accepting := true
 		active := true
-		current.Healthy = &healthy
 		current.AcceptingTraffic = &accepting
 		current.Active = &active
 		if err := s.repo.UpsertRuntimeInstance(current); err != nil {
@@ -677,10 +760,8 @@ func (s *Service) updateTrafficFlags(serviceID uuid.UUID, liveSlot model.Slot, o
 		return err
 	}
 	if old != nil {
-		healthy := true
 		accepting := false
 		active := true
-		old.Healthy = &healthy
 		old.AcceptingTraffic = &accepting
 		old.Active = &active
 		if err := s.repo.UpsertRuntimeInstance(old); err != nil {
@@ -692,26 +773,30 @@ func (s *Service) updateTrafficFlags(serviceID uuid.UUID, liveSlot model.Slot, o
 
 func (s *Service) newDeployTask(release *model.Release, spec *dto.ServiceDeploymentSpec, req dto.CreateReleaseFromCIRequest, registryAuth *releasedomain.ResolvedRegistryCredential) (*model.Task, error) {
 	payload := model.TaskPayload{
-		ServiceID:         spec.ID,
-		ServiceKey:        spec.ServiceKey,
-		ImageRepo:         firstNonEmpty(req.ImageRepo, spec.ImageRepo),
-		ImageTag:          req.ImageTag,
-		CommitSHA:         req.CommitSHA,
-		TraceID:           req.TraceID,
-		TargetSlot:        release.TargetSlot,
-		CurrentLiveSlot:   spec.CurrentLiveSlot,
-		ContainerPort:     spec.ContainerPort,
-		DockerHealthCheck: spec.DockerHealthCheck,
-		HTTPHealthPath:    firstNonEmpty(spec.HTTPHealthPath, "/health"),
-		HTTPExpectedCode:  defaultInt(spec.HTTPExpectedCode, 200),
-		HTTPTimeoutSecond: defaultInt(spec.HTTPTimeoutSecond, 5),
-		BackendName:       servicecatalogapp.BackendName(spec.ID),
-		ServerName:        servicecatalogapp.ServerName(release.TargetSlot),
-		PreviousServer:    servicecatalogapp.ServerName(spec.CurrentLiveSlot),
-		Command:           spec.Command,
-		Entrypoint:        spec.Entrypoint,
-		Volumes:           toModelVolumeMounts(spec.Volumes),
-		PublishedPorts:    toModelPublishedPorts(spec.PublishedPorts),
+		ServiceID:               spec.ID,
+		ServiceKey:              spec.ServiceKey,
+		ImageRepo:               firstNonEmpty(req.ImageRepo, spec.ImageRepo),
+		ImageTag:                req.ImageTag,
+		CommitSHA:               req.CommitSHA,
+		TraceID:                 req.TraceID,
+		TargetSlot:              release.TargetSlot,
+		CurrentLiveSlot:         spec.CurrentLiveSlot,
+		ContainerPort:           spec.ContainerPort,
+		DockerHealthCheck:       spec.DockerHealthCheck,
+		HTTPHealthPath:          firstNonEmpty(spec.HTTPHealthPath, "/health"),
+		HTTPExpectedCode:        defaultInt(spec.HTTPExpectedCode, model.DefaultHTTPExpectedCode),
+		HTTPTimeoutSecond:       defaultInt(spec.HTTPTimeoutSecond, model.DefaultHTTPTimeoutSecond),
+		StartupGraceSecond:      defaultInt(spec.StartupGraceSecond, model.DefaultStartupGraceSecond),
+		HTTPProbeTimeoutSecond:  defaultInt(spec.HTTPProbeTimeoutSecond, model.DefaultHTTPProbeTimeoutSecond),
+		HTTPProbeIntervalSecond: defaultInt(spec.HTTPProbeIntervalSecond, model.DefaultHTTPProbeIntervalSecond),
+		HTTPSuccessThreshold:    defaultInt(spec.HTTPSuccessThreshold, model.DefaultHTTPSuccessThreshold),
+		BackendName:             servicecatalogapp.BackendName(spec.ID),
+		ServerName:              servicecatalogapp.ServerName(release.TargetSlot),
+		PreviousServer:          servicecatalogapp.ServerName(spec.CurrentLiveSlot),
+		Command:                 spec.Command,
+		Entrypoint:              spec.Entrypoint,
+		Volumes:                 toModelVolumeMounts(spec.Volumes),
+		PublishedPorts:          toModelPublishedPorts(spec.PublishedPorts),
 	}
 	sensitive := model.TaskSensitivePayload{
 		Env: spec.Env,
@@ -742,26 +827,30 @@ func (s *Service) newDeployTask(release *model.Release, spec *dto.ServiceDeploym
 
 func (s *Service) newSwitchTask(release *model.Release, spec *dto.ServiceDeploymentSpec, taskType model.TaskType) (*model.Task, error) {
 	payload := model.TaskPayload{
-		ServiceID:         spec.ID,
-		ServiceKey:        spec.ServiceKey,
-		ImageRepo:         spec.ImageRepo,
-		ImageTag:          release.ImageTag,
-		CommitSHA:         release.CommitSHA,
-		TraceID:           release.TraceID,
-		TargetSlot:        release.TargetSlot,
-		CurrentLiveSlot:   release.PreviousLiveSlot,
-		ContainerPort:     spec.ContainerPort,
-		DockerHealthCheck: spec.DockerHealthCheck,
-		HTTPHealthPath:    firstNonEmpty(spec.HTTPHealthPath, "/health"),
-		HTTPExpectedCode:  defaultInt(spec.HTTPExpectedCode, 200),
-		HTTPTimeoutSecond: defaultInt(spec.HTTPTimeoutSecond, 5),
-		BackendName:       servicecatalogapp.BackendName(spec.ID),
-		ServerName:        servicecatalogapp.ServerName(release.TargetSlot),
-		PreviousServer:    servicecatalogapp.ServerName(release.PreviousLiveSlot),
-		Command:           spec.Command,
-		Entrypoint:        spec.Entrypoint,
-		Volumes:           toModelVolumeMounts(spec.Volumes),
-		PublishedPorts:    toModelPublishedPorts(spec.PublishedPorts),
+		ServiceID:               spec.ID,
+		ServiceKey:              spec.ServiceKey,
+		ImageRepo:               spec.ImageRepo,
+		ImageTag:                release.ImageTag,
+		CommitSHA:               release.CommitSHA,
+		TraceID:                 release.TraceID,
+		TargetSlot:              release.TargetSlot,
+		CurrentLiveSlot:         release.PreviousLiveSlot,
+		ContainerPort:           spec.ContainerPort,
+		DockerHealthCheck:       spec.DockerHealthCheck,
+		HTTPHealthPath:          firstNonEmpty(spec.HTTPHealthPath, "/health"),
+		HTTPExpectedCode:        defaultInt(spec.HTTPExpectedCode, model.DefaultHTTPExpectedCode),
+		HTTPTimeoutSecond:       defaultInt(spec.HTTPTimeoutSecond, model.DefaultHTTPTimeoutSecond),
+		StartupGraceSecond:      defaultInt(spec.StartupGraceSecond, model.DefaultStartupGraceSecond),
+		HTTPProbeTimeoutSecond:  defaultInt(spec.HTTPProbeTimeoutSecond, model.DefaultHTTPProbeTimeoutSecond),
+		HTTPProbeIntervalSecond: defaultInt(spec.HTTPProbeIntervalSecond, model.DefaultHTTPProbeIntervalSecond),
+		HTTPSuccessThreshold:    defaultInt(spec.HTTPSuccessThreshold, model.DefaultHTTPSuccessThreshold),
+		BackendName:             servicecatalogapp.BackendName(spec.ID),
+		ServerName:              servicecatalogapp.ServerName(release.TargetSlot),
+		PreviousServer:          servicecatalogapp.ServerName(release.PreviousLiveSlot),
+		Command:                 spec.Command,
+		Entrypoint:              spec.Entrypoint,
+		Volumes:                 toModelVolumeMounts(spec.Volumes),
+		PublishedPorts:          toModelPublishedPorts(spec.PublishedPorts),
 	}
 	ciphertext, keyVersion, plaintextSensitive, err := s.prepareTaskSensitive(spec, model.TaskSensitivePayload{Env: spec.Env})
 	if err != nil {
@@ -783,23 +872,30 @@ func (s *Service) newSwitchTask(release *model.Release, spec *dto.ServiceDeploym
 
 func (s *Service) newRollbackTask(release *model.Release, spec *dto.ServiceDeploymentSpec) (*model.Task, error) {
 	payload := model.TaskPayload{
-		ServiceID:         spec.ID,
-		ServiceKey:        spec.ServiceKey,
-		ImageRepo:         spec.ImageRepo,
-		ImageTag:          release.ImageTag,
-		CommitSHA:         release.CommitSHA,
-		TraceID:           release.TraceID,
-		TargetSlot:        release.PreviousLiveSlot,
-		CurrentLiveSlot:   spec.CurrentLiveSlot,
-		ContainerPort:     spec.ContainerPort,
-		DockerHealthCheck: spec.DockerHealthCheck,
-		BackendName:       servicecatalogapp.BackendName(spec.ID),
-		ServerName:        servicecatalogapp.ServerName(release.PreviousLiveSlot),
-		PreviousServer:    servicecatalogapp.ServerName(spec.CurrentLiveSlot),
-		Command:           spec.Command,
-		Entrypoint:        spec.Entrypoint,
-		Volumes:           toModelVolumeMounts(spec.Volumes),
-		PublishedPorts:    toModelPublishedPorts(spec.PublishedPorts),
+		ServiceID:               spec.ID,
+		ServiceKey:              spec.ServiceKey,
+		ImageRepo:               spec.ImageRepo,
+		ImageTag:                release.ImageTag,
+		CommitSHA:               release.CommitSHA,
+		TraceID:                 release.TraceID,
+		TargetSlot:              release.PreviousLiveSlot,
+		CurrentLiveSlot:         spec.CurrentLiveSlot,
+		ContainerPort:           spec.ContainerPort,
+		DockerHealthCheck:       spec.DockerHealthCheck,
+		HTTPHealthPath:          firstNonEmpty(spec.HTTPHealthPath, "/health"),
+		HTTPExpectedCode:        defaultInt(spec.HTTPExpectedCode, model.DefaultHTTPExpectedCode),
+		HTTPTimeoutSecond:       defaultInt(spec.HTTPTimeoutSecond, model.DefaultHTTPTimeoutSecond),
+		StartupGraceSecond:      defaultInt(spec.StartupGraceSecond, model.DefaultStartupGraceSecond),
+		HTTPProbeTimeoutSecond:  defaultInt(spec.HTTPProbeTimeoutSecond, model.DefaultHTTPProbeTimeoutSecond),
+		HTTPProbeIntervalSecond: defaultInt(spec.HTTPProbeIntervalSecond, model.DefaultHTTPProbeIntervalSecond),
+		HTTPSuccessThreshold:    defaultInt(spec.HTTPSuccessThreshold, model.DefaultHTTPSuccessThreshold),
+		BackendName:             servicecatalogapp.BackendName(spec.ID),
+		ServerName:              servicecatalogapp.ServerName(release.PreviousLiveSlot),
+		PreviousServer:          servicecatalogapp.ServerName(spec.CurrentLiveSlot),
+		Command:                 spec.Command,
+		Entrypoint:              spec.Entrypoint,
+		Volumes:                 toModelVolumeMounts(spec.Volumes),
+		PublishedPorts:          toModelPublishedPorts(spec.PublishedPorts),
 	}
 	ciphertext, keyVersion, plaintextSensitive, err := s.prepareTaskSensitive(spec, model.TaskSensitivePayload{Env: spec.Env})
 	if err != nil {
@@ -883,6 +979,48 @@ func newAudit(aggregateType string, aggregateID string, eventType string, traceI
 	}
 }
 
+func (s *Service) recordLateTaskUpdate(release *model.Release, task *model.Task, update *grpcapi.TaskUpdate, reason string) error {
+	if release == nil {
+		return nil
+	}
+	message := fmt.Sprintf("reason=%s taskId=%s status=%s step=%s", reason, task.ID.String(), update.GetStatus().String(), update.GetStep())
+	return s.repo.CreateAudit(newAudit("release", release.ID.String(), "late_task_update_ignored", release.TraceID, message))
+}
+
+func taskTimedOut(task *model.Task, now time.Time) bool {
+	if task == nil {
+		return false
+	}
+	lastUpdatedAt := task.UpdatedAt
+	if lastUpdatedAt.IsZero() {
+		lastUpdatedAt = task.CreatedAt
+	}
+	if lastUpdatedAt.IsZero() {
+		return false
+	}
+	return lastUpdatedAt.Add(timeoutForTask(task)).Before(now)
+}
+
+func timeoutForTask(task *model.Task) time.Duration {
+	if task == nil {
+		return switchTaskTimeout
+	}
+	payload := getJSON(task.Payload)
+	switch task.Type {
+	case model.TaskTypeDeployGreen:
+		return deployImagePullBudget +
+			time.Duration(defaultInt(payload.StartupGraceSecond, model.DefaultStartupGraceSecond))*time.Second +
+			time.Duration(defaultInt(payload.HTTPTimeoutSecond, model.DefaultHTTPTimeoutSecond))*time.Second +
+			deployTimeoutBuffer
+	case model.TaskTypeSwitchTraffic, model.TaskTypeRollback:
+		return switchTaskTimeout
+	case model.TaskTypeCleanupOld:
+		return cleanupTaskTimeout
+	default:
+		return switchTaskTimeout
+	}
+}
+
 func coalesceNonEmpty(values ...string) string {
 	for _, value := range values {
 		if strings.TrimSpace(value) != "" {
@@ -953,4 +1091,12 @@ func defaultInt(v int, fallback int) int {
 		return v
 	}
 	return fallback
+}
+
+func truncateForAudit(value string) string {
+	const maxLen = 512
+	if len(value) <= maxLen {
+		return value
+	}
+	return value[len(value)-maxLen:]
 }

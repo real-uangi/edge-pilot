@@ -133,6 +133,24 @@ export function ServiceEditorPage() {
             <label className={styles.field}>
               <span className={styles.label}>超时秒数</span>
               <input className={styles.input} type="number" {...form.register("httpTimeoutSecond")} />
+              <span className={styles.hint}>总预热窗口，默认 90 秒</span>
+            </label>
+            <label className={styles.field}>
+              <span className={styles.label}>启动宽限秒数</span>
+              <input className={styles.input} type="number" {...form.register("startupGraceSecond")} />
+              <span className={styles.hint}>容器启动后先等待，再进入探测循环</span>
+            </label>
+            <label className={styles.field}>
+              <span className={styles.label}>单次探测超时</span>
+              <input className={styles.input} type="number" {...form.register("httpProbeTimeoutSecond")} />
+            </label>
+            <label className={styles.field}>
+              <span className={styles.label}>探测间隔秒数</span>
+              <input className={styles.input} type="number" {...form.register("httpProbeIntervalSecond")} />
+            </label>
+            <label className={styles.field}>
+              <span className={styles.label}>连续成功阈值</span>
+              <input className={styles.input} type="number" {...form.register("httpSuccessThreshold")} />
             </label>
             <label className={styles.field}>
               <span className={styles.checkboxRow}>
@@ -203,6 +221,24 @@ export function ServiceEditorPage() {
               <div className={styles.keyValue}>
                 <span className={styles.key}>Docker 探活</span>
                 <span className={styles.value}>{boolLabel(serviceQuery.data.dockerHealthCheck)}</span>
+              </div>
+              <div className={styles.keyValue}>
+                <span className={styles.key}>预热窗口</span>
+                <span className={styles.value}>{serviceQuery.data.httpTimeoutSecond}s</span>
+              </div>
+              <div className={styles.keyValue}>
+                <span className={styles.key}>启动宽限</span>
+                <span className={styles.value}>{serviceQuery.data.startupGraceSecond}s</span>
+              </div>
+              <div className={styles.keyValue}>
+                <span className={styles.key}>探测节奏</span>
+                <span className={styles.value}>
+                  {serviceQuery.data.httpProbeIntervalSecond}s / timeout {serviceQuery.data.httpProbeTimeoutSecond}s
+                </span>
+              </div>
+              <div className={styles.keyValue}>
+                <span className={styles.key}>连续成功</span>
+                <span className={styles.value}>{serviceQuery.data.httpSuccessThreshold} 次</span>
               </div>
               <div className={styles.keyValue}>
                 <span className={styles.key}>更新时间</span>

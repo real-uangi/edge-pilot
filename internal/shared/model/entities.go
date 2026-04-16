@@ -14,6 +14,15 @@ const (
 	SlotGreen
 )
 
+const (
+	DefaultStartupGraceSecond      = 15
+	DefaultHTTPExpectedCode        = 200
+	DefaultHTTPTimeoutSecond       = 90
+	DefaultHTTPProbeTimeoutSecond  = 2
+	DefaultHTTPProbeIntervalSecond = 1
+	DefaultHTTPSuccessThreshold    = 2
+)
+
 type ReleaseStatus int
 
 const (
@@ -44,6 +53,18 @@ func (s ReleaseStatus) IsQueued() bool {
 	return s == ReleaseStatusQueued
 }
 
+func (s ReleaseStatus) IsTerminal() bool {
+	switch s {
+	case ReleaseStatusCompleted,
+		ReleaseStatusFailed,
+		ReleaseStatusRolledBack,
+		ReleaseStatusSkipped:
+		return true
+	default:
+		return false
+	}
+}
+
 type TaskType int
 
 const (
@@ -64,29 +85,44 @@ const (
 	TaskStatusTimedOut
 )
 
+func (s TaskStatus) IsTerminal() bool {
+	switch s {
+	case TaskStatusSucceeded,
+		TaskStatusFailed,
+		TaskStatusTimedOut:
+		return true
+	default:
+		return false
+	}
+}
+
 type Service struct {
 	ID uuid.UUID `json:"id" gorm:"type:uuid;primaryKey"`
 	commondb.Model
-	ServiceKey        string                             `json:"serviceKey" gorm:"size:128;uniqueIndex;not null"`
-	Name              string                             `json:"name" gorm:"size:255;not null"`
-	AgentID           string                             `json:"agentId" gorm:"size:128;index;not null"`
-	ImageRepo         string                             `json:"imageRepo" gorm:"size:512;not null"`
-	ContainerPort     int                                `json:"containerPort"`
-	CurrentLiveSlot   Slot                               `json:"currentLiveSlot"`
-	DockerHealthCheck *bool                              `json:"dockerHealthCheck" gorm:"not null"`
-	HTTPHealthPath    string                             `json:"httpHealthPath" gorm:"size:255"`
-	HTTPExpectedCode  int                                `json:"httpExpectedCode"`
-	HTTPTimeoutSecond int                                `json:"httpTimeoutSecond"`
-	RouteHost         string                             `json:"routeHost" gorm:"size:255;index;not null"`
-	RoutePathPrefix   string                             `json:"routePathPrefix" gorm:"size:255;index;not null"`
-	Env               *commondb.JSONB[map[string]string] `json:"env" gorm:"type:jsonb"`
-	EnvCiphertext     string                             `json:"envCiphertext" gorm:"type:text"`
-	EnvKeyVersion     string                             `json:"envKeyVersion" gorm:"size:64"`
-	Command           *commondb.JSONB[[]string]          `json:"command" gorm:"type:jsonb"`
-	Entrypoint        *commondb.JSONB[[]string]          `json:"entrypoint" gorm:"type:jsonb"`
-	Volumes           *commondb.JSONB[[]VolumeMount]     `json:"volumes" gorm:"type:jsonb"`
-	PublishedPorts    *commondb.JSONB[[]PublishedPort]   `json:"publishedPorts" gorm:"type:jsonb"`
-	Enabled           *bool                              `json:"enabled" gorm:"not null"`
+	ServiceKey              string                             `json:"serviceKey" gorm:"size:128;uniqueIndex;not null"`
+	Name                    string                             `json:"name" gorm:"size:255;not null"`
+	AgentID                 string                             `json:"agentId" gorm:"size:128;index;not null"`
+	ImageRepo               string                             `json:"imageRepo" gorm:"size:512;not null"`
+	ContainerPort           int                                `json:"containerPort"`
+	CurrentLiveSlot         Slot                               `json:"currentLiveSlot"`
+	DockerHealthCheck       *bool                              `json:"dockerHealthCheck" gorm:"not null"`
+	HTTPHealthPath          string                             `json:"httpHealthPath" gorm:"size:255"`
+	HTTPExpectedCode        int                                `json:"httpExpectedCode"`
+	HTTPTimeoutSecond       int                                `json:"httpTimeoutSecond"`
+	StartupGraceSecond      int                                `json:"startupGraceSecond"`
+	HTTPProbeTimeoutSecond  int                                `json:"httpProbeTimeoutSecond"`
+	HTTPProbeIntervalSecond int                                `json:"httpProbeIntervalSecond"`
+	HTTPSuccessThreshold    int                                `json:"httpSuccessThreshold"`
+	RouteHost               string                             `json:"routeHost" gorm:"size:255;index;not null"`
+	RoutePathPrefix         string                             `json:"routePathPrefix" gorm:"size:255;index;not null"`
+	Env                     *commondb.JSONB[map[string]string] `json:"env" gorm:"type:jsonb"`
+	EnvCiphertext           string                             `json:"envCiphertext" gorm:"type:text"`
+	EnvKeyVersion           string                             `json:"envKeyVersion" gorm:"size:64"`
+	Command                 *commondb.JSONB[[]string]          `json:"command" gorm:"type:jsonb"`
+	Entrypoint              *commondb.JSONB[[]string]          `json:"entrypoint" gorm:"type:jsonb"`
+	Volumes                 *commondb.JSONB[[]VolumeMount]     `json:"volumes" gorm:"type:jsonb"`
+	PublishedPorts          *commondb.JSONB[[]PublishedPort]   `json:"publishedPorts" gorm:"type:jsonb"`
+	Enabled                 *bool                              `json:"enabled" gorm:"not null"`
 }
 
 func (Service) TableName() string {
@@ -151,6 +187,10 @@ type Task struct {
 	SensitiveCiphertext string                       `json:"sensitiveCiphertext" gorm:"type:text"`
 	SensitiveKeyVersion string                       `json:"sensitiveKeyVersion" gorm:"size:64"`
 	LastError           string                       `json:"lastError" gorm:"type:text"`
+	LastStep            string                       `json:"lastStep" gorm:"type:text"`
+	DockerHealth        string                       `json:"dockerHealth" gorm:"type:text"`
+	FailureLogs         string                       `json:"failureLogs" gorm:"type:text"`
+	CleanupCompleted    *bool                        `json:"cleanupCompleted"`
 	DispatchedAt        *time.Time                   `json:"dispatchedAt" gorm:"type:timestamptz"`
 	StartedAt           *time.Time                   `json:"startedAt" gorm:"type:timestamptz"`
 	CompletedAt         *time.Time                   `json:"completedAt" gorm:"type:timestamptz"`
@@ -161,30 +201,34 @@ func (Task) TableName() string {
 }
 
 type TaskPayload struct {
-	ServiceID         uuid.UUID         `json:"serviceId"`
-	ServiceKey        string            `json:"serviceKey"`
-	ImageRepo         string            `json:"imageRepo"`
-	ImageTag          string            `json:"imageTag"`
-	RegistryHost      string            `json:"registryHost,omitempty"`
-	RegistryUsername  string            `json:"registryUsername,omitempty"`
-	RegistrySecret    string            `json:"registrySecret,omitempty"`
-	CommitSHA         string            `json:"commitSha"`
-	TraceID           string            `json:"traceId"`
-	TargetSlot        Slot              `json:"targetSlot"`
-	CurrentLiveSlot   Slot              `json:"currentLiveSlot"`
-	ContainerPort     int               `json:"containerPort"`
-	DockerHealthCheck bool              `json:"dockerHealthCheck"`
-	HTTPHealthPath    string            `json:"httpHealthPath"`
-	HTTPExpectedCode  int               `json:"httpExpectedCode"`
-	HTTPTimeoutSecond int               `json:"httpTimeoutSecond"`
-	BackendName       string            `json:"backendName"`
-	ServerName        string            `json:"serverName"`
-	PreviousServer    string            `json:"previousServer"`
-	Env               map[string]string `json:"env,omitempty"`
-	Command           []string          `json:"command,omitempty"`
-	Entrypoint        []string          `json:"entrypoint,omitempty"`
-	Volumes           []VolumeMount     `json:"volumes,omitempty"`
-	PublishedPorts    []PublishedPort   `json:"publishedPorts,omitempty"`
+	ServiceID               uuid.UUID         `json:"serviceId"`
+	ServiceKey              string            `json:"serviceKey"`
+	ImageRepo               string            `json:"imageRepo"`
+	ImageTag                string            `json:"imageTag"`
+	RegistryHost            string            `json:"registryHost,omitempty"`
+	RegistryUsername        string            `json:"registryUsername,omitempty"`
+	RegistrySecret          string            `json:"registrySecret,omitempty"`
+	CommitSHA               string            `json:"commitSha"`
+	TraceID                 string            `json:"traceId"`
+	TargetSlot              Slot              `json:"targetSlot"`
+	CurrentLiveSlot         Slot              `json:"currentLiveSlot"`
+	ContainerPort           int               `json:"containerPort"`
+	DockerHealthCheck       bool              `json:"dockerHealthCheck"`
+	HTTPHealthPath          string            `json:"httpHealthPath"`
+	HTTPExpectedCode        int               `json:"httpExpectedCode"`
+	HTTPTimeoutSecond       int               `json:"httpTimeoutSecond"`
+	StartupGraceSecond      int               `json:"startupGraceSecond"`
+	HTTPProbeTimeoutSecond  int               `json:"httpProbeTimeoutSecond"`
+	HTTPProbeIntervalSecond int               `json:"httpProbeIntervalSecond"`
+	HTTPSuccessThreshold    int               `json:"httpSuccessThreshold"`
+	BackendName             string            `json:"backendName"`
+	ServerName              string            `json:"serverName"`
+	PreviousServer          string            `json:"previousServer"`
+	Env                     map[string]string `json:"env,omitempty"`
+	Command                 []string          `json:"command,omitempty"`
+	Entrypoint              []string          `json:"entrypoint,omitempty"`
+	Volumes                 []VolumeMount     `json:"volumes,omitempty"`
+	PublishedPorts          []PublishedPort   `json:"publishedPorts,omitempty"`
 }
 
 type TaskSensitivePayload struct {

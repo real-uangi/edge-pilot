@@ -194,11 +194,27 @@ func (s *Service) buildServiceEntity(id uuid.UUID, req dto.UpsertServiceRequest)
 	}
 	expectedCode := req.HTTPExpectedCode
 	if expectedCode == 0 {
-		expectedCode = 200
+		expectedCode = model.DefaultHTTPExpectedCode
 	}
 	timeoutSeconds := req.HTTPTimeoutSecond
 	if timeoutSeconds == 0 {
-		timeoutSeconds = 5
+		timeoutSeconds = model.DefaultHTTPTimeoutSecond
+	}
+	startupGraceSecond := req.StartupGraceSecond
+	if startupGraceSecond == 0 {
+		startupGraceSecond = model.DefaultStartupGraceSecond
+	}
+	httpProbeTimeoutSecond := req.HTTPProbeTimeoutSecond
+	if httpProbeTimeoutSecond == 0 {
+		httpProbeTimeoutSecond = model.DefaultHTTPProbeTimeoutSecond
+	}
+	httpProbeIntervalSecond := req.HTTPProbeIntervalSecond
+	if httpProbeIntervalSecond == 0 {
+		httpProbeIntervalSecond = model.DefaultHTTPProbeIntervalSecond
+	}
+	httpSuccessThreshold := req.HTTPSuccessThreshold
+	if httpSuccessThreshold == 0 {
+		httpSuccessThreshold = model.DefaultHTTPSuccessThreshold
 	}
 	envCiphertext, envKeyVersion, err := s.encryptEnv(req.Env)
 	if err != nil {
@@ -206,26 +222,30 @@ func (s *Service) buildServiceEntity(id uuid.UUID, req dto.UpsertServiceRequest)
 	}
 
 	return &model.Service{
-		ID:                id,
-		ServiceKey:        req.ServiceKey,
-		Name:              req.Name,
-		AgentID:           req.AgentID,
-		ImageRepo:         req.ImageRepo,
-		ContainerPort:     req.ContainerPort,
-		DockerHealthCheck: dockerHealth,
-		HTTPHealthPath:    req.HTTPHealthPath,
-		HTTPExpectedCode:  expectedCode,
-		HTTPTimeoutSecond: timeoutSeconds,
-		RouteHost:         NormalizeRouteHost(req.RouteHost),
-		RoutePathPrefix:   NormalizeRoutePathPrefix(req.RoutePathPrefix),
-		Env:               nil,
-		EnvCiphertext:     envCiphertext,
-		EnvKeyVersion:     envKeyVersion,
-		Command:           commondb.NewJSONB(req.Command),
-		Entrypoint:        commondb.NewJSONB(req.Entrypoint),
-		Volumes:           commondb.NewJSONB(toModelVolumes(req.Volumes)),
-		PublishedPorts:    commondb.NewJSONB(toModelPublishedPorts(req.PublishedPorts)),
-		Enabled:           enabled,
+		ID:                      id,
+		ServiceKey:              req.ServiceKey,
+		Name:                    req.Name,
+		AgentID:                 req.AgentID,
+		ImageRepo:               req.ImageRepo,
+		ContainerPort:           req.ContainerPort,
+		DockerHealthCheck:       dockerHealth,
+		HTTPHealthPath:          req.HTTPHealthPath,
+		HTTPExpectedCode:        expectedCode,
+		HTTPTimeoutSecond:       timeoutSeconds,
+		StartupGraceSecond:      startupGraceSecond,
+		HTTPProbeTimeoutSecond:  httpProbeTimeoutSecond,
+		HTTPProbeIntervalSecond: httpProbeIntervalSecond,
+		HTTPSuccessThreshold:    httpSuccessThreshold,
+		RouteHost:               NormalizeRouteHost(req.RouteHost),
+		RoutePathPrefix:         NormalizeRoutePathPrefix(req.RoutePathPrefix),
+		Env:                     nil,
+		EnvCiphertext:           envCiphertext,
+		EnvKeyVersion:           envKeyVersion,
+		Command:                 commondb.NewJSONB(req.Command),
+		Entrypoint:              commondb.NewJSONB(req.Entrypoint),
+		Volumes:                 commondb.NewJSONB(toModelVolumes(req.Volumes)),
+		PublishedPorts:          commondb.NewJSONB(toModelPublishedPorts(req.PublishedPorts)),
+		Enabled:                 enabled,
 	}, nil
 }
 
@@ -258,27 +278,31 @@ func (s *Service) toServiceOutput(service *model.Service) (dto.ServiceOutput, er
 		return dto.ServiceOutput{}, err
 	}
 	return dto.ServiceOutput{
-		ID:                service.ID,
-		Name:              service.Name,
-		ServiceKey:        service.ServiceKey,
-		AgentID:           service.AgentID,
-		ImageRepo:         service.ImageRepo,
-		ContainerPort:     service.ContainerPort,
-		CurrentLiveSlot:   service.CurrentLiveSlot,
-		DockerHealthCheck: service.DockerHealthCheck,
-		HTTPHealthPath:    service.HTTPHealthPath,
-		HTTPExpectedCode:  service.HTTPExpectedCode,
-		HTTPTimeoutSecond: service.HTTPTimeoutSecond,
-		RouteHost:         service.RouteHost,
-		RoutePathPrefix:   service.RoutePathPrefix,
-		Env:               env,
-		Command:           getJSON(service.Command),
-		Entrypoint:        getJSON(service.Entrypoint),
-		Volumes:           toDTOVolumes(getJSON(service.Volumes)),
-		PublishedPorts:    toDTOPublishedPorts(getJSON(service.PublishedPorts)),
-		Enabled:           service.Enabled,
-		CreatedAt:         service.CreatedAt,
-		UpdatedAt:         service.UpdatedAt,
+		ID:                      service.ID,
+		Name:                    service.Name,
+		ServiceKey:              service.ServiceKey,
+		AgentID:                 service.AgentID,
+		ImageRepo:               service.ImageRepo,
+		ContainerPort:           service.ContainerPort,
+		CurrentLiveSlot:         service.CurrentLiveSlot,
+		DockerHealthCheck:       service.DockerHealthCheck,
+		HTTPHealthPath:          service.HTTPHealthPath,
+		HTTPExpectedCode:        service.HTTPExpectedCode,
+		HTTPTimeoutSecond:       service.HTTPTimeoutSecond,
+		StartupGraceSecond:      service.StartupGraceSecond,
+		HTTPProbeTimeoutSecond:  service.HTTPProbeTimeoutSecond,
+		HTTPProbeIntervalSecond: service.HTTPProbeIntervalSecond,
+		HTTPSuccessThreshold:    service.HTTPSuccessThreshold,
+		RouteHost:               service.RouteHost,
+		RoutePathPrefix:         service.RoutePathPrefix,
+		Env:                     env,
+		Command:                 getJSON(service.Command),
+		Entrypoint:              getJSON(service.Entrypoint),
+		Volumes:                 toDTOVolumes(getJSON(service.Volumes)),
+		PublishedPorts:          toDTOPublishedPorts(getJSON(service.PublishedPorts)),
+		Enabled:                 service.Enabled,
+		CreatedAt:               service.CreatedAt,
+		UpdatedAt:               service.UpdatedAt,
 	}, nil
 }
 
@@ -288,26 +312,30 @@ func (s *Service) toDeploymentSpec(service *model.Service) (dto.ServiceDeploymen
 		return dto.ServiceDeploymentSpec{}, err
 	}
 	return dto.ServiceDeploymentSpec{
-		ID:                service.ID,
-		Name:              service.Name,
-		ServiceKey:        service.ServiceKey,
-		AgentID:           service.AgentID,
-		ImageRepo:         service.ImageRepo,
-		ContainerPort:     service.ContainerPort,
-		CurrentLiveSlot:   service.CurrentLiveSlot,
-		DockerHealthCheck: service.DockerHealthCheck != nil && *service.DockerHealthCheck,
-		HTTPHealthPath:    service.HTTPHealthPath,
-		HTTPExpectedCode:  service.HTTPExpectedCode,
-		HTTPTimeoutSecond: service.HTTPTimeoutSecond,
-		RouteHost:         service.RouteHost,
-		RoutePathPrefix:   service.RoutePathPrefix,
-		Env:               env,
-		EnvEncrypted:      strings.TrimSpace(service.EnvCiphertext) != "",
-		Command:           getJSON(service.Command),
-		Entrypoint:        getJSON(service.Entrypoint),
-		Volumes:           toDTOVolumes(getJSON(service.Volumes)),
-		PublishedPorts:    toDTOPublishedPorts(getJSON(service.PublishedPorts)),
-		Enabled:           service.Enabled != nil && *service.Enabled,
+		ID:                      service.ID,
+		Name:                    service.Name,
+		ServiceKey:              service.ServiceKey,
+		AgentID:                 service.AgentID,
+		ImageRepo:               service.ImageRepo,
+		ContainerPort:           service.ContainerPort,
+		CurrentLiveSlot:         service.CurrentLiveSlot,
+		DockerHealthCheck:       service.DockerHealthCheck != nil && *service.DockerHealthCheck,
+		HTTPHealthPath:          service.HTTPHealthPath,
+		HTTPExpectedCode:        service.HTTPExpectedCode,
+		HTTPTimeoutSecond:       service.HTTPTimeoutSecond,
+		StartupGraceSecond:      service.StartupGraceSecond,
+		HTTPProbeTimeoutSecond:  service.HTTPProbeTimeoutSecond,
+		HTTPProbeIntervalSecond: service.HTTPProbeIntervalSecond,
+		HTTPSuccessThreshold:    service.HTTPSuccessThreshold,
+		RouteHost:               service.RouteHost,
+		RoutePathPrefix:         service.RoutePathPrefix,
+		Env:                     env,
+		EnvEncrypted:            strings.TrimSpace(service.EnvCiphertext) != "",
+		Command:                 getJSON(service.Command),
+		Entrypoint:              getJSON(service.Entrypoint),
+		Volumes:                 toDTOVolumes(getJSON(service.Volumes)),
+		PublishedPorts:          toDTOPublishedPorts(getJSON(service.PublishedPorts)),
+		Enabled:                 service.Enabled != nil && *service.Enabled,
 	}, nil
 }
 
