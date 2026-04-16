@@ -203,10 +203,6 @@ export function ReleaseDetailPage() {
               <tr>
                 <th>任务</th>
                 <th>状态</th>
-                <th>阶段</th>
-                <th>Docker 状态</th>
-                <th>清理</th>
-                <th>错误</th>
                 <th>派发时间</th>
                 <th>开始时间</th>
                 <th>完成时间</th>
@@ -214,44 +210,42 @@ export function ReleaseDetailPage() {
             </thead>
             <tbody>
               {tasks.map((task) => (
-                <tr key={task.id}>
-                  <td>{taskTypeLabel(task.type)}</td>
-                  <td>
-                    <StatusPill
-                      label={taskStatusLabel(task.status)}
-                      tone={taskStatusTone(task.status)}
-                    />
-                  </td>
-                  <td>{task.lastStep || "—"}</td>
-                  <td>{task.dockerHealth || "—"}</td>
-                  <td>{cleanupLabel(task.cleanupCompleted)}</td>
-                  <td>{task.lastError || "—"}</td>
-                  <td>{formatDateTime(task.dispatchedAt)}</td>
-                  <td>{formatDateTime(task.startedAt)}</td>
-                  <td>{formatDateTime(task.completedAt)}</td>
-                </tr>
+                [
+                  <tr key={task.id}>
+                    <td>{taskTypeLabel(task.type)}</td>
+                    <td>
+                      <StatusPill
+                        label={taskStatusLabel(task.status)}
+                        tone={taskStatusTone(task.status)}
+                      />
+                    </td>
+                    <td>{formatDateTime(task.dispatchedAt)}</td>
+                    <td>{formatDateTime(task.startedAt)}</td>
+                    <td>{formatDateTime(task.completedAt)}</td>
+                  </tr>,
+                  <tr className={styles.timelineDetailRow} key={task.id + "-details"}>
+                    <td className={styles.timelineDetailCell} colSpan={5}>
+                      <details className={styles.logCard}>
+                        <summary className={styles.logSummary}>查看详情和日志</summary>
+                        <div className={styles.logMeta}>
+                          <span>阶段：{task.lastStep || "—"}</span>
+                          <span>Docker 状态：{task.dockerHealth || "—"}</span>
+                          <span>清理：{cleanupLabel(task.cleanupCompleted)}</span>
+                          <span>错误：{task.lastError || "—"}</span>
+                        </div>
+                        {task.failureLogs ? (
+                          <pre className={styles.logBlock}>{task.failureLogs}</pre>
+                        ) : (
+                          <div className={styles.logEmpty}>暂无失败日志</div>
+                        )}
+                      </details>
+                    </td>
+                  </tr>,
+                ]
               ))}
             </tbody>
           </table>
         </div>
-        {tasks.some((task) => task.failureLogs) ? (
-          <div className={styles.logGrid}>
-            {tasks
-              .filter((task) => task.failureLogs)
-              .map((task) => (
-                <details className={styles.logCard} key={task.id}>
-                  <summary className={styles.logSummary}>
-                    {taskTypeLabel(task.type)} · {task.lastStep || taskStatusLabel(task.status)}
-                  </summary>
-                  <div className={styles.logMeta}>
-                    <span>{task.lastError || "无错误摘要"}</span>
-                    <span>{task.dockerHealth || "无 Docker 摘要"}</span>
-                  </div>
-                  <pre className={styles.logBlock}>{task.failureLogs}</pre>
-                </details>
-              ))}
-          </div>
-        ) : null}
       </section>
     </div>
   );
