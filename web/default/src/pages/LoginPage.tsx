@@ -25,6 +25,7 @@ export function LoginPage() {
         <div className={styles.copy}>
           <span className={styles.eyebrow}>Edge Pilot</span>
           <h1 className={styles.title}>登录管理面板</h1>
+          <p className={styles.subtitle}>使用管理员账号进入控制台。</p>
         </div>
         <form
           className={styles.form}

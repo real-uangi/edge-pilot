@@ -3,8 +3,10 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate, useParams } from "react-router-dom";
 import { api, getErrorMessage, type AgentCredentialRecord } from "../lib/api";
 import { formatDateTime, boolLabel } from "../lib/format";
+import { ActionButton } from "../components/ActionButton";
 import { AgentLabel } from "../components/AgentLabel";
 import { StatusPill } from "../components/StatusPill";
+import { EmptyState, ErrorState, InlineNotice, LoadingState } from "../components/StateBlocks";
 import styles from "../styles/admin.module.css";
 
 export function AgentDetailPage() {
@@ -70,10 +72,31 @@ export function AgentDetailPage() {
   });
 
   if (agentQuery.isPending) {
-    return <div className={styles.page}>正在加载节点…</div>;
+    return (
+      <div className={styles.page}>
+        <LoadingState title="正在加载节点详情" message="正在同步节点基础信息。" />
+      </div>
+    );
   }
+
+  if (agentQuery.isError) {
+    return (
+      <div className={styles.page}>
+        <ErrorState
+          title="节点详情加载失败"
+          message={getErrorMessage(agentQuery.error)}
+          onRetry={() => agentQuery.refetch()}
+        />
+      </div>
+    );
+  }
+
   if (!agentQuery.data) {
-    return <div className={styles.page}>节点不存在。</div>;
+    return (
+      <div className={styles.page}>
+        <EmptyState title="节点不存在" message="请返回节点列表后重新选择。" />
+      </div>
+    );
   }
 
   const agent = agentQuery.data;
@@ -98,53 +121,34 @@ export function AgentDetailPage() {
           </p>
         </div>
         <div className={styles.buttonRow}>
-          <button className={styles.secondaryButton} onClick={() => navigate("/agents")} type="button">
-            返回
-          </button>
-          <button className={styles.secondaryButton} onClick={() => agentQuery.refetch()} type="button">
-            刷新
-          </button>
-          <button
-            className={styles.ghostButton}
-            disabled={enableMutation.isPending}
-            onClick={() => enableMutation.mutate()}
-            type="button"
-          >
-            启用
-          </button>
-          <button
-            className={styles.dangerButton}
-            disabled={disableMutation.isPending}
-            onClick={() => disableMutation.mutate()}
-            type="button"
-          >
-            停用
-          </button>
-          <button
-            className={styles.primaryButton}
-            disabled={resetMutation.isPending}
+          <ActionButton label="返回" onClick={() => navigate("/agents")} />
+          <ActionButton label="刷新" onClick={() => agentQuery.refetch()} />
+          <ActionButton label="启用" variant="ghost" pending={enableMutation.isPending} onClick={() => enableMutation.mutate()} />
+          <ActionButton label="停用" variant="danger" pending={disableMutation.isPending} onClick={() => disableMutation.mutate()} />
+          <ActionButton
+            label="重置令牌"
+            pending={resetMutation.isPending}
+            pendingLabel="重置中"
+            variant="primary"
             onClick={() => resetMutation.mutate()}
-            type="button"
-          >
-            {resetMutation.isPending ? "重置中" : "重置令牌"}
-          </button>
-          <button
-            className={styles.dangerButton}
-            disabled={Boolean(deleteBlockedReason) || deleteMutation.isPending}
+          />
+          <ActionButton
+            label="删除节点"
+            pending={deleteMutation.isPending}
+            pendingLabel="删除中"
+            variant="danger"
+            disabled={Boolean(deleteBlockedReason)}
             onClick={() => {
               if (window.confirm("确认删除这个节点？")) {
                 deleteMutation.mutate();
               }
             }}
-            type="button"
-          >
-            {deleteMutation.isPending ? "删除中" : "删除节点"}
-          </button>
+          />
         </div>
       </section>
 
-      {actionError ? <div className={styles.error}>{actionError}</div> : null}
-      {deleteBlockedReason ? <p className={styles.sectionCopy}>{deleteBlockedReason}</p> : null}
+      {actionError ? <InlineNotice message={actionError} tone="error" /> : null}
+      {deleteBlockedReason ? <InlineNotice message={deleteBlockedReason} tone="info" /> : null}
 
       {issuedCredential ? (
         <section className={styles.credentialCard}>

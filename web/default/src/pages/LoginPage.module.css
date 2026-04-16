@@ -66,6 +66,10 @@
   padding: 12px 14px;
 }
 
+.field input:hover {
+  background: #fcfcfc;
+}
+
 .submit {
   border: 0;
   border-radius: 999px;
@@ -74,6 +78,16 @@
   color: #ffffff;
   font-weight: 700;
   font-size: 14px;
+}
+
+.submit:hover:not(:disabled) {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px var(--ep-shadow-strong);
+}
+
+.submit:disabled {
+  cursor: not-allowed;
+  opacity: 0.48;
 }
 
 .error {

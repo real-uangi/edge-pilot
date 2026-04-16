@@ -2,6 +2,8 @@ import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, getErrorMessage, type RegistryCredentialRecord } from "../lib/api";
 import { formatDateTime } from "../lib/format";
+import { ActionButton } from "../components/ActionButton";
+import { EmptyState, ErrorState, InlineNotice, LoadingState } from "../components/StateBlocks";
 import styles from "../styles/admin.module.css";
 
 const emptyForm = {
@@ -58,18 +60,15 @@ export function RegistryCredentialsPage() {
       <section className={styles.sectionHeader}>
         <div>
           <h1 className={styles.sectionTitle}>镜像仓库凭据</h1>
+          <p className={styles.sectionCopy}>维护镜像仓库认证信息，支持新增、更新和删除。</p>
         </div>
         <div className={styles.buttonRow}>
-          <button className={styles.secondaryButton} onClick={() => credentialsQuery.refetch()} type="button">
-            刷新
-          </button>
-          <button className={styles.secondaryButton} onClick={resetForm} type="button">
-            新建
-          </button>
+          <ActionButton label="刷新" onClick={() => credentialsQuery.refetch()} />
+          <ActionButton label="新建" onClick={resetForm} />
         </div>
       </section>
 
-      {actionError ? <div className={styles.error}>{actionError}</div> : null}
+      {actionError ? <InlineNotice message={actionError} tone="error" /> : null}
 
       <section className={styles.sectionCard}>
         <form
@@ -108,68 +107,75 @@ export function RegistryCredentialsPage() {
           </div>
 
           <div className={styles.buttonRow} style={{ marginTop: 24 }}>
-            <button className={styles.primaryButton} disabled={saveMutation.isPending} type="submit">
-              {saveMutation.isPending ? "保存中" : editing ? "更新凭据" : "创建凭据"}
-            </button>
-            {editing ? (
-              <button className={styles.secondaryButton} onClick={resetForm} type="button">
-                取消编辑
-              </button>
-            ) : null}
+            <ActionButton
+              label={editing ? "更新凭据" : "创建凭据"}
+              pending={saveMutation.isPending}
+              pendingLabel="保存中"
+              type="submit"
+              variant="primary"
+            />
+            {editing ? <ActionButton label="取消编辑" onClick={resetForm} /> : null}
           </div>
         </form>
       </section>
 
       <section className={styles.sectionCard}>
-        <div className={styles.tableWrap}>
-          <table>
-            <thead>
-              <tr>
-                <th>Registry Host</th>
-                <th>用户名</th>
-                <th>已配置密钥</th>
-                <th>更新时间</th>
-                <th>操作</th>
-              </tr>
-            </thead>
-            <tbody>
-              {credentialsQuery.data?.map((item) => (
-                <tr key={item.id}>
-                  <td>{item.registryHost}</td>
-                  <td>{item.username}</td>
-                  <td>{item.secretConfigured ? "是" : "否"}</td>
-                  <td>{formatDateTime(item.updatedAt)}</td>
-                  <td>
-                    <div className={styles.buttonRow}>
-                      <button
-                        className={styles.secondaryButton}
-                        onClick={() => {
-                          setEditing(item);
-                          setForm({
-                            registryHost: item.registryHost,
-                            username: item.username,
-                            secret: "",
-                          });
-                        }}
-                        type="button"
-                      >
-                        编辑
-                      </button>
-                      <button
-                        className={styles.secondaryButton}
-                        disabled={deleteMutation.isPending}
-                        onClick={() => deleteMutation.mutate(item.id)}
-                        type="button"
-                      >
-                        删除
-                      </button>
-                    </div>
-                  </td>
+        {credentialsQuery.isPending ? (
+          <LoadingState title="正在加载凭据列表" message="正在同步仓库认证记录。" />
+        ) : credentialsQuery.isError ? (
+          <ErrorState
+            title="凭据列表加载失败"
+            message={getErrorMessage(credentialsQuery.error)}
+            onRetry={() => credentialsQuery.refetch()}
+          />
+        ) : !credentialsQuery.data?.length ? (
+          <EmptyState title="暂无凭据" message="请先创建至少一个仓库凭据。" />
+        ) : (
+          <div className={styles.tableWrap}>
+            <table>
+              <thead>
+                <tr>
+                  <th>Registry Host</th>
+                  <th>用户名</th>
+                  <th>已配置密钥</th>
+                  <th>更新时间</th>
+                  <th>操作</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+              </thead>
+              <tbody>
+                {credentialsQuery.data.map((item) => (
+                  <tr key={item.id}>
+                    <td>{item.registryHost}</td>
+                    <td>{item.username}</td>
+                    <td>{item.secretConfigured ? "是" : "否"}</td>
+                    <td>{formatDateTime(item.updatedAt)}</td>
+                    <td>
+                      <div className={styles.buttonRow}>
+                        <ActionButton
+                          label="编辑"
+                          onClick={() => {
+                            setEditing(item);
+                            setForm({
+                              registryHost: item.registryHost,
+                              username: item.username,
+                              secret: "",
+                            });
+                          }}
+                        />
+                        <ActionButton
+                          label="删除"
+                          pending={deleteMutation.isPending}
+                          pendingLabel="删除中"
+                          onClick={() => deleteMutation.mutate(item.id)}
+                        />
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </section>
     </div>
   );

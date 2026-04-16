@@ -1,9 +1,10 @@
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
-import { api } from "../lib/api";
+import { api, getErrorMessage } from "../lib/api";
 import { boolLabel, formatDateTime, releaseStatusLabel, releaseStatusTone } from "../lib/format";
 import { AgentLabel } from "../components/AgentLabel";
 import { StatusPill } from "../components/StatusPill";
+import { ErrorState, LoadingState } from "../components/StateBlocks";
 import styles from "../styles/admin.module.css";
 
 export function DashboardPage() {
@@ -14,10 +15,31 @@ export function DashboardPage() {
   });
 
   if (overviewQuery.isPending) {
-    return <div className={styles.page}>正在加载总览…</div>;
+    return (
+      <div className={styles.page}>
+        <LoadingState title="正在加载总览" message="正在汇总服务、节点和发布信息。" />
+      </div>
+    );
   }
+
+  if (overviewQuery.isError) {
+    return (
+      <div className={styles.page}>
+        <ErrorState
+          title="总览加载失败"
+          message={getErrorMessage(overviewQuery.error)}
+          onRetry={() => overviewQuery.refetch()}
+        />
+      </div>
+    );
+  }
+
   if (!overviewQuery.data) {
-    return <div className={styles.page}>总览暂不可用。</div>;
+    return (
+      <div className={styles.page}>
+        <ErrorState title="总览暂不可用" message="当前未返回总览数据，请稍后重试。" />
+      </div>
+    );
   }
 
   const { agents, services, recentReleases, activeInstances } = overviewQuery.data;
@@ -31,6 +53,7 @@ export function DashboardPage() {
       <section className={styles.hero}>
         <span className={styles.eyebrow}>总览</span>
         <h1 className={styles.title}>把单机服务运行成一套可控的发布面板</h1>
+        <p className={styles.subtitle}>聚焦服务健康、节点状态和发布进度，降低切换与回滚风险。</p>
       </section>
 
       <section className={styles.cardGrid}>

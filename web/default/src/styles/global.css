@@ -23,8 +23,24 @@
   --ep-shadow: rgba(0, 0, 0, 0.12);
   --ep-shadow-strong: rgba(0, 0, 0, 0.16);
   --ep-radius: 12px;
+  --ep-radius-sm: 8px;
+  --ep-radius-lg: 16px;
   --ep-pill: 999px;
   --ep-container: min(1136px, calc(100vw - 32px));
+  --ep-space-1: 4px;
+  --ep-space-2: 8px;
+  --ep-space-3: 12px;
+  --ep-space-4: 16px;
+  --ep-space-5: 24px;
+  --ep-space-6: 32px;
+  --ep-text-1: 12px;
+  --ep-text-2: 13px;
+  --ep-text-3: 14px;
+  --ep-text-4: 16px;
+  --ep-motion-fast: 120ms;
+  --ep-motion-base: 180ms;
+  --ep-ease-standard: cubic-bezier(0.2, 0, 0, 1);
+  --ep-focus-ring: 0 0 0 2px #ffffff, 0 0 0 4px #000000;
 }
 
 * {
@@ -59,6 +75,29 @@ button {
   cursor: pointer;
 }
 
+a,
+button,
+input,
+select,
+textarea {
+  transition:
+    background-color var(--ep-motion-base) var(--ep-ease-standard),
+    border-color var(--ep-motion-base) var(--ep-ease-standard),
+    color var(--ep-motion-fast) var(--ep-ease-standard),
+    box-shadow var(--ep-motion-base) var(--ep-ease-standard),
+    transform var(--ep-motion-fast) var(--ep-ease-standard),
+    opacity var(--ep-motion-fast) var(--ep-ease-standard);
+}
+
+a:focus-visible,
+button:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible {
+  outline: none;
+  box-shadow: var(--ep-focus-ring);
+}
+
 table {
   width: 100%;
   border-collapse: collapse;
@@ -67,7 +106,7 @@ table {
 th,
 td {
   text-align: left;
-  padding: 10px 10px;
+  padding: 10px;
   border-bottom: 1px solid rgba(0, 0, 0, 0.08);
   vertical-align: top;
   font-size: 13px;
@@ -78,4 +117,9 @@ th {
   text-transform: uppercase;
   letter-spacing: 0.04em;
   color: var(--ep-body);
+  white-space: nowrap;
+}
+
+tbody tr:hover td {
+  background: #fafafa;
 }

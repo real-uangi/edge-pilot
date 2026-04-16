@@ -1,15 +1,27 @@
 .page {
   display: grid;
   gap: 18px;
+  animation: fade-in-up var(--ep-motion-base) var(--ep-ease-standard);
+}
+
+@keyframes fade-in-up {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 .hero {
   display: grid;
-  gap: 8px;
-  padding: 22px;
+  gap: 10px;
+  padding: 24px;
   background: #000000;
   color: #ffffff;
-  border-radius: 16px;
+  border-radius: var(--ep-radius-lg);
 }
 
 .eyebrow {
@@ -29,7 +41,7 @@
   margin: 0;
   max-width: 820px;
   color: rgba(255, 255, 255, 0.76);
-  line-height: 1.45;
+  line-height: 1.5;
   font-size: 14px;
 }
 
@@ -99,6 +111,7 @@
   display: flex;
   gap: 10px;
   flex-wrap: wrap;
+  align-items: center;
 }
 
 .primaryButton,
@@ -119,10 +132,19 @@
   border-color: #000000;
 }
 
+.primaryButton:hover:not(:disabled) {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.16);
+}
+
 .secondaryButton {
   background: var(--ep-chip);
   color: #000000;
   border-color: rgba(0, 0, 0, 0.08);
+}
+
+.secondaryButton:hover:not(:disabled) {
+  background: #e2e2e2;
 }
 
 .dangerButton {
@@ -132,10 +154,18 @@
   border-width: 2px;
 }
 
+.dangerButton:hover:not(:disabled) {
+  background: #f3f3f3;
+}
+
 .ghostButton {
   background: #ffffff;
   color: #000000;
   border-color: #000000;
+}
+
+.ghostButton:hover:not(:disabled) {
+  background: #f3f3f3;
 }
 
 .primaryButton:disabled,
@@ -201,6 +231,12 @@
   font-size: 13px;
 }
 
+.input:hover,
+.textarea:hover,
+.select:hover {
+  background: #fcfcfc;
+}
+
 .textarea {
   min-height: 100px;
   resize: vertical;
@@ -221,10 +257,74 @@
   font-size: 13px;
 }
 
+.stateCard {
+  border-radius: 12px;
+  padding: 18px;
+  background: #f7f7f7;
+  color: #000000;
+  display: grid;
+  gap: 8px;
+}
+
+.stateTitle {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 700;
+}
+
+.stateMessage {
+  margin: 0;
+  font-size: 13px;
+  color: var(--ep-body);
+  line-height: 1.45;
+}
+
+.stateActions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.loadingDot {
+  width: 18px;
+  height: 18px;
+  border-radius: 999px;
+  border: 2px solid rgba(0, 0, 0, 0.2);
+  border-top-color: #000000;
+  animation: spin 900ms linear infinite;
+}
+
+@keyframes spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.inlineNotice {
+  border-radius: 12px;
+  padding: 12px 14px;
+  font-size: 13px;
+  font-weight: 600;
+  background: #f3f3f3;
+  color: #000000;
+}
+
+.inlineNoticeError {
+  border: 1px solid #000000;
+}
+
+.inlineNoticeInfo {
+  border: 1px dashed #000000;
+}
+
 .credentialCard {
   background: #000000;
   color: #ffffff;
-  border-radius: 16px;
+  border-radius: var(--ep-radius-lg);
   padding: 16px;
   display: grid;
   gap: 8px;

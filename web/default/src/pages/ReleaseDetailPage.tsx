@@ -10,8 +10,10 @@ import {
   taskStatusTone,
   taskTypeLabel,
 } from "../lib/format";
+import { ActionButton } from "../components/ActionButton";
 import { AgentLabel } from "../components/AgentLabel";
 import { StatusPill } from "../components/StatusPill";
+import { EmptyState, ErrorState, InlineNotice, LoadingState } from "../components/StateBlocks";
 import styles from "../styles/admin.module.css";
 
 function confirmAction(message: string, action: () => void) {
@@ -72,22 +74,38 @@ export function ReleaseDetailPage() {
   });
 
   if (detailQuery.isPending) {
-    return <div className={styles.page}>正在加载发布单…</div>;
+    return (
+      <div className={styles.page}>
+        <LoadingState title="正在加载发布单" message="正在同步任务时间线和节点状态。" />
+      </div>
+    );
   }
+
+  if (detailQuery.isError) {
+    return (
+      <div className={styles.page}>
+        <ErrorState
+          title="发布单加载失败"
+          message={getErrorMessage(detailQuery.error)}
+          onRetry={() => detailQuery.refetch()}
+        />
+      </div>
+    );
+  }
+
   if (!detailQuery.data) {
-    return <div className={styles.page}>发布单不存在。</div>;
+    return (
+      <div className={styles.page}>
+        <EmptyState title="发布单不存在" message="请返回发布列表后重新选择。" />
+      </div>
+    );
   }
 
   const { release, tasks } = detailQuery.data;
   const agent = agentsQuery.data?.find((item) => item.id === release.agentId);
-  const actionError =
-    getErrorMessage(
-      startMutation.error ??
-        skipMutation.error ??
-        confirmMutation.error ??
-        rollbackMutation.error ??
-        retryMutation.error,
-    );
+  const actionError = getErrorMessage(
+    startMutation.error ?? skipMutation.error ?? confirmMutation.error ?? rollbackMutation.error ?? retryMutation.error,
+  );
 
   return (
     <div className={styles.page}>
@@ -97,52 +115,43 @@ export function ReleaseDetailPage() {
           <p className={styles.sectionCopy}>{release.id}</p>
         </div>
         <div className={styles.buttonRow}>
-          <button className={styles.secondaryButton} onClick={() => navigate("/releases")} type="button">
-            返回
-          </button>
-          <button className={styles.secondaryButton} onClick={() => detailQuery.refetch()} type="button">
-            刷新
-          </button>
-          <button
-            className={styles.primaryButton}
-            disabled={release.status !== 1 || startMutation.isPending}
+          <ActionButton label="返回" onClick={() => navigate("/releases")} />
+          <ActionButton label="刷新" onClick={() => detailQuery.refetch()} />
+          <ActionButton
+            label="开始"
+            pending={startMutation.isPending}
+            variant="primary"
+            disabled={release.status !== 1}
             onClick={() => confirmAction("确认开始这个发布单？", () => startMutation.mutate())}
-            type="button"
-          >
-            开始
-          </button>
-          <button
-            className={styles.ghostButton}
-            disabled={release.status !== 1 || skipMutation.isPending}
+          />
+          <ActionButton
+            label="跳过"
+            pending={skipMutation.isPending}
+            variant="ghost"
+            disabled={release.status !== 1}
             onClick={() => confirmAction("确认跳过这个发布单？", () => skipMutation.mutate())}
-            type="button"
-          >
-            跳过
-          </button>
-          <button
-            className={styles.primaryButton}
-            disabled={release.status !== 4 || confirmMutation.isPending}
+          />
+          <ActionButton
+            label="确认切流"
+            pending={confirmMutation.isPending}
+            variant="primary"
+            disabled={release.status !== 4}
             onClick={() => confirmAction("确认执行切流？", () => confirmMutation.mutate())}
-            type="button"
-          >
-            确认切流
-          </button>
-          <button
-            className={styles.dangerButton}
-            disabled={[1, 9].includes(release.status) || rollbackMutation.isPending}
+          />
+          <ActionButton
+            label="回滚"
+            pending={rollbackMutation.isPending}
+            variant="danger"
+            disabled={[1, 9].includes(release.status)}
             onClick={() => confirmAction("确认回滚这个发布单？", () => rollbackMutation.mutate())}
-            type="button"
-          >
-            回滚
-          </button>
-          <button
-            className={styles.ghostButton}
-            disabled={release.status !== 7 || retryMutation.isPending}
+          />
+          <ActionButton
+            label="重试"
+            pending={retryMutation.isPending}
+            variant="ghost"
+            disabled={release.status !== 7}
             onClick={() => confirmAction("确认重试这个发布单？", () => retryMutation.mutate())}
-            type="button"
-          >
-            重试
-          </button>
+          />
         </div>
       </section>
 
@@ -153,7 +162,7 @@ export function ReleaseDetailPage() {
         rollbackMutation.isError,
         retryMutation.isError,
       ].some(Boolean) ? (
-        <div className={styles.error}>{actionError}</div>
+        <InlineNotice message={actionError} tone="error" />
       ) : null}
 
       <section className={styles.sectionCard}>
@@ -197,55 +206,56 @@ export function ReleaseDetailPage() {
             <h2 className={styles.sectionTitle}>任务时间线</h2>
           </div>
         </div>
-        <div className={styles.tableWrap}>
-          <table>
-            <thead>
-              <tr>
-                <th>任务</th>
-                <th>状态</th>
-                <th>派发时间</th>
-                <th>开始时间</th>
-                <th>完成时间</th>
-              </tr>
-            </thead>
-            <tbody>
-              {tasks.map((task) => (
-                [
-                  <tr key={task.id}>
-                    <td>{taskTypeLabel(task.type)}</td>
-                    <td>
-                      <StatusPill
-                        label={taskStatusLabel(task.status)}
-                        tone={taskStatusTone(task.status)}
-                      />
-                    </td>
-                    <td>{formatDateTime(task.dispatchedAt)}</td>
-                    <td>{formatDateTime(task.startedAt)}</td>
-                    <td>{formatDateTime(task.completedAt)}</td>
-                  </tr>,
-                  <tr className={styles.timelineDetailRow} key={task.id + "-details"}>
-                    <td className={styles.timelineDetailCell} colSpan={5}>
-                      <details className={styles.logCard}>
-                        <summary className={styles.logSummary}>查看详情和日志</summary>
-                        <div className={styles.logMeta}>
-                          <span>阶段：{task.lastStep || "—"}</span>
-                          <span>Docker 状态：{task.dockerHealth || "—"}</span>
-                          <span>清理：{cleanupLabel(task.cleanupCompleted)}</span>
-                          <span>错误：{task.lastError || "—"}</span>
-                        </div>
-                        {task.failureLogs ? (
-                          <pre className={styles.logBlock}>{task.failureLogs}</pre>
-                        ) : (
-                          <div className={styles.logEmpty}>暂无失败日志</div>
-                        )}
-                      </details>
-                    </td>
-                  </tr>,
-                ]
-              ))}
-            </tbody>
-          </table>
-        </div>
+        {!tasks.length ? (
+          <EmptyState title="暂无任务" message="该发布单还未生成执行任务。" />
+        ) : (
+          <div className={styles.tableWrap}>
+            <table>
+              <thead>
+                <tr>
+                  <th>任务</th>
+                  <th>状态</th>
+                  <th>派发时间</th>
+                  <th>开始时间</th>
+                  <th>完成时间</th>
+                </tr>
+              </thead>
+              <tbody>
+                {tasks.map((task) => (
+                  [
+                    <tr key={task.id}>
+                      <td>{taskTypeLabel(task.type)}</td>
+                      <td>
+                        <StatusPill label={taskStatusLabel(task.status)} tone={taskStatusTone(task.status)} />
+                      </td>
+                      <td>{formatDateTime(task.dispatchedAt)}</td>
+                      <td>{formatDateTime(task.startedAt)}</td>
+                      <td>{formatDateTime(task.completedAt)}</td>
+                    </tr>,
+                    <tr className={styles.timelineDetailRow} key={task.id + "-details"}>
+                      <td className={styles.timelineDetailCell} colSpan={5}>
+                        <details className={styles.logCard}>
+                          <summary className={styles.logSummary}>查看详情和日志</summary>
+                          <div className={styles.logMeta}>
+                            <span>阶段：{task.lastStep || "—"}</span>
+                            <span>Docker 状态：{task.dockerHealth || "—"}</span>
+                            <span>清理：{cleanupLabel(task.cleanupCompleted)}</span>
+                            <span>错误：{task.lastError || "—"}</span>
+                          </div>
+                          {task.failureLogs ? (
+                            <pre className={styles.logBlock}>{task.failureLogs}</pre>
+                          ) : (
+                            <div className={styles.logEmpty}>暂无失败日志</div>
+                          )}
+                        </details>
+                      </td>
+                    </tr>,
+                  ]
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </section>
     </div>
   );
