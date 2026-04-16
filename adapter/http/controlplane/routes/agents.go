@@ -14,9 +14,23 @@ import (
 	"github.com/real-uangi/allingo/common/result"
 )
 
+type agentAdminActions interface {
+	CreateAgent() (*dto.AgentCredentialOutput, error)
+	ListAgents() ([]dto.AgentOutput, error)
+	GetAgent(string) (*dto.AgentOutput, error)
+	ResetToken(string) (*dto.AgentCredentialOutput, error)
+	Enable(string) (*dto.AgentOutput, error)
+	Disable(string) (*dto.AgentOutput, error)
+	Delete(string) error
+}
+
 func SetAdminAgentRoutes(engine *gin.Engine, agents *agentapp.RegistryService, auth *adminauthapp.Service, cfg *config.AdminAuthConfig) {
 	admin := engine.Group("/api/admin")
 	admin.Use(adaptermiddleware.RequireAdminSession(auth, cfg))
+	registerAdminAgentRoutes(admin, agents)
+}
+
+func registerAdminAgentRoutes(admin *gin.RouterGroup, agents agentAdminActions) {
 	admin.POST("/agents", func(c *gin.Context) {
 		output, err := agents.CreateAgent()
 		if err != nil {
@@ -28,56 +42,23 @@ func SetAdminAgentRoutes(engine *gin.Engine, agents *agentapp.RegistryService, a
 	admin.GET("/agents", api.NoArgsFunc(func() ([]dto.AgentOutput, error) {
 		return agents.ListAgents()
 	}))
-	admin.GET("/agents/:id", func(c *gin.Context) {
-		id := c.Param("id")
-		if _, err := uuid.Parse(id); err != nil {
-			c.Render(api.HandleErr(err))
-			return
+	admin.GET("/agents/:id", api.SingleParamUUIDFunc(func(id uuid.UUID) (*dto.AgentOutput, error) {
+		return agents.GetAgent(id.String())
+	}, "id"))
+	admin.POST("/agents/:id/reset-token", api.SingleParamUUIDFunc(func(id uuid.UUID) (*dto.AgentCredentialOutput, error) {
+		return agents.ResetToken(id.String())
+	}, "id"))
+	admin.POST("/agents/:id/enable", api.SingleParamUUIDFunc(func(id uuid.UUID) (*dto.AgentOutput, error) {
+		return agents.Enable(id.String())
+	}, "id"))
+	admin.POST("/agents/:id/disable", api.SingleParamUUIDFunc(func(id uuid.UUID) (*dto.AgentOutput, error) {
+		return agents.Disable(id.String())
+	}, "id"))
+	admin.DELETE("/agents/:id", api.SingleParamUUIDFunc(func(id uuid.UUID) (*gin.H, error) {
+		if err := agents.Delete(id.String()); err != nil {
+			return nil, err
 		}
-		output, err := agents.GetAgent(id)
-		if err != nil {
-			c.Render(api.HandleErr(err))
-			return
-		}
-		c.Render(http.StatusOK, result.Ok(output))
-	})
-	admin.POST("/agents/:id/reset-token", func(c *gin.Context) {
-		id := c.Param("id")
-		if _, err := uuid.Parse(id); err != nil {
-			c.Render(api.HandleErr(err))
-			return
-		}
-		output, err := agents.ResetToken(id)
-		if err != nil {
-			c.Render(api.HandleErr(err))
-			return
-		}
-		c.Render(http.StatusOK, result.Ok(output))
-	})
-	admin.POST("/agents/:id/enable", func(c *gin.Context) {
-		id := c.Param("id")
-		if _, err := uuid.Parse(id); err != nil {
-			c.Render(api.HandleErr(err))
-			return
-		}
-		output, err := agents.Enable(id)
-		if err != nil {
-			c.Render(api.HandleErr(err))
-			return
-		}
-		c.Render(http.StatusOK, result.Ok(output))
-	})
-	admin.POST("/agents/:id/disable", func(c *gin.Context) {
-		id := c.Param("id")
-		if _, err := uuid.Parse(id); err != nil {
-			c.Render(api.HandleErr(err))
-			return
-		}
-		output, err := agents.Disable(id)
-		if err != nil {
-			c.Render(api.HandleErr(err))
-			return
-		}
-		c.Render(http.StatusOK, result.Ok(output))
-	})
+		output := gin.H{"deleted": true}
+		return &output, nil
+	}, "id"))
 }

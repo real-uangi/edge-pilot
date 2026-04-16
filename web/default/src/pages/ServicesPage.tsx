@@ -2,6 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
 import { api } from "../lib/api";
 import { formatDateTime, slotLabel } from "../lib/format";
+import { AgentLabel } from "../components/AgentLabel";
 import { StatusPill } from "../components/StatusPill";
 import styles from "../styles/admin.module.css";
 
@@ -10,6 +11,11 @@ export function ServicesPage() {
     queryKey: ["services"],
     queryFn: api.listServices,
   });
+  const agentsQuery = useQuery({
+    queryKey: ["agents"],
+    queryFn: api.listAgents,
+  });
+  const agentsByID = new Map((agentsQuery.data ?? []).map((agent) => [agent.id, agent] as const));
 
   return (
     <div className={styles.page}>
@@ -50,7 +56,13 @@ export function ServicesPage() {
                     </Link>
                   </td>
                   <td>{service.serviceKey}</td>
-                  <td>{service.agentId}</td>
+                  <td>
+                    <AgentLabel
+                      id={service.agentId}
+                      hostname={agentsByID.get(service.agentId)?.hostname}
+                      ip={agentsByID.get(service.agentId)?.ip}
+                    />
+                  </td>
                   <td>{service.routeHost + service.routePathPrefix}</td>
                   <td>{slotLabel(service.currentLiveSlot)}</td>
                   <td>

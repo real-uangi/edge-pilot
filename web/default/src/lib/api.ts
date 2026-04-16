@@ -305,6 +305,11 @@ export const api = {
       method: "POST",
     });
   },
+  deleteAgent(id: string) {
+    return request<{ deleted: boolean }>(`/api/admin/agents/${id}`, {
+      method: "DELETE",
+    });
+  },
   listReleases() {
     return request<ReleaseRecord[]>("/api/admin/releases");
   },

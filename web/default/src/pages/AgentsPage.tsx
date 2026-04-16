@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
 import { api, getErrorMessage, type AgentCredentialRecord } from "../lib/api";
 import { formatDateTime, boolLabel } from "../lib/format";
+import { AgentLabel } from "../components/AgentLabel";
 import { StatusPill } from "../components/StatusPill";
 import styles from "../styles/admin.module.css";
 
@@ -81,7 +82,7 @@ export function AgentsPage() {
                 <tr key={agent.id}>
                   <td>
                     <Link className={styles.tableLink} to={`/agents/${agent.id}`}>
-                      {agent.id}
+                      <AgentLabel id={agent.id} hostname={agent.hostname} ip={agent.ip} />
                     </Link>
                   </td>
                   <td>{agent.hostname || "—"}</td>

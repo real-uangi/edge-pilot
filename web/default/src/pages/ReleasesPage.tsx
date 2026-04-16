@@ -2,6 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
 import { api } from "../lib/api";
 import { formatDateTime, releaseStatusLabel, releaseStatusTone, slotLabel } from "../lib/format";
+import { AgentLabel } from "../components/AgentLabel";
 import { StatusPill } from "../components/StatusPill";
 import styles from "../styles/admin.module.css";
 
@@ -10,6 +11,11 @@ export function ReleasesPage() {
     queryKey: ["releases"],
     queryFn: api.listReleases,
   });
+  const agentsQuery = useQuery({
+    queryKey: ["agents"],
+    queryFn: api.listAgents,
+  });
+  const agentsByID = new Map((agentsQuery.data ?? []).map((agent) => [agent.id, agent] as const));
 
   return (
     <div className={styles.page}>
@@ -50,7 +56,13 @@ export function ReleasesPage() {
                     />
                   </td>
                   <td>{release.imageRepo + ":" + release.imageTag}</td>
-                  <td>{release.agentId}</td>
+                  <td>
+                    <AgentLabel
+                      id={release.agentId}
+                      hostname={agentsByID.get(release.agentId)?.hostname}
+                      ip={agentsByID.get(release.agentId)?.ip}
+                    />
+                  </td>
                   <td>{slotLabel(release.targetSlot)}</td>
                   <td>{release.queuePosition}</td>
                   <td>{formatDateTime(release.createdAt)}</td>

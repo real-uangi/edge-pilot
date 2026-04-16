@@ -88,6 +88,7 @@ func (r *fakeAgentRepo) Get(id string) (*model.AgentNode, error) {
 	}
 	return r.nodes[id], nil
 }
+func (r *fakeAgentRepo) Delete(string) error              { return nil }
 func (r *fakeAgentRepo) List() ([]model.AgentNode, error) { return nil, nil }
 func (r *fakeAgentRepo) ListEnabled() ([]model.AgentNode, error) {
 	return nil, nil

@@ -2,6 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
 import { api } from "../lib/api";
 import { boolLabel, formatDateTime, releaseStatusLabel, releaseStatusTone } from "../lib/format";
+import { AgentLabel } from "../components/AgentLabel";
 import { StatusPill } from "../components/StatusPill";
 import styles from "../styles/admin.module.css";
 
@@ -20,6 +21,7 @@ export function DashboardPage() {
   }
 
   const { agents, services, recentReleases, activeInstances } = overviewQuery.data;
+  const agentsByID = new Map(agents.map((agent) => [agent.id, agent] as const));
   const onlineAgents = agents.filter((item) => item.online).length;
   const enabledServices = services.filter((item) => item.enabled).length;
   const activeReleases = recentReleases.filter((item) => item.isActive).length;
@@ -83,7 +85,13 @@ export function DashboardPage() {
                     </Link>
                   </td>
                   <td>{service.routeHost + service.routePathPrefix}</td>
-                  <td>{service.agentId}</td>
+                  <td>
+                    <AgentLabel
+                      id={service.agentId}
+                      hostname={agentsByID.get(service.agentId)?.hostname}
+                      ip={agentsByID.get(service.agentId)?.ip}
+                    />
+                  </td>
                   <td>{boolLabel(service.enabled, "启用", "停用")}</td>
                   <td>{formatDateTime(service.updatedAt)}</td>
                 </tr>
@@ -119,7 +127,7 @@ export function DashboardPage() {
                   <tr key={agent.id}>
                     <td>
                       <Link className={styles.tableLink} to={`/agents/${agent.id}`}>
-                        {agent.id}
+                        <AgentLabel id={agent.id} hostname={agent.hostname} ip={agent.ip} />
                       </Link>
                     </td>
                     <td>{agent.ip || "—"}</td>

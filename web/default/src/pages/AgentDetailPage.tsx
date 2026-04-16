@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate, useParams } from "react-router-dom";
 import { api, getErrorMessage, type AgentCredentialRecord } from "../lib/api";
 import { formatDateTime, boolLabel } from "../lib/format";
+import { AgentLabel } from "../components/AgentLabel";
 import { StatusPill } from "../components/StatusPill";
 import styles from "../styles/admin.module.css";
 
@@ -19,12 +20,17 @@ export function AgentDetailPage() {
     enabled: Boolean(id),
     refetchInterval: 10000,
   });
+  const servicesQuery = useQuery({
+    queryKey: ["services"],
+    queryFn: api.listServices,
+  });
 
   const refreshQueries = async () => {
     await Promise.all([
       queryClient.invalidateQueries({ queryKey: ["agent", id] }),
       queryClient.invalidateQueries({ queryKey: ["agents"] }),
       queryClient.invalidateQueries({ queryKey: ["overview"] }),
+      queryClient.invalidateQueries({ queryKey: ["services"] }),
     ]);
   };
 
@@ -53,6 +59,15 @@ export function AgentDetailPage() {
     },
     onError: (error) => setActionError(getErrorMessage(error)),
   });
+  const deleteMutation = useMutation({
+    mutationFn: () => api.deleteAgent(id!),
+    onSuccess: async () => {
+      setActionError(null);
+      await refreshQueries();
+      navigate("/agents", { replace: true });
+    },
+    onError: (error) => setActionError(getErrorMessage(error)),
+  });
 
   if (agentQuery.isPending) {
     return <div className={styles.page}>正在加载节点…</div>;
@@ -62,13 +77,25 @@ export function AgentDetailPage() {
   }
 
   const agent = agentQuery.data;
+  const boundServiceCount = (servicesQuery.data ?? []).filter((service) => service.agentId === agent.id).length;
+  const deleteBlockedReason = agent.online
+    ? "在线节点不可删除"
+    : servicesQuery.isPending
+      ? "正在检查节点绑定状态"
+      : servicesQuery.isError
+        ? "节点绑定状态加载失败"
+        : boundServiceCount > 0
+          ? `该节点仍绑定 ${boundServiceCount} 个服务`
+          : null;
 
   return (
     <div className={styles.page}>
       <section className={styles.sectionHeader}>
         <div>
           <h1 className={styles.sectionTitle}>节点详情</h1>
-          <p className={styles.sectionCopy}>{agent.id}</p>
+          <p className={styles.sectionCopy}>
+            <AgentLabel id={agent.id} hostname={agent.hostname} ip={agent.ip} />
+          </p>
         </div>
         <div className={styles.buttonRow}>
           <button className={styles.secondaryButton} onClick={() => navigate("/agents")} type="button">
@@ -101,20 +128,44 @@ export function AgentDetailPage() {
           >
             {resetMutation.isPending ? "重置中" : "重置令牌"}
           </button>
+          <button
+            className={styles.dangerButton}
+            disabled={Boolean(deleteBlockedReason) || deleteMutation.isPending}
+            onClick={() => {
+              if (window.confirm("确认删除这个节点？")) {
+                deleteMutation.mutate();
+              }
+            }}
+            type="button"
+          >
+            {deleteMutation.isPending ? "删除中" : "删除节点"}
+          </button>
         </div>
       </section>
 
       {actionError ? <div className={styles.error}>{actionError}</div> : null}
+      {deleteBlockedReason ? <p className={styles.sectionCopy}>{deleteBlockedReason}</p> : null}
 
       {issuedCredential ? (
         <section className={styles.credentialCard}>
           <span className={styles.eyebrow}>一次性令牌</span>
-          <div className={styles.credentialValue}>{issuedCredential.token}</div>
+          <div>
+            <strong>ID</strong>
+            <div className={styles.credentialValue}>{issuedCredential.id}</div>
+          </div>
+          <div>
+            <strong>令牌</strong>
+            <div className={styles.credentialValue}>{issuedCredential.token}</div>
+          </div>
         </section>
       ) : null}
 
       <section className={styles.sectionCard}>
         <div className={styles.keyValueGrid}>
+          <div className={styles.keyValue}>
+            <span className={styles.key}>节点 ID</span>
+            <span className={styles.value}>{agent.id}</span>
+          </div>
           <div className={styles.keyValue}>
             <span className={styles.key}>在线状态</span>
             <span className={styles.value}>{boolLabel(agent.online, "在线", "离线")}</span>

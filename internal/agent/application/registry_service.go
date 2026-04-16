@@ -13,14 +13,20 @@ import (
 )
 
 type RegistryService struct {
-	auth *config.AgentAuthConfig
-	repo domain.Repository
+	auth     *config.AgentAuthConfig
+	repo     domain.Repository
+	bindings domain.ServiceBindingChecker
 }
 
 func NewRegistryService(auth *config.AgentAuthConfig, repo domain.Repository) *RegistryService {
+	return NewRegistryServiceWithBindingChecker(auth, repo, nil)
+}
+
+func NewRegistryServiceWithBindingChecker(auth *config.AgentAuthConfig, repo domain.Repository, bindings domain.ServiceBindingChecker) *RegistryService {
 	return &RegistryService{
-		auth: auth,
-		repo: repo,
+		auth:     auth,
+		repo:     repo,
+		bindings: bindings,
 	}
 }
 
@@ -91,6 +97,29 @@ func (s *RegistryService) Enable(agentID string) (*dto.AgentOutput, error) {
 
 func (s *RegistryService) Disable(agentID string) (*dto.AgentOutput, error) {
 	return s.setEnabled(agentID, false)
+}
+
+func (s *RegistryService) Delete(agentID string) error {
+	node, err := s.repo.Get(agentID)
+	if err != nil {
+		return err
+	}
+	if node == nil {
+		return business.ErrNotFound
+	}
+	if node.Online != nil && *node.Online {
+		return business.NewErrorWithCode("在线节点不可删除", 409)
+	}
+	if s.bindings != nil {
+		count, err := s.bindings.CountByAgent(agentID)
+		if err != nil {
+			return err
+		}
+		if count > 0 {
+			return business.NewErrorWithCode("该节点仍绑定服务，无法删除", 409)
+		}
+	}
+	return s.repo.Delete(agentID)
 }
 
 func (s *RegistryService) GetAgent(agentID string) (*dto.AgentOutput, error) {

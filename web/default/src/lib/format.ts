@@ -12,6 +12,17 @@ export function shortId(value: string): string {
   return value.slice(0, 8);
 }
 
+type AgentDisplayInput = {
+  id: string;
+  hostname?: string | null;
+  ip?: string | null;
+};
+
+export function formatAgentLabel(agent: AgentDisplayInput): string {
+  const parts = [agent.hostname?.trim(), agent.ip?.trim(), shortId(agent.id)].filter(Boolean);
+  return parts.join(" · ");
+}
+
 export function boolLabel(value?: boolean | null, trueText = "是", falseText = "否"): string {
   if (value == null) {
     return "未知";

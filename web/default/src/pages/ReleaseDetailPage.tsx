@@ -10,6 +10,7 @@ import {
   taskStatusTone,
   taskTypeLabel,
 } from "../lib/format";
+import { AgentLabel } from "../components/AgentLabel";
 import { StatusPill } from "../components/StatusPill";
 import styles from "../styles/admin.module.css";
 
@@ -28,6 +29,10 @@ export function ReleaseDetailPage() {
     queryFn: () => api.getRelease(id!),
     enabled: Boolean(id),
     refetchInterval: 5000,
+  });
+  const agentsQuery = useQuery({
+    queryKey: ["agents"],
+    queryFn: api.listAgents,
   });
 
   const invalidate = async () => {
@@ -63,6 +68,7 @@ export function ReleaseDetailPage() {
   }
 
   const { release, tasks } = detailQuery.data;
+  const agent = agentsQuery.data?.find((item) => item.id === release.agentId);
   const actionError =
     getErrorMessage(startMutation.error ?? skipMutation.error ?? confirmMutation.error ?? rollbackMutation.error);
 
@@ -131,7 +137,9 @@ export function ReleaseDetailPage() {
           </div>
           <div className={styles.keyValue}>
             <span className={styles.key}>节点</span>
-            <span className={styles.value}>{release.agentId}</span>
+            <span className={styles.value}>
+              <AgentLabel id={release.agentId} hostname={agent?.hostname} ip={agent?.ip} />
+            </span>
           </div>
           <div className={styles.keyValue}>
             <span className={styles.key}>目标槽位</span>

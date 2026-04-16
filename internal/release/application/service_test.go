@@ -941,6 +941,13 @@ func (r *fakeAgentRepo) Get(id string) (*model.AgentNode, error) {
 	return &copyNode, nil
 }
 
+func (r *fakeAgentRepo) Delete(id string) error {
+	if r.nodes != nil {
+		delete(r.nodes, id)
+	}
+	return nil
+}
+
 func (r *fakeAgentRepo) List() ([]model.AgentNode, error) {
 	out := make([]model.AgentNode, 0, len(r.nodes))
 	for _, item := range r.nodes {

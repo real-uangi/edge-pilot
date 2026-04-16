@@ -33,6 +33,10 @@ func (r *repository) Get(id string) (*model.AgentNode, error) {
 	return &node, nil
 }
 
+func (r *repository) Delete(id string) error {
+	return r.conn.Where("id = ?", id).Delete(&model.AgentNode{}).Error
+}
+
 func (r *repository) List() ([]model.AgentNode, error) {
 	var nodes []model.AgentNode
 	if err := r.conn.Order("created_at desc").Find(&nodes).Error; err != nil {

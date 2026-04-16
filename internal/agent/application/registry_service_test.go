@@ -120,6 +120,60 @@ func TestRegistryServiceMarkConnectedKeepsExistingIPWhenReportedIPIsEmpty(t *tes
 	}
 }
 
+func TestRegistryServiceDeleteRemovesOfflineUnboundAgent(t *testing.T) {
+	repo := &fakeRegistryRepo{nodes: map[string]*model.AgentNode{}}
+	svc := NewRegistryServiceWithBindingChecker(config.LoadAgentAuthConfig(), repo, fakeServiceBindingChecker{count: 0})
+	created, err := svc.CreateAgent()
+	if err != nil {
+		t.Fatalf("CreateAgent() error = %v", err)
+	}
+
+	if err := svc.Delete(created.ID); err != nil {
+		t.Fatalf("Delete() error = %v", err)
+	}
+	if _, ok := repo.nodes[created.ID]; ok {
+		t.Fatalf("expected agent to be deleted")
+	}
+}
+
+func TestRegistryServiceDeleteRejectsOnlineAgent(t *testing.T) {
+	repo := &fakeRegistryRepo{nodes: map[string]*model.AgentNode{}}
+	svc := NewRegistryServiceWithBindingChecker(config.LoadAgentAuthConfig(), repo, fakeServiceBindingChecker{count: 0})
+	created, err := svc.CreateAgent()
+	if err != nil {
+		t.Fatalf("CreateAgent() error = %v", err)
+	}
+	if err := svc.MarkConnectedWithIP(created.ID, "host-a", "10.0.0.8", "v1.2.3", []string{"docker"}); err != nil {
+		t.Fatalf("MarkConnectedWithIP() error = %v", err)
+	}
+
+	if err := svc.Delete(created.ID); err == nil {
+		t.Fatalf("expected online delete to fail")
+	}
+}
+
+func TestRegistryServiceDeleteRejectsBoundAgent(t *testing.T) {
+	repo := &fakeRegistryRepo{nodes: map[string]*model.AgentNode{}}
+	svc := NewRegistryServiceWithBindingChecker(config.LoadAgentAuthConfig(), repo, fakeServiceBindingChecker{count: 2})
+	created, err := svc.CreateAgent()
+	if err != nil {
+		t.Fatalf("CreateAgent() error = %v", err)
+	}
+
+	if err := svc.Delete(created.ID); err == nil {
+		t.Fatalf("expected bound agent delete to fail")
+	}
+}
+
+func TestRegistryServiceDeleteRejectsMissingAgent(t *testing.T) {
+	repo := &fakeRegistryRepo{nodes: map[string]*model.AgentNode{}}
+	svc := NewRegistryServiceWithBindingChecker(config.LoadAgentAuthConfig(), repo, fakeServiceBindingChecker{count: 0})
+
+	if err := svc.Delete("11111111-1111-1111-1111-111111111111"); err == nil {
+		t.Fatalf("expected missing agent delete to fail")
+	}
+}
+
 type fakeRegistryRepo struct {
 	nodes map[string]*model.AgentNode
 }
@@ -141,6 +195,11 @@ func (r *fakeRegistryRepo) Get(id string) (*model.AgentNode, error) {
 	}
 	copyNode := *node
 	return &copyNode, nil
+}
+
+func (r *fakeRegistryRepo) Delete(id string) error {
+	delete(r.nodes, id)
+	return nil
 }
 
 func (r *fakeRegistryRepo) List() ([]model.AgentNode, error) {
@@ -174,4 +233,13 @@ func (r *fakeRegistryRepo) MarkOffline(id string, reason string) error {
 
 func (r *fakeRegistryRepo) MarkOfflineStale(before time.Time) ([]string, error) {
 	return nil, nil
+}
+
+type fakeServiceBindingChecker struct {
+	count int
+	err   error
+}
+
+func (f fakeServiceBindingChecker) CountByAgent(string) (int, error) {
+	return f.count, f.err
 }

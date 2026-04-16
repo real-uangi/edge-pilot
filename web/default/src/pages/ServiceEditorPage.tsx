@@ -4,7 +4,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
 import { useNavigate, useParams } from "react-router-dom";
 import { api, getErrorMessage } from "../lib/api";
-import { formatDateTime, slotLabel, boolLabel } from "../lib/format";
+import { formatAgentLabel, formatDateTime, slotLabel, boolLabel } from "../lib/format";
 import {
   serviceFormSchema,
   toServiceFormDefaults,
@@ -101,7 +101,7 @@ export function ServiceEditorPage() {
                 <option value="">选择节点</option>
                 {agentsQuery.data?.map((agent) => (
                   <option key={agent.id} value={agent.id}>
-                    {agent.id}
+                    {formatAgentLabel(agent)}
                   </option>
                 ))}
               </select>
