@@ -5,11 +5,13 @@ import { api, getErrorMessage, type AgentCredentialRecord } from "../lib/api";
 import { formatDateTime, boolLabel } from "../lib/format";
 import { ActionButton } from "../components/ActionButton";
 import { AgentLabel } from "../components/AgentLabel";
+import { useDialog } from "../components/DialogProvider";
 import { StatusPill } from "../components/StatusPill";
 import { EmptyState, ErrorState, InlineNotice, LoadingState } from "../components/StateBlocks";
 import styles from "../styles/admin.module.css";
 
 export function AgentDetailPage() {
+  const dialog = useDialog();
   const { id } = useParams();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
@@ -138,8 +140,15 @@ export function AgentDetailPage() {
             pendingLabel="删除中"
             variant="danger"
             disabled={Boolean(deleteBlockedReason)}
-            onClick={() => {
-              if (window.confirm("确认删除这个节点？")) {
+            onClick={async () => {
+              const confirmed = await dialog.confirm({
+                title: "删除节点",
+                message: "确认删除这个节点？",
+                confirmText: "确认删除",
+                cancelText: "取消",
+                danger: true,
+              });
+              if (confirmed) {
                 deleteMutation.mutate();
               }
             }}

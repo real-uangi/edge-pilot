@@ -1,4 +1,4 @@
-import type { ButtonHTMLAttributes } from "react";
+import { forwardRef, type ButtonHTMLAttributes } from "react";
 import styles from "../styles/admin.module.css";
 
 type ActionVariant = "primary" | "secondary" | "danger" | "ghost";
@@ -17,23 +17,27 @@ interface ActionButtonProps extends Omit<ButtonHTMLAttributes<HTMLButtonElement>
   variant?: ActionVariant;
 }
 
-export function ActionButton({
-  label,
-  pending = false,
-  pendingLabel,
-  variant = "secondary",
-  disabled,
-  type = "button",
-  ...rest
-}: ActionButtonProps) {
+export const ActionButton = forwardRef<HTMLButtonElement, ActionButtonProps>(function ActionButton(
+  {
+    label,
+    pending = false,
+    pendingLabel,
+    variant = "secondary",
+    disabled,
+    type = "button",
+    ...rest
+  },
+  ref,
+) {
   return (
     <button
       className={variantClassMap[variant]}
       disabled={disabled || pending}
+      ref={ref}
       type={type}
       {...rest}
     >
       {pending ? pendingLabel ?? `${label}中` : label}
     </button>
   );
-}
+});

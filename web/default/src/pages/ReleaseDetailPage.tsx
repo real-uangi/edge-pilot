@@ -13,15 +13,10 @@ import {
 } from "../lib/format";
 import { ActionButton } from "../components/ActionButton";
 import { AgentLabel } from "../components/AgentLabel";
+import { useDialog } from "../components/DialogProvider";
 import { StatusPill } from "../components/StatusPill";
 import { EmptyState, ErrorState, InlineNotice, LoadingState } from "../components/StateBlocks";
 import styles from "../styles/admin.module.css";
-
-function confirmAction(message: string, action: () => void) {
-  if (window.confirm(message)) {
-    action();
-  }
-}
 
 function cleanupLabel(value: boolean | null) {
   if (value == null) {
@@ -84,6 +79,7 @@ function TaskLogDetails({ task }: { task: ReleaseTaskLogInfo }) {
 }
 
 export function ReleaseDetailPage() {
+  const dialog = useDialog();
   const { id } = useParams();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
@@ -126,6 +122,17 @@ export function ReleaseDetailPage() {
     mutationFn: () => api.retryRelease(id!),
     onSuccess: invalidate,
   });
+
+  const confirmAction = async (message: string, action: () => void) => {
+    const confirmed = await dialog.confirm({
+      message,
+      confirmText: "确认",
+      cancelText: "取消",
+    });
+    if (confirmed) {
+      action();
+    }
+  };
 
   if (detailQuery.isPending) {
     return (
@@ -176,35 +183,35 @@ export function ReleaseDetailPage() {
             pending={startMutation.isPending}
             variant="primary"
             disabled={release.status !== 1}
-            onClick={() => confirmAction("确认开始这个发布单？", () => startMutation.mutate())}
+            onClick={() => void confirmAction("确认开始这个发布单？", () => startMutation.mutate())}
           />
           <ActionButton
             label="跳过"
             pending={skipMutation.isPending}
             variant="ghost"
             disabled={release.status !== 1}
-            onClick={() => confirmAction("确认跳过这个发布单？", () => skipMutation.mutate())}
+            onClick={() => void confirmAction("确认跳过这个发布单？", () => skipMutation.mutate())}
           />
           <ActionButton
             label="确认切流"
             pending={confirmMutation.isPending}
             variant="primary"
             disabled={release.status !== 4}
-            onClick={() => confirmAction("确认执行切流？", () => confirmMutation.mutate())}
+            onClick={() => void confirmAction("确认执行切流？", () => confirmMutation.mutate())}
           />
           <ActionButton
             label="回滚"
             pending={rollbackMutation.isPending}
             variant="danger"
             disabled={[1, 9].includes(release.status)}
-            onClick={() => confirmAction("确认回滚这个发布单？", () => rollbackMutation.mutate())}
+            onClick={() => void confirmAction("确认回滚这个发布单？", () => rollbackMutation.mutate())}
           />
           <ActionButton
             label="重试"
             pending={retryMutation.isPending}
             variant="ghost"
             disabled={release.status !== 7}
-            onClick={() => confirmAction("确认重试这个发布单？", () => retryMutation.mutate())}
+            onClick={() => void confirmAction("确认重试这个发布单？", () => retryMutation.mutate())}
           />
         </div>
       </section>

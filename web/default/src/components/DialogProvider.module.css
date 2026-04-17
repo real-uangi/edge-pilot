@@ -1,0 +1,80 @@
+.backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.4);
+  display: grid;
+  place-items: center;
+  padding: 16px;
+  z-index: 1200;
+}
+
+.dialog {
+  width: min(520px, 100%);
+  background: #ffffff;
+  border-radius: var(--ep-radius);
+  box-shadow: 0 8px 24px var(--ep-shadow-strong);
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  padding: 18px;
+  display: grid;
+  gap: 12px;
+  animation: dialog-in var(--ep-motion-base) var(--ep-ease-standard);
+}
+
+@keyframes dialog-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.title {
+  margin: 0;
+  font-size: 20px;
+  line-height: 1.2;
+}
+
+.message {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--ep-body);
+  white-space: pre-wrap;
+}
+
+.promptField {
+  display: grid;
+  gap: 6px;
+}
+
+.promptLabel {
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.input {
+  width: 100%;
+  border: 1px solid #000000;
+  border-radius: 8px;
+  padding: 10px 12px;
+  background: #ffffff;
+  color: #000000;
+  font-size: 13px;
+}
+
+.actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+@media (max-width: 600px) {
+  .dialog {
+    padding: 16px;
+    gap: 10px;
+  }
+}
