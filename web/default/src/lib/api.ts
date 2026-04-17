@@ -92,6 +92,11 @@ export interface ReleaseRecord {
   previousLiveSlot: number;
   currentTaskId: string | null;
   switchConfirmed: boolean | null;
+  verificationUrl: string;
+  stickyCookieName: string;
+  stickyCookieTtl: number;
+  currentReleaseHeaderName: string;
+  liveReleaseHeaderName: string;
   isActive: boolean;
   queuePosition: number;
   createdAt: string;

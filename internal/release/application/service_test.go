@@ -127,6 +127,56 @@ func TestCreateFromCIDeduplicatesSameImageRequest(t *testing.T) {
 	}
 }
 
+func TestCreateFromCIPopulatesVerificationAccessInfo(t *testing.T) {
+	serviceRepo := &fakeServiceRepo{}
+	agentRepo := &fakeAgentRepo{}
+	releaseRepo := newFakeReleaseRepo()
+	dispatcher := &fakeDispatcher{}
+
+	serviceCatalog := servicecatalogapp.NewService(serviceRepo)
+	registry := agentapp.NewRegistryService(config.LoadAgentAuthConfig(), agentRepo)
+	releaseService := NewService(releaseRepo, dispatcher, serviceCatalog, registry)
+
+	enabled := true
+	dockerHealth := true
+	service := &model.Service{
+		ID:                uuid.New(),
+		ServiceKey:        "svc-a",
+		Name:              "svc-a",
+		AgentID:           "agent-a",
+		ImageRepo:         "repo/app",
+		ContainerPort:     8080,
+		CurrentLiveSlot:   model.SlotBlue,
+		DockerHealthCheck: &dockerHealth,
+		RouteHost:         "svc-a.example.com",
+		RoutePathPrefix:   "/",
+		Enabled:           &enabled,
+	}
+	serviceRepo.ensure()
+	serviceRepo.byID[service.ID] = service
+	serviceRepo.byKey[service.ServiceKey] = service
+
+	output, err := releaseService.CreateFromCI(dto.CreateReleaseFromCIRequest{
+		ServiceKey: service.ServiceKey,
+		ImageTag:   "v1.0.0",
+	})
+	if err != nil {
+		t.Fatalf("CreateFromCI() error = %v", err)
+	}
+	if output.VerificationURL != "//svc-a.example.com/?__ep_release_id="+output.ID.String() {
+		t.Fatalf("unexpected verification URL: %q", output.VerificationURL)
+	}
+	if output.StickyCookieName != "ep_release_id_svc_a" {
+		t.Fatalf("unexpected sticky cookie name: %q", output.StickyCookieName)
+	}
+	if output.CurrentReleaseHeaderName != servicecatalogapp.CurrentReleaseIDHeaderName {
+		t.Fatalf("unexpected current release header name: %q", output.CurrentReleaseHeaderName)
+	}
+	if output.LiveReleaseHeaderName != servicecatalogapp.LiveReleaseIDHeaderName {
+		t.Fatalf("unexpected live release header name: %q", output.LiveReleaseHeaderName)
+	}
+}
+
 func TestCreateFromCIAllowsMultipleQueuedRequestsForDifferentImages(t *testing.T) {
 	serviceRepo := &fakeServiceRepo{}
 	agentRepo := &fakeAgentRepo{}
@@ -306,7 +356,7 @@ func TestStartQueuedReleaseEncryptsSensitiveTaskPayload(t *testing.T) {
 
 	serviceCatalog := servicecatalogapp.NewService(serviceRepo)
 	registry := agentapp.NewRegistryService(config.LoadAgentAuthConfig(), agentRepo)
-	releaseService := NewServiceWithRegistryCredentialsAndCodec(releaseRepo, dispatcher, serviceCatalog, registry, nil, codec)
+	releaseService := NewServiceWithRegistryCredentialsAndCodec(releaseRepo, dispatcher, serviceCatalog, registry, nil, nil, codec)
 
 	enabled := true
 	dockerHealth := true
@@ -1385,6 +1435,24 @@ func (r *fakeReleaseRepo) ListReleases(limit int) ([]model.Release, error) {
 		out = out[:limit]
 	}
 	return out, nil
+}
+
+func (r *fakeReleaseRepo) FindReadyToSwitchRelease(serviceID uuid.UUID) (*model.Release, error) {
+	var matched []*model.Release
+	for _, item := range r.releases {
+		if item.ServiceID != serviceID || item.Status != model.ReleaseStatusReadyToSwitch {
+			continue
+		}
+		copyRelease := *item
+		matched = append(matched, &copyRelease)
+	}
+	if len(matched) == 0 {
+		return nil, nil
+	}
+	sort.Slice(matched, func(i, j int) bool {
+		return matched[i].UpdatedAt.After(matched[j].UpdatedAt)
+	})
+	return matched[0], nil
 }
 
 func (r *fakeReleaseRepo) HasActiveRelease(serviceID uuid.UUID) (bool, error) {

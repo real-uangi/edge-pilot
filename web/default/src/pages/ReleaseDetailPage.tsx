@@ -179,6 +179,16 @@ export function ReleaseDetailPage() {
           <ActionButton label="返回" onClick={() => navigate("/releases")} />
           <ActionButton label="刷新" onClick={() => detailQuery.refetch()} />
           <ActionButton
+            label="验证目标版本"
+            disabled={!release.verificationUrl || release.status < 4}
+            onClick={() => {
+              if (!release.verificationUrl) {
+                return;
+              }
+              window.open(release.verificationUrl, "_blank", "noopener,noreferrer");
+            }}
+          />
+          <ActionButton
             label="开始"
             pending={startMutation.isPending}
             variant="primary"
@@ -254,11 +264,29 @@ export function ReleaseDetailPage() {
             <span className={styles.key}>创建时间</span>
             <span className={styles.value}>{formatDateTime(release.createdAt)}</span>
           </div>
+          <div className={styles.keyValue}>
+            <span className={styles.key}>验证 Cookie</span>
+            <span className={styles.value}>{release.stickyCookieName || "—"}</span>
+          </div>
+          <div className={styles.keyValue}>
+            <span className={styles.key}>当前版本响应头</span>
+            <span className={styles.value}>{release.currentReleaseHeaderName || "—"}</span>
+          </div>
+          <div className={styles.keyValue}>
+            <span className={styles.key}>最新版本响应头</span>
+            <span className={styles.value}>{release.liveReleaseHeaderName || "—"}</span>
+          </div>
         </div>
         <StatusPill
           label={release.switchConfirmed ? "已确认切流" : "未确认切流"}
           tone={release.switchConfirmed ? "success" : releaseStatusTone(release.status, release.isActive)}
         />
+        {release.verificationUrl ? (
+          <InlineNotice
+            message={`目标版本验证链接已就绪，浏览器将写入 ${release.stickyCookieName}，并可通过 ${release.currentReleaseHeaderName} / ${release.liveReleaseHeaderName} 对比当前命中版本与最新 live 版本。`}
+            tone="info"
+          />
+        ) : null}
       </section>
 
       <section className={styles.sectionCard}>

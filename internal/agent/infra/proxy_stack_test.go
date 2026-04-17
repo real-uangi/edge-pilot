@@ -2,6 +2,7 @@ package infra
 
 import (
 	"context"
+	servicecatalogapp "edge-pilot/internal/servicecatalog/application"
 	"edge-pilot/internal/shared/config"
 	"edge-pilot/internal/shared/grpcapi"
 	"errors"
@@ -31,14 +32,13 @@ func TestReconcileLockedUsesTransactionAndAppliesLiveSlotAfterCommit(t *testing.
 	expected := []string{
 		"version",
 		"start-transaction:42",
-		"ensure-backend:be-api@tx-1",
-		"ensure-server:be-api/blue@tx-1",
-		"ensure-server:be-api/green@tx-1",
+		"ensure-backend:be-api_blue@tx-1",
+		"ensure-server:be-api_blue/blue@tx-1",
+		"ensure-backend:be-api_green@tx-1",
+		"ensure-server:be-api_green/green@tx-1",
 		"replace-frontend:ep_http@tx-1",
 		"list-backends",
 		"commit:tx-1",
-		"enable:be-api/blue",
-		"disable:be-api/green",
 	}
 	if !reflect.DeepEqual(callLog, expected) {
 		t.Fatalf("unexpected call order: %#v", callLog)
@@ -96,9 +96,10 @@ func TestReconcileLockedAbortsTransactionWhenFrontendUpdateFails(t *testing.T) {
 	expected := []string{
 		"version",
 		"start-transaction:9",
-		"ensure-backend:be-api@tx-3",
-		"ensure-server:be-api/blue@tx-3",
-		"ensure-server:be-api/green@tx-3",
+		"ensure-backend:be-api_blue@tx-3",
+		"ensure-server:be-api_blue/blue@tx-3",
+		"ensure-backend:be-api_green@tx-3",
+		"ensure-server:be-api_green/green@tx-3",
 		"replace-frontend:ep_http@tx-3",
 		"abort:tx-3",
 	}
@@ -128,9 +129,10 @@ func TestReconcileLockedAbortsTransactionWhenCommitFails(t *testing.T) {
 	expected := []string{
 		"version",
 		"start-transaction:10",
-		"ensure-backend:be-api@tx-4",
-		"ensure-server:be-api/blue@tx-4",
-		"ensure-server:be-api/green@tx-4",
+		"ensure-backend:be-api_blue@tx-4",
+		"ensure-server:be-api_blue/blue@tx-4",
+		"ensure-backend:be-api_green@tx-4",
+		"ensure-server:be-api_green/green@tx-4",
 		"replace-frontend:ep_http@tx-4",
 		"list-backends",
 		"commit:tx-4",
@@ -162,9 +164,10 @@ func TestReconcileLockedPreservesPrimaryErrorWhenAbortFails(t *testing.T) {
 	expected := []string{
 		"version",
 		"start-transaction:11",
-		"ensure-backend:be-api@tx-5",
-		"ensure-server:be-api/blue@tx-5",
-		"ensure-server:be-api/green@tx-5",
+		"ensure-backend:be-api_blue@tx-5",
+		"ensure-server:be-api_blue/blue@tx-5",
+		"ensure-backend:be-api_green@tx-5",
+		"ensure-server:be-api_green/green@tx-5",
 		"replace-frontend:ep_http@tx-5",
 		"abort:tx-5",
 	}
@@ -204,17 +207,44 @@ func TestReconcileLockedPrecreatesServersWithResolversForEmptyInstances(t *testi
 	expected := []string{
 		"version",
 		"start-transaction:12",
-		"ensure-backend:be-api@tx-6",
-		"ensure-server:be-api/blue@tx-6",
-		"ensure-server:be-api/green@tx-6",
+		"ensure-backend:be-api_blue@tx-6",
+		"ensure-server:be-api_blue/blue@tx-6",
+		"ensure-backend:be-api_green@tx-6",
+		"ensure-server:be-api_green/green@tx-6",
 		"replace-frontend:ep_http@tx-6",
 		"list-backends",
 		"commit:tx-6",
-		"disable:be-api/blue",
-		"disable:be-api/green",
 	}
 	if !reflect.DeepEqual(callLog, expected) {
 		t.Fatalf("unexpected call order: %#v", callLog)
+	}
+}
+
+func TestFrontendSectionAddsStickyPreviewAndDiagnosticRules(t *testing.T) {
+	proxy := newTestManagedProxyRuntime(&fakeManagedProxyDataplane{}, &fakeManagedProxyRuntime{})
+
+	section := proxy.frontendSection(testProxySnapshotWithService(grpcapi.Slot_SLOT_GREEN))
+
+	if len(section.BackendSwitchingRuleList) != 5 {
+		t.Fatalf("expected 5 switching rules, got %d", len(section.BackendSwitchingRuleList))
+	}
+	if section.BackendSwitchingRuleList[0].Name != "be-api_blue" {
+		t.Fatalf("expected blue preview backend first, got %q", section.BackendSwitchingRuleList[0].Name)
+	}
+	if section.BackendSwitchingRuleList[4].Name != "be-api_green" {
+		t.Fatalf("expected live green backend fallback, got %q", section.BackendSwitchingRuleList[4].Name)
+	}
+	if len(section.HTTPAfterResponseRules) != 7 {
+		t.Fatalf("expected 7 response rules, got %d", len(section.HTTPAfterResponseRules))
+	}
+	if section.HTTPAfterResponseRules[0].Header != "Set-Cookie" {
+		t.Fatalf("expected preview response to set cookie, got %#v", section.HTTPAfterResponseRules[0])
+	}
+	if section.HTTPAfterResponseRules[3].Header != servicecatalogapp.CurrentReleaseIDHeaderName {
+		t.Fatalf("expected current release header, got %#v", section.HTTPAfterResponseRules[3])
+	}
+	if section.HTTPAfterResponseRules[6].Header != servicecatalogapp.LiveReleaseIDHeaderName {
+		t.Fatalf("expected live release header, got %#v", section.HTTPAfterResponseRules[6])
 	}
 }
 
@@ -264,8 +294,8 @@ func testProxySnapshotWithService(slot grpcapi.Slot) *grpcapi.ProxyConfigSnapsho
 				RouteHost:       "api.example.com",
 				RoutePathPrefix: "/",
 				BackendName:     "be-api",
-				BlueServerName:  "blue",
-				GreenServerName: "green",
+				BlueServerName:  "release-blue",
+				GreenServerName: "release-green",
 				ContainerPort:   8080,
 				CurrentLiveSlot: slot,
 			},

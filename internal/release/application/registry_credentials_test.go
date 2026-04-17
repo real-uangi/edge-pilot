@@ -33,7 +33,7 @@ func TestStartQueuedReleaseInjectsRegistryCredentialIntoDeployTask(t *testing.T)
 		MasterKey:  []byte("12345678901234567890123456789012"),
 		KeyVersion: "v1",
 	})
-	releaseService := NewServiceWithRegistryCredentialsAndCodec(releaseRepo, dispatcher, serviceCatalog, registry, resolver, codec)
+	releaseService := NewServiceWithRegistryCredentialsAndCodec(releaseRepo, dispatcher, serviceCatalog, registry, nil, resolver, codec)
 
 	enabled := true
 	dockerHealth := true

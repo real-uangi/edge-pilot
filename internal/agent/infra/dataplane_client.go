@@ -31,6 +31,7 @@ type frontendSection struct {
 	Binds                    map[string]frontendBind `json:"binds"`
 	ACLList                  []frontendACL           `json:"acl_list,omitempty"`
 	BackendSwitchingRuleList []frontendSwitchRule    `json:"backend_switching_rule_list,omitempty"`
+	HTTPAfterResponseRules   []httpAfterResponseRule `json:"http_after_response_rule_list,omitempty"`
 }
 
 type frontendBind struct {
@@ -50,6 +51,15 @@ type frontendSwitchRule struct {
 	Name     string `json:"name"`
 	Cond     string `json:"cond"`
 	CondTest string `json:"cond_test"`
+	Index    int    `json:"index"`
+}
+
+type httpAfterResponseRule struct {
+	Action   string `json:"action"`
+	Header   string `json:"hdr_name,omitempty"`
+	Format   string `json:"hdr_fmt,omitempty"`
+	Cond     string `json:"cond,omitempty"`
+	CondTest string `json:"cond_test,omitempty"`
 	Index    int    `json:"index"`
 }
 

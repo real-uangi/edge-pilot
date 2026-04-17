@@ -4,6 +4,7 @@ import (
 	"edge-pilot/internal/agent/application"
 	releasedomain "edge-pilot/internal/release/domain"
 	servicecatalogapp "edge-pilot/internal/servicecatalog/application"
+	servicecatalogdomain "edge-pilot/internal/servicecatalog/domain"
 	"edge-pilot/internal/shared/dto"
 	"edge-pilot/internal/shared/grpcapi"
 	"edge-pilot/internal/shared/model"
@@ -23,6 +24,7 @@ type Service struct {
 	dispatcher    releasedomain.TaskDispatcher
 	services      *servicecatalogapp.Service
 	agentRegistry *application.RegistryService
+	proxyConfigs  servicecatalogdomain.ProxyConfigPublisher
 	registryAuth  releasedomain.RegistryCredentialResolver
 	codec         *secret.Codec
 }
@@ -40,7 +42,7 @@ func NewService(
 	services *servicecatalogapp.Service,
 	agentRegistry *application.RegistryService,
 ) *Service {
-	return NewServiceWithRegistryCredentialsAndCodec(repo, dispatcher, services, agentRegistry, nil, nil)
+	return NewServiceWithRegistryCredentialsAndCodec(repo, dispatcher, services, agentRegistry, nil, nil, nil)
 }
 
 func NewServiceWithRegistryCredentials(
@@ -50,7 +52,7 @@ func NewServiceWithRegistryCredentials(
 	agentRegistry *application.RegistryService,
 	registryAuth releasedomain.RegistryCredentialResolver,
 ) *Service {
-	return NewServiceWithRegistryCredentialsAndCodec(repo, dispatcher, services, agentRegistry, registryAuth, nil)
+	return NewServiceWithRegistryCredentialsAndCodec(repo, dispatcher, services, agentRegistry, nil, registryAuth, nil)
 }
 
 func NewServiceWithRegistryCredentialsAndCodec(
@@ -58,6 +60,7 @@ func NewServiceWithRegistryCredentialsAndCodec(
 	dispatcher releasedomain.TaskDispatcher,
 	services *servicecatalogapp.Service,
 	agentRegistry *application.RegistryService,
+	proxyConfigs servicecatalogdomain.ProxyConfigPublisher,
 	registryAuth releasedomain.RegistryCredentialResolver,
 	codec *secret.Codec,
 ) *Service {
@@ -69,6 +72,7 @@ func NewServiceWithRegistryCredentialsAndCodec(
 		dispatcher:    dispatcher,
 		services:      services,
 		agentRegistry: agentRegistry,
+		proxyConfigs:  proxyConfigs,
 		registryAuth:  registryAuth,
 		codec:         codec,
 	}
@@ -786,6 +790,9 @@ func (s *Service) applyTaskSuccess(release *model.Release, task *model.Task, upd
 		if err := s.repo.UpdateRelease(release); err != nil {
 			return err
 		}
+		if err := s.publishAgent(task.AgentID); err != nil {
+			return err
+		}
 		return s.repo.CreateAudit(newAudit("release", release.ID.String(), "ready_to_switch", release.TraceID, update.GetListenAddress()))
 	case model.TaskTypeSwitchTraffic:
 		release.Status = model.ReleaseStatusCompleted
@@ -799,6 +806,9 @@ func (s *Service) applyTaskSuccess(release *model.Release, task *model.Task, upd
 		if err := s.repo.UpdateRelease(release); err != nil {
 			return err
 		}
+		if err := s.publishAgent(task.AgentID); err != nil {
+			return err
+		}
 		return s.repo.CreateAudit(newAudit("release", release.ID.String(), "traffic_switched", release.TraceID, update.GetServerName()))
 	case model.TaskTypeRollback:
 		release.Status = model.ReleaseStatusRolledBack
@@ -810,6 +820,9 @@ func (s *Service) applyTaskSuccess(release *model.Release, task *model.Task, upd
 			return err
 		}
 		if err := s.repo.UpdateRelease(release); err != nil {
+			return err
+		}
+		if err := s.publishAgent(task.AgentID); err != nil {
 			return err
 		}
 		return s.repo.CreateAudit(newAudit("release", release.ID.String(), "rolled_back", release.TraceID, update.GetServerName()))
@@ -1024,28 +1037,42 @@ func (s *Service) prepareTaskSensitive(spec *dto.ServiceDeploymentSpec, sensitiv
 
 func toReleaseOutput(release *model.Release) dto.ReleaseOutput {
 	return dto.ReleaseOutput{
-		ID:               release.ID,
-		ServiceID:        release.ServiceID,
-		AgentID:          release.AgentID,
-		ImageRepo:        release.ImageRepo,
-		ImageTag:         release.ImageTag,
-		CommitSHA:        release.CommitSHA,
-		TriggeredBy:      release.TriggeredBy,
-		TraceID:          release.TraceID,
-		Status:           release.Status,
-		TargetSlot:       release.TargetSlot,
-		PreviousLiveSlot: release.PreviousLiveSlot,
-		CurrentTaskID:    release.CurrentTaskID,
-		SwitchConfirmed:  release.SwitchConfirmed,
-		IsActive:         release.Status.IsActive(),
-		CreatedAt:        release.CreatedAt,
-		UpdatedAt:        release.UpdatedAt,
-		CompletedAt:      release.CompletedAt,
+		ID:                       release.ID,
+		ServiceID:                release.ServiceID,
+		AgentID:                  release.AgentID,
+		ImageRepo:                release.ImageRepo,
+		ImageTag:                 release.ImageTag,
+		CommitSHA:                release.CommitSHA,
+		TriggeredBy:              release.TriggeredBy,
+		TraceID:                  release.TraceID,
+		Status:                   release.Status,
+		TargetSlot:               release.TargetSlot,
+		PreviousLiveSlot:         release.PreviousLiveSlot,
+		CurrentTaskID:            release.CurrentTaskID,
+		SwitchConfirmed:          release.SwitchConfirmed,
+		StickyCookieTTL:          servicecatalogapp.StickyCookieMaxAgeSec,
+		CurrentReleaseHeaderName: servicecatalogapp.CurrentReleaseIDHeaderName,
+		LiveReleaseHeaderName:    servicecatalogapp.LiveReleaseIDHeaderName,
+		IsActive:                 release.Status.IsActive(),
+		CreatedAt:                release.CreatedAt,
+		UpdatedAt:                release.UpdatedAt,
+		CompletedAt:              release.CompletedAt,
 	}
 }
 
 func (s *Service) enrichReleaseOutput(release *model.Release) (dto.ReleaseOutput, error) {
 	output := toReleaseOutput(release)
+	if spec, err := s.services.GetSpecByID(release.ServiceID); err != nil {
+		var statusCarrier interface{ GetStatusCode() int }
+		if errors.As(err, &statusCarrier) && statusCarrier.GetStatusCode() == 404 {
+			// Preserve historical release visibility even if the service has been removed.
+		} else {
+			return dto.ReleaseOutput{}, err
+		}
+	} else {
+		output.VerificationURL = servicecatalogapp.BuildVerificationURL(spec.RouteHost, spec.RoutePathPrefix, release.ID.String())
+		output.StickyCookieName = servicecatalogapp.StickyCookieName(spec.ServiceKey)
+	}
 	if !release.Status.IsQueued() {
 		return output, nil
 	}
@@ -1067,6 +1094,13 @@ func newAudit(aggregateType string, aggregateID string, eventType string, traceI
 		Message:       message,
 		Metadata:      commondb.NewJSONB(map[string]string{"message": message}),
 	}
+}
+
+func (s *Service) publishAgent(agentID string) error {
+	if s.proxyConfigs == nil || strings.TrimSpace(agentID) == "" {
+		return nil
+	}
+	return s.proxyConfigs.PublishAgent(agentID)
 }
 
 func (s *Service) recordLateTaskUpdate(release *model.Release, task *model.Task, update *grpcapi.TaskUpdate, reason string) error {

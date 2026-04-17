@@ -50,6 +50,20 @@ func (r *repository) ListReleases(limit int) ([]model.Release, error) {
 	return releases, nil
 }
 
+func (r *repository) FindReadyToSwitchRelease(serviceID uuid.UUID) (*model.Release, error) {
+	var release model.Release
+	result := r.conn.Where("service_id = ? AND status = ?", serviceID, model.ReleaseStatusReadyToSwitch).
+		Order("updated_at desc").
+		First(&release)
+	if result.Error != nil {
+		if result.Error == gorm.ErrRecordNotFound {
+			return nil, nil
+		}
+		return nil, result.Error
+	}
+	return &release, nil
+}
+
 func (r *repository) HasActiveRelease(serviceID uuid.UUID) (bool, error) {
 	var count int64
 	if err := r.conn.Model(&model.Release{}).

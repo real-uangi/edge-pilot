@@ -2,16 +2,22 @@ package application
 
 import (
 	"edge-pilot/internal/shared/model"
+	"net/url"
 	"sort"
+	"strconv"
 	"strings"
 
 	"github.com/google/uuid"
 )
 
 const (
-	SharedFrontendName     = "ep_http"
-	SharedDefaultBackend   = "ep_default"
-	SharedFrontendBindPort = 80
+	SharedFrontendName         = "ep_http"
+	SharedDefaultBackend       = "ep_default"
+	SharedFrontendBindPort     = 80
+	PreviewReleaseIDQueryParam = "__ep_release_id"
+	CurrentReleaseIDHeaderName = "X-Edge-Pilot-Current-Release-Id"
+	LiveReleaseIDHeaderName    = "X-Edge-Pilot-Live-Release-Id"
+	StickyCookieMaxAgeSec      = 600
 )
 
 type ProxyServiceConfig struct {
@@ -47,6 +53,52 @@ func NormalizeRoutePathPrefix(value string) string {
 
 func BackendName(serviceID uuid.UUID) string {
 	return serviceID.String()
+}
+
+func BackendNameForSlot(base string, slot model.Slot) string {
+	return base + "_" + SlotToken(slot)
+}
+
+func StickyCookieName(serviceKey string) string {
+	normalized := strings.ToLower(strings.TrimSpace(serviceKey))
+	if normalized == "" {
+		normalized = "service"
+	}
+	var builder strings.Builder
+	builder.Grow(len(normalized))
+	for _, r := range normalized {
+		switch {
+		case r >= 'a' && r <= 'z':
+			builder.WriteRune(r)
+		case r >= '0' && r <= '9':
+			builder.WriteRune(r)
+		default:
+			builder.WriteByte('_')
+		}
+	}
+	return "ep_release_id_" + strings.Trim(builder.String(), "_")
+}
+
+func SlotToken(slot model.Slot) string {
+	switch slot {
+	case model.SlotBlue:
+		return "blue"
+	case model.SlotGreen:
+		return "green"
+	default:
+		return ""
+	}
+}
+
+func BuildVerificationURL(routeHost string, routePathPrefix string, releaseID string) string {
+	host := NormalizeRouteHost(routeHost)
+	releaseID = strings.TrimSpace(releaseID)
+	if host == "" || releaseID == "" {
+		return ""
+	}
+	values := url.Values{}
+	values.Set(PreviewReleaseIDQueryParam, releaseID)
+	return "//" + host + NormalizeRoutePathPrefix(routePathPrefix) + "?" + values.Encode()
 }
 
 func ServerName(slot model.Slot) string {
@@ -86,4 +138,21 @@ func BuildProxyServiceConfigs(services []model.Service) []ProxyServiceConfig {
 		return out[i].ServiceKey < out[j].ServiceKey
 	})
 	return out
+}
+
+func BuildStickyCookie(cookieName string, releaseID string, routePathPrefix string) string {
+	releaseID = strings.TrimSpace(releaseID)
+	cookieName = strings.TrimSpace(cookieName)
+	if releaseID == "" || cookieName == "" {
+		return ""
+	}
+	path := NormalizeRoutePathPrefix(routePathPrefix)
+	parts := []string{
+		cookieName + "=" + releaseID,
+		"Max-Age=" + strconv.Itoa(StickyCookieMaxAgeSec),
+		"Path=" + path,
+		"HttpOnly",
+		"SameSite=Lax",
+	}
+	return strings.Join(parts, "; ")
 }
