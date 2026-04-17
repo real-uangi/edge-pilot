@@ -77,7 +77,7 @@ func TestDataPlaneClientTransactionWritesIncludeTransactionID(t *testing.T) {
 				Header:   "X-Test",
 				Format:   "release-1",
 				Cond:     "if",
-				CondTest: "test_acl_expr",
+				CondTest: "if test_acl_expr",
 				Index:    0,
 			},
 		},
@@ -101,7 +101,7 @@ func TestDataPlaneClientTransactionWritesIncludeTransactionID(t *testing.T) {
 	assertTransactionRequest(t, requests[1], http.MethodPut, "/v3/services/haproxy/configuration/backends/be-api/servers/blue", "tx-1", false)
 	assertServerPayload(t, requests[1], managedProxyResolversName, managedProxyInitAddrFallback)
 	assertTransactionRequest(t, requests[2], http.MethodPut, "/v3/services/haproxy/configuration/frontends/ep_http", "tx-1", true)
-	assertFrontendResponseRulePayload(t, requests[2], "set-header", "if", "test_acl_expr")
+	assertFrontendResponseRulePayload(t, requests[2], "set-header", "if", "if test_acl_expr")
 	assertTransactionRequest(t, requests[3], http.MethodDelete, "/v3/services/haproxy/configuration/backends/stale-api", "tx-1", false)
 	assertTransactionLifecycleRequest(t, requests[4], http.MethodPut, "/v3/services/haproxy/transactions/tx-1")
 	assertTransactionLifecycleRequest(t, requests[5], http.MethodDelete, "/v3/services/haproxy/transactions/tx-1")

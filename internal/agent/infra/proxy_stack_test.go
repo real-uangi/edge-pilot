@@ -250,7 +250,7 @@ func TestFrontendSectionAddsStickyPreviewAndDiagnosticRules(t *testing.T) {
 	if section.HTTPAfterResponseRules[0].Cond != "if" {
 		t.Fatalf("expected response rule cond if, got %#v", section.HTTPAfterResponseRules[0])
 	}
-	if section.HTTPAfterResponseRules[0].CondTest != hostACL+" "+pathACL+" "+queryBlueACL {
+	if section.HTTPAfterResponseRules[0].CondTest != "if "+hostACL+" "+pathACL+" "+queryBlueACL {
 		t.Fatalf("expected response rule cond_test ACL expression, got %#v", section.HTTPAfterResponseRules[0])
 	}
 	if section.HTTPAfterResponseRules[3].Header != servicecatalogapp.CurrentReleaseIDHeaderName {
@@ -278,8 +278,8 @@ func TestFrontendSectionAddsStickyPreviewAndDiagnosticRules(t *testing.T) {
 		if strings.TrimSpace(rule.CondTest) == "" {
 			t.Fatalf("response rule[%d] cond_test should not be empty, got %#v", i, rule)
 		}
-		if rule.CondTest == "if" || rule.CondTest == "unless" {
-			t.Fatalf("response rule[%d] cond_test should be ACL expression, got %#v", i, rule)
+		if !strings.HasPrefix(rule.CondTest, "if ") && !strings.HasPrefix(rule.CondTest, "unless ") {
+			t.Fatalf("response rule[%d] cond_test should include if/unless prefix, got %#v", i, rule)
 		}
 	}
 }
