@@ -187,6 +187,10 @@ func (s *Service) buildServiceEntity(id uuid.UUID, req dto.UpsertServiceRequest)
 	if err := validateContainerPort(req.ContainerPort); err != nil {
 		return nil, err
 	}
+	normalizedPathPrefix := NormalizeRoutePathPrefix(req.RoutePathPrefix)
+	if err := validateRoutePathPrefix(normalizedPathPrefix); err != nil {
+		return nil, err
+	}
 	dockerHealth := req.DockerHealthCheck
 	if dockerHealth == nil {
 		dockerHealth = boolPointer(true)
@@ -242,7 +246,7 @@ func (s *Service) buildServiceEntity(id uuid.UUID, req dto.UpsertServiceRequest)
 		HTTPProbeIntervalSecond: httpProbeIntervalSecond,
 		HTTPSuccessThreshold:    httpSuccessThreshold,
 		RouteHost:               NormalizeRouteHost(req.RouteHost),
-		RoutePathPrefix:         NormalizeRoutePathPrefix(req.RoutePathPrefix),
+		RoutePathPrefix:         normalizedPathPrefix,
 		Env:                     nil,
 		EnvCiphertext:           envCiphertext,
 		EnvKeyVersion:           envKeyVersion,
@@ -465,6 +469,18 @@ func validatePublishedPorts(items []model.PublishedPort) error {
 func validateContainerPort(port int) error {
 	if port <= 0 || port > 65535 {
 		return business.NewBadRequest("containerPort 非法")
+	}
+	return nil
+}
+
+func validateRoutePathPrefix(path string) error {
+	for _, r := range path {
+		if r <= 0x1f || r == 0x7f || r == ' ' || r == '\t' || r == '\r' || r == '\n' {
+			return business.NewBadRequest("routePathPrefix 非法")
+		}
+		if r == ';' || r == '?' || r == '#' {
+			return business.NewBadRequest("routePathPrefix 非法")
+		}
 	}
 	return nil
 }

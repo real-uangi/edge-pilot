@@ -258,6 +258,35 @@ func TestCreateRejectsInvalidContainerPort(t *testing.T) {
 	}
 }
 
+func TestCreateRejectsInvalidRoutePathPrefix(t *testing.T) {
+	repo := newFakeServiceCatalogRepo()
+	svc := NewService(repo)
+
+	if _, err := svc.Create(dto.UpsertServiceRequest{
+		Name:            "svc-a",
+		ServiceKey:      "svc-a",
+		AgentID:         "11111111-1111-1111-1111-111111111111",
+		ImageRepo:       "repo/app",
+		ContainerPort:   8080,
+		RouteHost:       "a.example.com",
+		RoutePathPrefix: "/api;v1",
+	}); err == nil {
+		t.Fatal("expected invalid routePathPrefix with semicolon to be rejected")
+	}
+
+	if _, err := svc.Create(dto.UpsertServiceRequest{
+		Name:            "svc-b",
+		ServiceKey:      "svc-b",
+		AgentID:         "11111111-1111-1111-1111-111111111111",
+		ImageRepo:       "repo/app",
+		ContainerPort:   8080,
+		RouteHost:       "b.example.com",
+		RoutePathPrefix: "/api\tv1",
+	}); err == nil {
+		t.Fatal("expected invalid routePathPrefix with whitespace to be rejected")
+	}
+}
+
 func TestGetFallsBackToPlaintextEnvForLegacyData(t *testing.T) {
 	repo := newFakeServiceCatalogRepo()
 	svc := NewService(repo)
