@@ -401,6 +401,32 @@ func TestFrontendSectionAddsStickyPreviewAndDiagnosticRules(t *testing.T) {
 	}
 }
 
+func TestFrontendSectionSkipsInvalidResponseHeaderRules(t *testing.T) {
+	proxy := newTestManagedProxyRuntime(&fakeManagedProxyDataplane{}, &fakeManagedProxyRuntime{})
+
+	snapshot := testProxySnapshotWithService(grpcapi.Slot_SLOT_BLUE)
+	snapshot.Services[0].GreenServerName = ""
+
+	section := proxy.frontendSection(snapshot)
+
+	if len(section.HTTPAfterResponseRules) != 5 {
+		t.Fatalf("expected 5 response rules after filtering invalid green rules, got %d", len(section.HTTPAfterResponseRules))
+	}
+	for i, rule := range section.HTTPAfterResponseRules {
+		if strings.TrimSpace(rule.Format) == "" {
+			t.Fatalf("response rule[%d] should have non-empty hdr_fmt, got %#v", i, rule)
+		}
+		if rule.Index != i {
+			t.Fatalf("response rule[%d] should be reindexed to %d, got %d", i, i, rule.Index)
+		}
+	}
+	for _, rule := range section.HTTPAfterResponseRules {
+		if rule.CondTest == aclName("svc-1", "host")+" "+aclName("svc-1", "path")+" "+aclName("svc-1", "query_green") {
+			t.Fatalf("green preview response rule should be skipped when green release is invalid, got %#v", rule)
+		}
+	}
+}
+
 func TestProxyInspectNeedsBootstrapRefresh(t *testing.T) {
 	runtime := newTestManagedProxyRuntime(&fakeManagedProxyDataplane{}, &fakeManagedProxyRuntime{})
 	expectedHash := runtime.bootstrapFilesHash()

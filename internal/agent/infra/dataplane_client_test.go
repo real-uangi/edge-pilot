@@ -161,6 +161,77 @@ func TestDataPlaneClientShowRawConfig(t *testing.T) {
 	}
 }
 
+func TestDataPlaneClientReplaceFrontendInTransactionFiltersInvalidResponseRules(t *testing.T) {
+	var requests []recordedRequest
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, err := io.ReadAll(r.Body)
+		if err != nil {
+			t.Fatalf("ReadAll() error = %v", err)
+		}
+		requests = append(requests, recordedRequest{
+			method: r.Method,
+			path:   r.URL.Path,
+			query:  r.URL.Query(),
+			body:   string(body),
+		})
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer server.Close()
+
+	client := newDataPlaneAPIClient(func() string { return server.URL }, func() string { return "admin" }, func() string { return "secret" })
+	ctx := context.Background()
+	if err := client.ReplaceFrontendInTransaction(ctx, "tx-1", frontendSection{
+		Name: "ep_http",
+		Mode: "http",
+		HTTPAfterResponseRules: []httpAfterResponseRule{
+			{
+				Type:     "add-header",
+				Action:   "add-header",
+				Header:   "Set-Cookie",
+				Cond:     "if",
+				CondTest: "green_acl",
+				Index:    0,
+			},
+			{
+				Type:     "set-header",
+				Action:   "set-header",
+				Header:   "X-Test",
+				Format:   "release-1",
+				Cond:     "if",
+				CondTest: "blue_acl",
+				Index:    1,
+			},
+		},
+	}); err != nil {
+		t.Fatalf("ReplaceFrontendInTransaction() error = %v", err)
+	}
+
+	if len(requests) != 1 {
+		t.Fatalf("expected 1 request, got %d", len(requests))
+	}
+	var payload map[string]any
+	if err := json.Unmarshal([]byte(requests[0].body), &payload); err != nil {
+		t.Fatalf("Unmarshal() error = %v", err)
+	}
+	rawRules, ok := payload["http_after_response_rule_list"].([]any)
+	if !ok {
+		t.Fatalf("expected http_after_response_rule_list array, got %#v", payload["http_after_response_rule_list"])
+	}
+	if len(rawRules) != 1 {
+		t.Fatalf("expected invalid response rule to be filtered, got %d rules", len(rawRules))
+	}
+	firstRule, ok := rawRules[0].(map[string]any)
+	if !ok {
+		t.Fatalf("expected first rule object, got %#v", rawRules[0])
+	}
+	if got := firstRule["hdr_fmt"]; got != "release-1" {
+		t.Fatalf("expected hdr_fmt release-1, got %#v", got)
+	}
+	if got := firstRule["index"]; got != float64(0) {
+		t.Fatalf("expected filtered rule reindexed to 0, got %#v", got)
+	}
+}
+
 func assertServerPayload(t *testing.T, request recordedRequest, resolvers string, initAddr string) {
 	t.Helper()
 	var payload map[string]any

@@ -147,6 +147,7 @@ func (c *DataPlaneAPIClient) ShowRawConfig(ctx context.Context) (string, error) 
 }
 
 func (c *DataPlaneAPIClient) ReplaceFrontend(ctx context.Context, section frontendSection) error {
+	section.HTTPAfterResponseRules = filterHTTPAfterResponseRules(section.HTTPAfterResponseRules)
 	version, err := c.ConfigurationVersion(ctx)
 	if err != nil {
 		return err
@@ -164,6 +165,7 @@ func (c *DataPlaneAPIClient) ReplaceFrontend(ctx context.Context, section fronte
 }
 
 func (c *DataPlaneAPIClient) ReplaceFrontendInTransaction(ctx context.Context, transactionID string, section frontendSection) error {
+	section.HTTPAfterResponseRules = filterHTTPAfterResponseRules(section.HTTPAfterResponseRules)
 	path := c.configurationPath("/v3/services/haproxy/configuration/frontends/"+url.PathEscape(section.Name), "", transactionID, true)
 	if _, err := c.do(ctx, http.MethodPut, path, section); err != nil {
 		if !isHTTPStatus(err, http.StatusNotFound) {
@@ -174,6 +176,29 @@ func (c *DataPlaneAPIClient) ReplaceFrontendInTransaction(ctx context.Context, t
 		return err
 	}
 	return nil
+}
+
+func filterHTTPAfterResponseRules(rules []httpAfterResponseRule) []httpAfterResponseRule {
+	out := make([]httpAfterResponseRule, 0, len(rules))
+	for _, rule := range rules {
+		if strings.TrimSpace(rule.Type) == "" || strings.TrimSpace(rule.Action) == "" {
+			continue
+		}
+		if strings.TrimSpace(rule.Header) == "" {
+			continue
+		}
+		if strings.TrimSpace(rule.CondTest) == "" {
+			continue
+		}
+		if strings.TrimSpace(rule.Format) == "" {
+			continue
+		}
+		out = append(out, rule)
+	}
+	for i := range out {
+		out[i].Index = i
+	}
+	return out
 }
 
 func (c *DataPlaneAPIClient) EnsureBackend(ctx context.Context, section backendSection) error {

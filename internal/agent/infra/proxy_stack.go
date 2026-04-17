@@ -724,7 +724,7 @@ func (m *ManagedProxyRuntime) frontendSection(snapshot *grpcapi.ProxyConfigSnaps
 		},
 		ACLList:                  acls,
 		BackendSwitchingRuleList: rules,
-		HTTPAfterResponseRules:   responseRules,
+		HTTPAfterResponseRules:   filterHTTPAfterResponseRules(responseRules),
 	}
 }
 
