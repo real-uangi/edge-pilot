@@ -67,7 +67,20 @@ func TestDataPlaneClientTransactionWritesIncludeTransactionID(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("EnsureServerInTransaction() error = %v", err)
 	}
-	if err := client.ReplaceFrontendInTransaction(ctx, "tx-1", frontendSection{Name: "ep_http", Mode: "http"}); err != nil {
+	if err := client.ReplaceFrontendInTransaction(ctx, "tx-1", frontendSection{
+		Name: "ep_http",
+		Mode: "http",
+		HTTPAfterResponseRules: []httpAfterResponseRule{
+			{
+				Type:   "set-header",
+				Action: "set-header",
+				Header: "X-Test",
+				Format: "release-1",
+				Cond:   "if",
+				Index:  0,
+			},
+		},
+	}); err != nil {
 		t.Fatalf("ReplaceFrontendInTransaction() error = %v", err)
 	}
 	if err := client.DeleteBackendInTransaction(ctx, "stale-api", "tx-1"); err != nil {
@@ -87,6 +100,7 @@ func TestDataPlaneClientTransactionWritesIncludeTransactionID(t *testing.T) {
 	assertTransactionRequest(t, requests[1], http.MethodPut, "/v3/services/haproxy/configuration/backends/be-api/servers/blue", "tx-1", false)
 	assertServerPayload(t, requests[1], managedProxyResolversName, managedProxyInitAddrFallback)
 	assertTransactionRequest(t, requests[2], http.MethodPut, "/v3/services/haproxy/configuration/frontends/ep_http", "tx-1", true)
+	assertFrontendResponseRulePayload(t, requests[2], "set-header")
 	assertTransactionRequest(t, requests[3], http.MethodDelete, "/v3/services/haproxy/configuration/backends/stale-api", "tx-1", false)
 	assertTransactionLifecycleRequest(t, requests[4], http.MethodPut, "/v3/services/haproxy/transactions/tx-1")
 	assertTransactionLifecycleRequest(t, requests[5], http.MethodDelete, "/v3/services/haproxy/transactions/tx-1")
@@ -157,6 +171,25 @@ func assertServerPayload(t *testing.T, request recordedRequest, resolvers string
 	}
 	if got := payload["init_addr"]; got != initAddr {
 		t.Fatalf("expected init_addr %q, got %#v", initAddr, got)
+	}
+}
+
+func assertFrontendResponseRulePayload(t *testing.T, request recordedRequest, ruleType string) {
+	t.Helper()
+	var payload map[string]any
+	if err := json.Unmarshal([]byte(request.body), &payload); err != nil {
+		t.Fatalf("Unmarshal() error = %v", err)
+	}
+	rawRules, ok := payload["http_after_response_rule_list"].([]any)
+	if !ok || len(rawRules) == 0 {
+		t.Fatalf("expected non-empty http_after_response_rule_list, got %#v", payload["http_after_response_rule_list"])
+	}
+	firstRule, ok := rawRules[0].(map[string]any)
+	if !ok {
+		t.Fatalf("expected first rule object, got %#v", rawRules[0])
+	}
+	if got := firstRule["type"]; got != ruleType {
+		t.Fatalf("expected first response rule type %q, got %#v", ruleType, got)
 	}
 }
 

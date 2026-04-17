@@ -575,6 +575,7 @@ func (m *ManagedProxyRuntime) frontendSection(snapshot *grpcapi.ProxyConfigSnaps
 		})
 		responseBase := idx * 7
 		responseRules = append(responseRules, httpAfterResponseRule{
+			Type:     "add-header",
 			Action:   "add-header",
 			Header:   "Set-Cookie",
 			Format:   servicecatalogapp.BuildStickyCookie(cookieName, blueReleaseID, service.GetRoutePathPrefix()),
@@ -583,6 +584,7 @@ func (m *ManagedProxyRuntime) frontendSection(snapshot *grpcapi.ProxyConfigSnaps
 			Index:    responseBase,
 		})
 		responseRules = append(responseRules, httpAfterResponseRule{
+			Type:     "add-header",
 			Action:   "add-header",
 			Header:   "Set-Cookie",
 			Format:   servicecatalogapp.BuildStickyCookie(cookieName, greenReleaseID, service.GetRoutePathPrefix()),
@@ -591,6 +593,7 @@ func (m *ManagedProxyRuntime) frontendSection(snapshot *grpcapi.ProxyConfigSnaps
 			Index:    responseBase + 1,
 		})
 		responseRules = append(responseRules, httpAfterResponseRule{
+			Type:     "add-header",
 			Action:   "add-header",
 			Header:   "Set-Cookie",
 			Format:   servicecatalogapp.BuildStickyCookie(cookieName, liveReleaseID, service.GetRoutePathPrefix()),
@@ -599,6 +602,7 @@ func (m *ManagedProxyRuntime) frontendSection(snapshot *grpcapi.ProxyConfigSnaps
 			Index:    responseBase + 2,
 		})
 		responseRules = append(responseRules, httpAfterResponseRule{
+			Type:     "set-header",
 			Action:   "set-header",
 			Header:   servicecatalogapp.CurrentReleaseIDHeaderName,
 			Format:   blueReleaseID,
@@ -607,6 +611,7 @@ func (m *ManagedProxyRuntime) frontendSection(snapshot *grpcapi.ProxyConfigSnaps
 			Index:    responseBase + 3,
 		})
 		responseRules = append(responseRules, httpAfterResponseRule{
+			Type:     "set-header",
 			Action:   "set-header",
 			Header:   servicecatalogapp.CurrentReleaseIDHeaderName,
 			Format:   greenReleaseID,
@@ -615,6 +620,7 @@ func (m *ManagedProxyRuntime) frontendSection(snapshot *grpcapi.ProxyConfigSnaps
 			Index:    responseBase + 4,
 		})
 		responseRules = append(responseRules, httpAfterResponseRule{
+			Type:     "set-header",
 			Action:   "set-header",
 			Header:   servicecatalogapp.CurrentReleaseIDHeaderName,
 			Format:   liveReleaseID,
@@ -623,6 +629,7 @@ func (m *ManagedProxyRuntime) frontendSection(snapshot *grpcapi.ProxyConfigSnaps
 			Index:    responseBase + 5,
 		})
 		responseRules = append(responseRules, httpAfterResponseRule{
+			Type:     "set-header",
 			Action:   "set-header",
 			Header:   servicecatalogapp.LiveReleaseIDHeaderName,
 			Format:   liveReleaseID,

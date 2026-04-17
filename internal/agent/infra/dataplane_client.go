@@ -55,6 +55,7 @@ type frontendSwitchRule struct {
 }
 
 type httpAfterResponseRule struct {
+	Type     string `json:"type"`
 	Action   string `json:"action"`
 	Header   string `json:"hdr_name,omitempty"`
 	Format   string `json:"hdr_fmt,omitempty"`

@@ -240,11 +240,20 @@ func TestFrontendSectionAddsStickyPreviewAndDiagnosticRules(t *testing.T) {
 	if section.HTTPAfterResponseRules[0].Header != "Set-Cookie" {
 		t.Fatalf("expected preview response to set cookie, got %#v", section.HTTPAfterResponseRules[0])
 	}
+	if section.HTTPAfterResponseRules[0].Type != "add-header" {
+		t.Fatalf("expected response rule type add-header, got %#v", section.HTTPAfterResponseRules[0])
+	}
 	if section.HTTPAfterResponseRules[3].Header != servicecatalogapp.CurrentReleaseIDHeaderName {
 		t.Fatalf("expected current release header, got %#v", section.HTTPAfterResponseRules[3])
 	}
+	if section.HTTPAfterResponseRules[3].Type != "set-header" {
+		t.Fatalf("expected response rule type set-header, got %#v", section.HTTPAfterResponseRules[3])
+	}
 	if section.HTTPAfterResponseRules[6].Header != servicecatalogapp.LiveReleaseIDHeaderName {
 		t.Fatalf("expected live release header, got %#v", section.HTTPAfterResponseRules[6])
+	}
+	if section.HTTPAfterResponseRules[6].Type != "set-header" {
+		t.Fatalf("expected response rule type set-header, got %#v", section.HTTPAfterResponseRules[6])
 	}
 }
 
