@@ -364,8 +364,8 @@ func TestFrontendSectionAddsStickyPreviewAndDiagnosticRules(t *testing.T) {
 	if section.HTTPAfterResponseRules[0].Type != "add-header" {
 		t.Fatalf("expected response rule type add-header, got %#v", section.HTTPAfterResponseRules[0])
 	}
-	if section.HTTPAfterResponseRules[0].Cond != "if" {
-		t.Fatalf("expected response rule cond if, got %#v", section.HTTPAfterResponseRules[0])
+	if strings.TrimSpace(section.HTTPAfterResponseRules[0].Cond) != "" {
+		t.Fatalf("expected response rule cond to be omitted, got %#v", section.HTTPAfterResponseRules[0])
 	}
 	if section.HTTPAfterResponseRules[0].CondTest != "if "+hostACL+" "+pathACL+" "+queryBlueACL {
 		t.Fatalf("expected response rule cond_test ACL expression, got %#v", section.HTTPAfterResponseRules[0])
@@ -376,8 +376,8 @@ func TestFrontendSectionAddsStickyPreviewAndDiagnosticRules(t *testing.T) {
 	if section.HTTPAfterResponseRules[3].Type != "set-header" {
 		t.Fatalf("expected response rule type set-header, got %#v", section.HTTPAfterResponseRules[3])
 	}
-	if section.HTTPAfterResponseRules[3].Cond != "if" {
-		t.Fatalf("expected response rule cond if, got %#v", section.HTTPAfterResponseRules[3])
+	if strings.TrimSpace(section.HTTPAfterResponseRules[3].Cond) != "" {
+		t.Fatalf("expected response rule cond to be omitted, got %#v", section.HTTPAfterResponseRules[3])
 	}
 	if section.HTTPAfterResponseRules[3].CondTest == "if" || section.HTTPAfterResponseRules[3].CondTest == "unless" {
 		t.Fatalf("expected response rule cond_test ACL expression, got %#v", section.HTTPAfterResponseRules[3])
@@ -389,8 +389,8 @@ func TestFrontendSectionAddsStickyPreviewAndDiagnosticRules(t *testing.T) {
 		t.Fatalf("expected response rule type set-header, got %#v", section.HTTPAfterResponseRules[6])
 	}
 	for i, rule := range section.HTTPAfterResponseRules {
-		if rule.Cond != "if" && rule.Cond != "unless" {
-			t.Fatalf("response rule[%d] cond should be if/unless, got %#v", i, rule)
+		if strings.TrimSpace(rule.Cond) != "" {
+			t.Fatalf("response rule[%d] cond should be omitted when cond_test includes if/unless, got %#v", i, rule)
 		}
 		if strings.TrimSpace(rule.CondTest) == "" {
 			t.Fatalf("response rule[%d] cond_test should not be empty, got %#v", i, rule)

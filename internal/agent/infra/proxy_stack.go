@@ -652,7 +652,6 @@ func (m *ManagedProxyRuntime) frontendSection(snapshot *grpcapi.ProxyConfigSnaps
 			Action:   "add-header",
 			Header:   "Set-Cookie",
 			Format:   servicecatalogapp.BuildStickyCookie(cookieName, blueReleaseID, service.GetRoutePathPrefix()),
-			Cond:     "if",
 			CondTest: prefixedCondTest(hostACL + " " + pathACL + " " + queryBlueACL),
 			Index:    responseBase,
 		})
@@ -661,7 +660,6 @@ func (m *ManagedProxyRuntime) frontendSection(snapshot *grpcapi.ProxyConfigSnaps
 			Action:   "add-header",
 			Header:   "Set-Cookie",
 			Format:   servicecatalogapp.BuildStickyCookie(cookieName, greenReleaseID, service.GetRoutePathPrefix()),
-			Cond:     "if",
 			CondTest: prefixedCondTest(hostACL + " " + pathACL + " " + queryGreenACL),
 			Index:    responseBase + 1,
 		})
@@ -670,7 +668,6 @@ func (m *ManagedProxyRuntime) frontendSection(snapshot *grpcapi.ProxyConfigSnaps
 			Action:   "add-header",
 			Header:   "Set-Cookie",
 			Format:   servicecatalogapp.BuildStickyCookie(cookieName, liveReleaseID, service.GetRoutePathPrefix()),
-			Cond:     "if",
 			CondTest: prefixedCondTest(hostACL + " " + pathACL + " !" + queryBlueACL + " !" + queryGreenACL + " !" + cookieBlueACL + " !" + cookieGreenACL),
 			Index:    responseBase + 2,
 		})
@@ -679,7 +676,6 @@ func (m *ManagedProxyRuntime) frontendSection(snapshot *grpcapi.ProxyConfigSnaps
 			Action:   "set-header",
 			Header:   servicecatalogapp.CurrentReleaseIDHeaderName,
 			Format:   blueReleaseID,
-			Cond:     "if",
 			CondTest: prefixedCondTest(hostACL + " " + pathACL + " (" + queryBlueACL + " || (!" + queryGreenACL + " " + cookieBlueACL + "))"),
 			Index:    responseBase + 3,
 		})
@@ -688,7 +684,6 @@ func (m *ManagedProxyRuntime) frontendSection(snapshot *grpcapi.ProxyConfigSnaps
 			Action:   "set-header",
 			Header:   servicecatalogapp.CurrentReleaseIDHeaderName,
 			Format:   greenReleaseID,
-			Cond:     "if",
 			CondTest: prefixedCondTest(hostACL + " " + pathACL + " (" + queryGreenACL + " || (!" + queryBlueACL + " " + cookieGreenACL + "))"),
 			Index:    responseBase + 4,
 		})
@@ -697,7 +692,6 @@ func (m *ManagedProxyRuntime) frontendSection(snapshot *grpcapi.ProxyConfigSnaps
 			Action:   "set-header",
 			Header:   servicecatalogapp.CurrentReleaseIDHeaderName,
 			Format:   liveReleaseID,
-			Cond:     "if",
 			CondTest: prefixedCondTest(hostACL + " " + pathACL + " !" + queryBlueACL + " !" + queryGreenACL + " !" + cookieBlueACL + " !" + cookieGreenACL),
 			Index:    responseBase + 5,
 		})
@@ -706,7 +700,6 @@ func (m *ManagedProxyRuntime) frontendSection(snapshot *grpcapi.ProxyConfigSnaps
 			Action:   "set-header",
 			Header:   servicecatalogapp.LiveReleaseIDHeaderName,
 			Format:   liveReleaseID,
-			Cond:     "if",
 			CondTest: prefixedCondTest(hostACL + " " + pathACL),
 			Index:    responseBase + 6,
 		})
