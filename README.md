@@ -228,6 +228,8 @@ Docker 部署和 Linux 用户授权说明见：[docs/docker-deploy.md](docs/dock
 
 Control-Plane CI 回调触发说明见：[docs/control-plane-ci-callback.md](docs/control-plane-ci-callback.md)
 
+业务前端如何根据 `X-Edge-Pilot-*` 响应头检查并刷新版本，见：[docs/edge-pilot-release-headers.md](docs/edge-pilot-release-headers.md)
+
 ## 当前限制
 
 - 当前聚焦 HTTP 服务的蓝绿发布，不支持 worker 与非 HTTP 协议
