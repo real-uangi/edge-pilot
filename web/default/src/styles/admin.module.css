@@ -485,6 +485,20 @@
   word-break: break-word;
 }
 
+.configBlock {
+  margin: 10px 0 0;
+  padding: 12px;
+  border-radius: 8px;
+  background: #000000;
+  color: #ffffff;
+  font-size: 12px;
+  line-height: 1.45;
+  overflow-y: auto;
+  overflow-x: auto;
+  white-space: pre;
+  max-height: 420px;
+}
+
 .logEmpty {
   margin-top: 10px;
   color: var(--ep-body);

@@ -185,6 +185,7 @@ type AgentMessage struct {
 	//	*AgentMessage_Heartbeat
 	//	*AgentMessage_TaskUpdate
 	//	*AgentMessage_Stats
+	//	*AgentMessage_HaproxyConfigResponse
 	Payload       isAgentMessage_Payload `protobuf_oneof:"payload"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -263,6 +264,15 @@ func (x *AgentMessage) GetStats() *StatsReport {
 	return nil
 }
 
+func (x *AgentMessage) GetHaproxyConfigResponse() *HAProxyConfigResponse {
+	if x != nil {
+		if x, ok := x.Payload.(*AgentMessage_HaproxyConfigResponse); ok {
+			return x.HaproxyConfigResponse
+		}
+	}
+	return nil
+}
+
 type isAgentMessage_Payload interface {
 	isAgentMessage_Payload()
 }
@@ -283,6 +293,10 @@ type AgentMessage_Stats struct {
 	Stats *StatsReport `protobuf:"bytes,4,opt,name=stats,proto3,oneof"`
 }
 
+type AgentMessage_HaproxyConfigResponse struct {
+	HaproxyConfigResponse *HAProxyConfigResponse `protobuf:"bytes,5,opt,name=haproxy_config_response,json=haproxyConfigResponse,proto3,oneof"`
+}
+
 func (*AgentMessage_Hello) isAgentMessage_Payload() {}
 
 func (*AgentMessage_Heartbeat) isAgentMessage_Payload() {}
@@ -291,6 +305,8 @@ func (*AgentMessage_TaskUpdate) isAgentMessage_Payload() {}
 
 func (*AgentMessage_Stats) isAgentMessage_Payload() {}
 
+func (*AgentMessage_HaproxyConfigResponse) isAgentMessage_Payload() {}
+
 type ControlMessage struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// Types that are valid to be assigned to Payload:
@@ -298,6 +314,7 @@ type ControlMessage struct {
 	//	*ControlMessage_Ack
 	//	*ControlMessage_Task
 	//	*ControlMessage_ProxyConfig
+	//	*ControlMessage_HaproxyConfigRequest
 	Payload       isControlMessage_Payload `protobuf_oneof:"payload"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -367,6 +384,15 @@ func (x *ControlMessage) GetProxyConfig() *ProxyConfigSnapshot {
 	return nil
 }
 
+func (x *ControlMessage) GetHaproxyConfigRequest() *HAProxyConfigRequest {
+	if x != nil {
+		if x, ok := x.Payload.(*ControlMessage_HaproxyConfigRequest); ok {
+			return x.HaproxyConfigRequest
+		}
+	}
+	return nil
+}
+
 type isControlMessage_Payload interface {
 	isControlMessage_Payload()
 }
@@ -383,11 +409,17 @@ type ControlMessage_ProxyConfig struct {
 	ProxyConfig *ProxyConfigSnapshot `protobuf:"bytes,3,opt,name=proxy_config,json=proxyConfig,proto3,oneof"`
 }
 
+type ControlMessage_HaproxyConfigRequest struct {
+	HaproxyConfigRequest *HAProxyConfigRequest `protobuf:"bytes,4,opt,name=haproxy_config_request,json=haproxyConfigRequest,proto3,oneof"`
+}
+
 func (*ControlMessage_Ack) isControlMessage_Payload() {}
 
 func (*ControlMessage_Task) isControlMessage_Payload() {}
 
 func (*ControlMessage_ProxyConfig) isControlMessage_Payload() {}
+
+func (*ControlMessage_HaproxyConfigRequest) isControlMessage_Payload() {}
 
 type HelloMessage struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
@@ -1433,22 +1465,144 @@ func (x *StatsReport) GetServices() []*BackendStatPoint {
 	return nil
 }
 
+type HAProxyConfigRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	RequestId     string                 `protobuf:"bytes,1,opt,name=request_id,json=requestId,proto3" json:"request_id,omitempty"`
+	AgentId       string                 `protobuf:"bytes,2,opt,name=agent_id,json=agentId,proto3" json:"agent_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *HAProxyConfigRequest) Reset() {
+	*x = HAProxyConfigRequest{}
+	mi := &file_internal_shared_grpcapi_agent_control_proto_msgTypes[13]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *HAProxyConfigRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*HAProxyConfigRequest) ProtoMessage() {}
+
+func (x *HAProxyConfigRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_internal_shared_grpcapi_agent_control_proto_msgTypes[13]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use HAProxyConfigRequest.ProtoReflect.Descriptor instead.
+func (*HAProxyConfigRequest) Descriptor() ([]byte, []int) {
+	return file_internal_shared_grpcapi_agent_control_proto_rawDescGZIP(), []int{13}
+}
+
+func (x *HAProxyConfigRequest) GetRequestId() string {
+	if x != nil {
+		return x.RequestId
+	}
+	return ""
+}
+
+func (x *HAProxyConfigRequest) GetAgentId() string {
+	if x != nil {
+		return x.AgentId
+	}
+	return ""
+}
+
+type HAProxyConfigResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	RequestId     string                 `protobuf:"bytes,1,opt,name=request_id,json=requestId,proto3" json:"request_id,omitempty"`
+	AgentId       string                 `protobuf:"bytes,2,opt,name=agent_id,json=agentId,proto3" json:"agent_id,omitempty"`
+	Config        string                 `protobuf:"bytes,3,opt,name=config,proto3" json:"config,omitempty"`
+	ErrorMessage  string                 `protobuf:"bytes,4,opt,name=error_message,json=errorMessage,proto3" json:"error_message,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *HAProxyConfigResponse) Reset() {
+	*x = HAProxyConfigResponse{}
+	mi := &file_internal_shared_grpcapi_agent_control_proto_msgTypes[14]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *HAProxyConfigResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*HAProxyConfigResponse) ProtoMessage() {}
+
+func (x *HAProxyConfigResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_internal_shared_grpcapi_agent_control_proto_msgTypes[14]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use HAProxyConfigResponse.ProtoReflect.Descriptor instead.
+func (*HAProxyConfigResponse) Descriptor() ([]byte, []int) {
+	return file_internal_shared_grpcapi_agent_control_proto_rawDescGZIP(), []int{14}
+}
+
+func (x *HAProxyConfigResponse) GetRequestId() string {
+	if x != nil {
+		return x.RequestId
+	}
+	return ""
+}
+
+func (x *HAProxyConfigResponse) GetAgentId() string {
+	if x != nil {
+		return x.AgentId
+	}
+	return ""
+}
+
+func (x *HAProxyConfigResponse) GetConfig() string {
+	if x != nil {
+		return x.Config
+	}
+	return ""
+}
+
+func (x *HAProxyConfigResponse) GetErrorMessage() string {
+	if x != nil {
+		return x.ErrorMessage
+	}
+	return ""
+}
+
 var File_internal_shared_grpcapi_agent_control_proto protoreflect.FileDescriptor
 
 const file_internal_shared_grpcapi_agent_control_proto_rawDesc = "" +
 	"\n" +
-	"+internal/shared/grpcapi/agent_control.proto\x12\x11edgepilot.grpcapi\"\x91\x02\n" +
+	"+internal/shared/grpcapi/agent_control.proto\x12\x11edgepilot.grpcapi\"\xf5\x02\n" +
 	"\fAgentMessage\x127\n" +
 	"\x05hello\x18\x01 \x01(\v2\x1f.edgepilot.grpcapi.HelloMessageH\x00R\x05hello\x12C\n" +
 	"\theartbeat\x18\x02 \x01(\v2#.edgepilot.grpcapi.HeartbeatMessageH\x00R\theartbeat\x12@\n" +
 	"\vtask_update\x18\x03 \x01(\v2\x1d.edgepilot.grpcapi.TaskUpdateH\x00R\n" +
 	"taskUpdate\x126\n" +
-	"\x05stats\x18\x04 \x01(\v2\x1e.edgepilot.grpcapi.StatsReportH\x00R\x05statsB\t\n" +
-	"\apayload\"\xd1\x01\n" +
+	"\x05stats\x18\x04 \x01(\v2\x1e.edgepilot.grpcapi.StatsReportH\x00R\x05stats\x12b\n" +
+	"\x17haproxy_config_response\x18\x05 \x01(\v2(.edgepilot.grpcapi.HAProxyConfigResponseH\x00R\x15haproxyConfigResponseB\t\n" +
+	"\apayload\"\xb2\x02\n" +
 	"\x0eControlMessage\x121\n" +
 	"\x03ack\x18\x01 \x01(\v2\x1d.edgepilot.grpcapi.AckMessageH\x00R\x03ack\x124\n" +
 	"\x04task\x18\x02 \x01(\v2\x1e.edgepilot.grpcapi.TaskCommandH\x00R\x04task\x12K\n" +
-	"\fproxy_config\x18\x03 \x01(\v2&.edgepilot.grpcapi.ProxyConfigSnapshotH\x00R\vproxyConfigB\t\n" +
+	"\fproxy_config\x18\x03 \x01(\v2&.edgepilot.grpcapi.ProxyConfigSnapshotH\x00R\vproxyConfig\x12_\n" +
+	"\x16haproxy_config_request\x18\x04 \x01(\v2'.edgepilot.grpcapi.HAProxyConfigRequestH\x00R\x14haproxyConfigRequestB\t\n" +
 	"\apayload\"\xba\x01\n" +
 	"\fHelloMessage\x12\x19\n" +
 	"\bagent_id\x18\x01 \x01(\tR\aagentId\x12\x14\n" +
@@ -1570,7 +1724,17 @@ const file_internal_shared_grpcapi_agent_control_proto_rawDesc = "" +
 	"\x0eerror_requests\x18\x06 \x01(\x03R\rerrorRequests\"i\n" +
 	"\vStatsReport\x12\x19\n" +
 	"\bagent_id\x18\x01 \x01(\tR\aagentId\x12?\n" +
-	"\bservices\x18\x02 \x03(\v2#.edgepilot.grpcapi.BackendStatPointR\bservices*;\n" +
+	"\bservices\x18\x02 \x03(\v2#.edgepilot.grpcapi.BackendStatPointR\bservices\"P\n" +
+	"\x14HAProxyConfigRequest\x12\x1d\n" +
+	"\n" +
+	"request_id\x18\x01 \x01(\tR\trequestId\x12\x19\n" +
+	"\bagent_id\x18\x02 \x01(\tR\aagentId\"\x8e\x01\n" +
+	"\x15HAProxyConfigResponse\x12\x1d\n" +
+	"\n" +
+	"request_id\x18\x01 \x01(\tR\trequestId\x12\x19\n" +
+	"\bagent_id\x18\x02 \x01(\tR\aagentId\x12\x16\n" +
+	"\x06config\x18\x03 \x01(\tR\x06config\x12#\n" +
+	"\rerror_message\x18\x04 \x01(\tR\ferrorMessage*;\n" +
 	"\x04Slot\x12\x14\n" +
 	"\x10SLOT_UNSPECIFIED\x10\x00\x12\r\n" +
 	"\tSLOT_BLUE\x10\x01\x12\x0e\n" +
@@ -1604,56 +1768,60 @@ func file_internal_shared_grpcapi_agent_control_proto_rawDescGZIP() []byte {
 }
 
 var file_internal_shared_grpcapi_agent_control_proto_enumTypes = make([]protoimpl.EnumInfo, 3)
-var file_internal_shared_grpcapi_agent_control_proto_msgTypes = make([]protoimpl.MessageInfo, 16)
+var file_internal_shared_grpcapi_agent_control_proto_msgTypes = make([]protoimpl.MessageInfo, 18)
 var file_internal_shared_grpcapi_agent_control_proto_goTypes = []any{
-	(Slot)(0),                   // 0: edgepilot.grpcapi.Slot
-	(TaskType)(0),               // 1: edgepilot.grpcapi.TaskType
-	(TaskStatus)(0),             // 2: edgepilot.grpcapi.TaskStatus
-	(*AgentMessage)(nil),        // 3: edgepilot.grpcapi.AgentMessage
-	(*ControlMessage)(nil),      // 4: edgepilot.grpcapi.ControlMessage
-	(*HelloMessage)(nil),        // 5: edgepilot.grpcapi.HelloMessage
-	(*HeartbeatMessage)(nil),    // 6: edgepilot.grpcapi.HeartbeatMessage
-	(*AckMessage)(nil),          // 7: edgepilot.grpcapi.AckMessage
-	(*VolumeMount)(nil),         // 8: edgepilot.grpcapi.VolumeMount
-	(*PublishedPort)(nil),       // 9: edgepilot.grpcapi.PublishedPort
-	(*TaskCommand)(nil),         // 10: edgepilot.grpcapi.TaskCommand
-	(*TaskUpdate)(nil),          // 11: edgepilot.grpcapi.TaskUpdate
-	(*ProxyServiceConfig)(nil),  // 12: edgepilot.grpcapi.ProxyServiceConfig
-	(*ProxyConfigSnapshot)(nil), // 13: edgepilot.grpcapi.ProxyConfigSnapshot
-	(*BackendStatPoint)(nil),    // 14: edgepilot.grpcapi.BackendStatPoint
-	(*StatsReport)(nil),         // 15: edgepilot.grpcapi.StatsReport
-	nil,                         // 16: edgepilot.grpcapi.TaskCommand.EnvEntry
-	nil,                         // 17: edgepilot.grpcapi.TaskCommand.HttpHealthHeadersEntry
-	nil,                         // 18: edgepilot.grpcapi.TaskUpdate.MetricsEntry
+	(Slot)(0),                     // 0: edgepilot.grpcapi.Slot
+	(TaskType)(0),                 // 1: edgepilot.grpcapi.TaskType
+	(TaskStatus)(0),               // 2: edgepilot.grpcapi.TaskStatus
+	(*AgentMessage)(nil),          // 3: edgepilot.grpcapi.AgentMessage
+	(*ControlMessage)(nil),        // 4: edgepilot.grpcapi.ControlMessage
+	(*HelloMessage)(nil),          // 5: edgepilot.grpcapi.HelloMessage
+	(*HeartbeatMessage)(nil),      // 6: edgepilot.grpcapi.HeartbeatMessage
+	(*AckMessage)(nil),            // 7: edgepilot.grpcapi.AckMessage
+	(*VolumeMount)(nil),           // 8: edgepilot.grpcapi.VolumeMount
+	(*PublishedPort)(nil),         // 9: edgepilot.grpcapi.PublishedPort
+	(*TaskCommand)(nil),           // 10: edgepilot.grpcapi.TaskCommand
+	(*TaskUpdate)(nil),            // 11: edgepilot.grpcapi.TaskUpdate
+	(*ProxyServiceConfig)(nil),    // 12: edgepilot.grpcapi.ProxyServiceConfig
+	(*ProxyConfigSnapshot)(nil),   // 13: edgepilot.grpcapi.ProxyConfigSnapshot
+	(*BackendStatPoint)(nil),      // 14: edgepilot.grpcapi.BackendStatPoint
+	(*StatsReport)(nil),           // 15: edgepilot.grpcapi.StatsReport
+	(*HAProxyConfigRequest)(nil),  // 16: edgepilot.grpcapi.HAProxyConfigRequest
+	(*HAProxyConfigResponse)(nil), // 17: edgepilot.grpcapi.HAProxyConfigResponse
+	nil,                           // 18: edgepilot.grpcapi.TaskCommand.EnvEntry
+	nil,                           // 19: edgepilot.grpcapi.TaskCommand.HttpHealthHeadersEntry
+	nil,                           // 20: edgepilot.grpcapi.TaskUpdate.MetricsEntry
 }
 var file_internal_shared_grpcapi_agent_control_proto_depIdxs = []int32{
 	5,  // 0: edgepilot.grpcapi.AgentMessage.hello:type_name -> edgepilot.grpcapi.HelloMessage
 	6,  // 1: edgepilot.grpcapi.AgentMessage.heartbeat:type_name -> edgepilot.grpcapi.HeartbeatMessage
 	11, // 2: edgepilot.grpcapi.AgentMessage.task_update:type_name -> edgepilot.grpcapi.TaskUpdate
 	15, // 3: edgepilot.grpcapi.AgentMessage.stats:type_name -> edgepilot.grpcapi.StatsReport
-	7,  // 4: edgepilot.grpcapi.ControlMessage.ack:type_name -> edgepilot.grpcapi.AckMessage
-	10, // 5: edgepilot.grpcapi.ControlMessage.task:type_name -> edgepilot.grpcapi.TaskCommand
-	13, // 6: edgepilot.grpcapi.ControlMessage.proxy_config:type_name -> edgepilot.grpcapi.ProxyConfigSnapshot
-	1,  // 7: edgepilot.grpcapi.TaskCommand.type:type_name -> edgepilot.grpcapi.TaskType
-	0,  // 8: edgepilot.grpcapi.TaskCommand.target_slot:type_name -> edgepilot.grpcapi.Slot
-	0,  // 9: edgepilot.grpcapi.TaskCommand.current_live_slot:type_name -> edgepilot.grpcapi.Slot
-	16, // 10: edgepilot.grpcapi.TaskCommand.env:type_name -> edgepilot.grpcapi.TaskCommand.EnvEntry
-	8,  // 11: edgepilot.grpcapi.TaskCommand.volumes:type_name -> edgepilot.grpcapi.VolumeMount
-	9,  // 12: edgepilot.grpcapi.TaskCommand.published_ports:type_name -> edgepilot.grpcapi.PublishedPort
-	17, // 13: edgepilot.grpcapi.TaskCommand.http_health_headers:type_name -> edgepilot.grpcapi.TaskCommand.HttpHealthHeadersEntry
-	2,  // 14: edgepilot.grpcapi.TaskUpdate.status:type_name -> edgepilot.grpcapi.TaskStatus
-	0,  // 15: edgepilot.grpcapi.TaskUpdate.slot:type_name -> edgepilot.grpcapi.Slot
-	18, // 16: edgepilot.grpcapi.TaskUpdate.metrics:type_name -> edgepilot.grpcapi.TaskUpdate.MetricsEntry
-	0,  // 17: edgepilot.grpcapi.ProxyServiceConfig.current_live_slot:type_name -> edgepilot.grpcapi.Slot
-	12, // 18: edgepilot.grpcapi.ProxyConfigSnapshot.services:type_name -> edgepilot.grpcapi.ProxyServiceConfig
-	14, // 19: edgepilot.grpcapi.StatsReport.services:type_name -> edgepilot.grpcapi.BackendStatPoint
-	3,  // 20: edgepilot.grpcapi.AgentControl.Connect:input_type -> edgepilot.grpcapi.AgentMessage
-	4,  // 21: edgepilot.grpcapi.AgentControl.Connect:output_type -> edgepilot.grpcapi.ControlMessage
-	21, // [21:22] is the sub-list for method output_type
-	20, // [20:21] is the sub-list for method input_type
-	20, // [20:20] is the sub-list for extension type_name
-	20, // [20:20] is the sub-list for extension extendee
-	0,  // [0:20] is the sub-list for field type_name
+	17, // 4: edgepilot.grpcapi.AgentMessage.haproxy_config_response:type_name -> edgepilot.grpcapi.HAProxyConfigResponse
+	7,  // 5: edgepilot.grpcapi.ControlMessage.ack:type_name -> edgepilot.grpcapi.AckMessage
+	10, // 6: edgepilot.grpcapi.ControlMessage.task:type_name -> edgepilot.grpcapi.TaskCommand
+	13, // 7: edgepilot.grpcapi.ControlMessage.proxy_config:type_name -> edgepilot.grpcapi.ProxyConfigSnapshot
+	16, // 8: edgepilot.grpcapi.ControlMessage.haproxy_config_request:type_name -> edgepilot.grpcapi.HAProxyConfigRequest
+	1,  // 9: edgepilot.grpcapi.TaskCommand.type:type_name -> edgepilot.grpcapi.TaskType
+	0,  // 10: edgepilot.grpcapi.TaskCommand.target_slot:type_name -> edgepilot.grpcapi.Slot
+	0,  // 11: edgepilot.grpcapi.TaskCommand.current_live_slot:type_name -> edgepilot.grpcapi.Slot
+	18, // 12: edgepilot.grpcapi.TaskCommand.env:type_name -> edgepilot.grpcapi.TaskCommand.EnvEntry
+	8,  // 13: edgepilot.grpcapi.TaskCommand.volumes:type_name -> edgepilot.grpcapi.VolumeMount
+	9,  // 14: edgepilot.grpcapi.TaskCommand.published_ports:type_name -> edgepilot.grpcapi.PublishedPort
+	19, // 15: edgepilot.grpcapi.TaskCommand.http_health_headers:type_name -> edgepilot.grpcapi.TaskCommand.HttpHealthHeadersEntry
+	2,  // 16: edgepilot.grpcapi.TaskUpdate.status:type_name -> edgepilot.grpcapi.TaskStatus
+	0,  // 17: edgepilot.grpcapi.TaskUpdate.slot:type_name -> edgepilot.grpcapi.Slot
+	20, // 18: edgepilot.grpcapi.TaskUpdate.metrics:type_name -> edgepilot.grpcapi.TaskUpdate.MetricsEntry
+	0,  // 19: edgepilot.grpcapi.ProxyServiceConfig.current_live_slot:type_name -> edgepilot.grpcapi.Slot
+	12, // 20: edgepilot.grpcapi.ProxyConfigSnapshot.services:type_name -> edgepilot.grpcapi.ProxyServiceConfig
+	14, // 21: edgepilot.grpcapi.StatsReport.services:type_name -> edgepilot.grpcapi.BackendStatPoint
+	3,  // 22: edgepilot.grpcapi.AgentControl.Connect:input_type -> edgepilot.grpcapi.AgentMessage
+	4,  // 23: edgepilot.grpcapi.AgentControl.Connect:output_type -> edgepilot.grpcapi.ControlMessage
+	23, // [23:24] is the sub-list for method output_type
+	22, // [22:23] is the sub-list for method input_type
+	22, // [22:22] is the sub-list for extension type_name
+	22, // [22:22] is the sub-list for extension extendee
+	0,  // [0:22] is the sub-list for field type_name
 }
 
 func init() { file_internal_shared_grpcapi_agent_control_proto_init() }
@@ -1666,11 +1834,13 @@ func file_internal_shared_grpcapi_agent_control_proto_init() {
 		(*AgentMessage_Heartbeat)(nil),
 		(*AgentMessage_TaskUpdate)(nil),
 		(*AgentMessage_Stats)(nil),
+		(*AgentMessage_HaproxyConfigResponse)(nil),
 	}
 	file_internal_shared_grpcapi_agent_control_proto_msgTypes[1].OneofWrappers = []any{
 		(*ControlMessage_Ack)(nil),
 		(*ControlMessage_Task)(nil),
 		(*ControlMessage_ProxyConfig)(nil),
+		(*ControlMessage_HaproxyConfigRequest)(nil),
 	}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
@@ -1678,7 +1848,7 @@ func file_internal_shared_grpcapi_agent_control_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_internal_shared_grpcapi_agent_control_proto_rawDesc), len(file_internal_shared_grpcapi_agent_control_proto_rawDesc)),
 			NumEnums:      3,
-			NumMessages:   16,
+			NumMessages:   18,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

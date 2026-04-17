@@ -298,6 +298,11 @@ func (f *fakeManagedProxyDataplane) ConfigurationVersion(context.Context) (strin
 	return f.version, nil
 }
 
+func (f *fakeManagedProxyDataplane) ShowRawConfig(context.Context) (string, error) {
+	*f.callLog = append(*f.callLog, "show-raw-config")
+	return "global\n  daemon\n", nil
+}
+
 func (f *fakeManagedProxyDataplane) StartTransaction(_ context.Context, version string) (string, error) {
 	*f.callLog = append(*f.callLog, "start-transaction:"+version)
 	return f.txID, nil

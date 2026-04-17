@@ -124,6 +124,28 @@ func TestDataPlaneClientEnsureBackendInTransactionCreatesWhenMissing(t *testing.
 	assertTransactionRequest(t, requests[1], http.MethodPost, "/v3/services/haproxy/configuration/backends", "tx-9", false)
 }
 
+func TestDataPlaneClientShowRawConfig(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			t.Fatalf("expected GET, got %s", r.Method)
+		}
+		if r.URL.Path != "/v3/services/haproxy/configuration/raw" {
+			t.Fatalf("unexpected path: %s", r.URL.Path)
+		}
+		_, _ = w.Write([]byte("global\n  daemon\n"))
+	}))
+	defer server.Close()
+
+	client := newDataPlaneAPIClient(func() string { return server.URL }, func() string { return "admin" }, func() string { return "secret" })
+	configText, err := client.ShowRawConfig(context.Background())
+	if err != nil {
+		t.Fatalf("ShowRawConfig() error = %v", err)
+	}
+	if configText != "global\n  daemon\n" {
+		t.Fatalf("unexpected config: %q", configText)
+	}
+}
+
 func assertServerPayload(t *testing.T, request recordedRequest, resolvers string, initAddr string) {
 	t.Helper()
 	var payload map[string]any

@@ -396,6 +396,9 @@ func (f *fakeProxyRuntime) DisableServer(context.Context, string, string) error 
 func (f *fakeProxyRuntime) ShowStats(context.Context) ([]*grpcapi.BackendStatPoint, error) {
 	return nil, nil
 }
+func (f *fakeProxyRuntime) ShowConfig(context.Context) (string, error) {
+	return "", nil
+}
 
 func newDeployTaskCommand(releaseID string) *grpcapi.TaskCommand {
 	return &grpcapi.TaskCommand{

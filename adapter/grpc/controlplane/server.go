@@ -15,6 +15,7 @@ import (
 	"os"
 	"sync"
 
+	"github.com/google/uuid"
 	"github.com/real-uangi/allingo/common/log"
 	"go.uber.org/fx"
 	"google.golang.org/grpc"
@@ -26,6 +27,9 @@ type sessionHub struct {
 	mu       sync.RWMutex
 	sessions map[string]*agentSession
 	codec    *secret.Codec
+
+	pendingMu            sync.Mutex
+	pendingConfigRequest map[string]chan *grpcapi.HAProxyConfigResponse
 }
 
 type agentSession struct {
@@ -38,8 +42,9 @@ type agentSession struct {
 
 func NewSessionHub(codec *secret.Codec) *sessionHub {
 	return &sessionHub{
-		sessions: make(map[string]*agentSession),
-		codec:    codec,
+		sessions:             make(map[string]*agentSession),
+		codec:                codec,
+		pendingConfigRequest: make(map[string]chan *grpcapi.HAProxyConfigResponse),
 	}
 }
 
@@ -65,6 +70,7 @@ func (h *sessionHub) unregister(agentID string) {
 		session.close()
 		delete(h.sessions, agentID)
 	}
+	h.failPendingByAgent(agentID)
 }
 
 func (h *sessionHub) DispatchTask(agentID string, task *model.Task) error {
@@ -121,6 +127,44 @@ func (h *sessionHub) DispatchProxyConfig(agentID string, snapshot *grpcapi.Proxy
 			ProxyConfig: snapshot,
 		},
 	})
+}
+
+func (h *sessionHub) RequestHAProxyConfig(ctx context.Context, agentID string) (string, error) {
+	h.mu.RLock()
+	session, ok := h.sessions[agentID]
+	h.mu.RUnlock()
+	if !ok {
+		return "", releasedomain.ErrAgentOffline
+	}
+
+	requestID := uuid.NewString()
+	responseCh := make(chan *grpcapi.HAProxyConfigResponse, 1)
+	h.registerPendingConfigRequest(agentID, requestID, responseCh)
+	defer h.unregisterPendingConfigRequest(agentID, requestID)
+
+	if err := session.send(&grpcapi.ControlMessage{
+		Payload: &grpcapi.ControlMessage_HaproxyConfigRequest{
+			HaproxyConfigRequest: &grpcapi.HAProxyConfigRequest{
+				RequestId: requestID,
+				AgentId:   agentID,
+			},
+		},
+	}); err != nil {
+		return "", err
+	}
+
+	select {
+	case <-ctx.Done():
+		return "", agentapp.ErrHAProxyConfigTimeout
+	case response := <-responseCh:
+		if response == nil {
+			return "", releasedomain.ErrAgentOffline
+		}
+		if response.GetErrorMessage() != "" {
+			return "", errors.New(response.GetErrorMessage())
+		}
+		return response.GetConfig(), nil
+	}
 }
 
 type Server struct {
@@ -229,6 +273,59 @@ func (s *Server) Connect(stream grpcapi.AgentControl_ConnectServer) (err error) 
 		case message.GetStats() != nil:
 			if err := s.observability.RecordStats(message.GetStats()); err != nil {
 				return err
+			}
+		case message.GetHaproxyConfigResponse() != nil:
+			s.hub.resolveHAProxyConfigResponse(message.GetHaproxyConfigResponse())
+		}
+	}
+}
+
+func (h *sessionHub) pendingConfigRequestKey(agentID string, requestID string) string {
+	return agentID + ":" + requestID
+}
+
+func (h *sessionHub) registerPendingConfigRequest(agentID string, requestID string, responseCh chan *grpcapi.HAProxyConfigResponse) {
+	h.pendingMu.Lock()
+	defer h.pendingMu.Unlock()
+	h.pendingConfigRequest[h.pendingConfigRequestKey(agentID, requestID)] = responseCh
+}
+
+func (h *sessionHub) unregisterPendingConfigRequest(agentID string, requestID string) {
+	h.pendingMu.Lock()
+	defer h.pendingMu.Unlock()
+	delete(h.pendingConfigRequest, h.pendingConfigRequestKey(agentID, requestID))
+}
+
+func (h *sessionHub) resolveHAProxyConfigResponse(response *grpcapi.HAProxyConfigResponse) {
+	if response == nil {
+		return
+	}
+	key := h.pendingConfigRequestKey(response.GetAgentId(), response.GetRequestId())
+
+	h.pendingMu.Lock()
+	ch := h.pendingConfigRequest[key]
+	delete(h.pendingConfigRequest, key)
+	h.pendingMu.Unlock()
+
+	if ch == nil {
+		return
+	}
+	select {
+	case ch <- response:
+	default:
+	}
+}
+
+func (h *sessionHub) failPendingByAgent(agentID string) {
+	prefix := agentID + ":"
+	h.pendingMu.Lock()
+	defer h.pendingMu.Unlock()
+	for key, ch := range h.pendingConfigRequest {
+		if len(key) >= len(prefix) && key[:len(prefix)] == prefix {
+			delete(h.pendingConfigRequest, key)
+			select {
+			case ch <- nil:
+			default:
 			}
 		}
 	}

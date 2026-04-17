@@ -40,6 +40,7 @@ type ProxyRuntime interface {
 	EnableServer(context.Context, string, string) error
 	DisableServer(context.Context, string, string) error
 	ShowStats(context.Context) ([]*grpcapi.BackendStatPoint, error)
+	ShowConfig(context.Context) (string, error)
 }
 
 type ContainerRuntime struct {

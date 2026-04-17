@@ -35,6 +35,7 @@ message AgentMessage {
     HeartbeatMessage heartbeat = 2;
     TaskUpdate task_update = 3;
     StatsReport stats = 4;
+    HAProxyConfigResponse haproxy_config_response = 5;
   }
 }
 
@@ -43,6 +44,7 @@ message ControlMessage {
     AckMessage ack = 1;
     TaskCommand task = 2;
     ProxyConfigSnapshot proxy_config = 3;
+    HAProxyConfigRequest haproxy_config_request = 4;
   }
 }
 
@@ -158,4 +160,16 @@ message BackendStatPoint {
 message StatsReport {
   string agent_id = 1;
   repeated BackendStatPoint services = 2;
+}
+
+message HAProxyConfigRequest {
+  string request_id = 1;
+  string agent_id = 2;
+}
+
+message HAProxyConfigResponse {
+  string request_id = 1;
+  string agent_id = 2;
+  string config = 3;
+  string error_message = 4;
 }

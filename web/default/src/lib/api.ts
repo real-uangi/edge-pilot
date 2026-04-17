@@ -63,6 +63,12 @@ export interface AgentCredentialRecord extends AgentRecord {
   token: string;
 }
 
+export interface AgentHAProxyConfigRecord {
+  agentId: string;
+  config: string;
+  fetchedAt: string;
+}
+
 export interface RegistryCredentialRecord {
   id: string;
   registryHost: string;
@@ -298,6 +304,9 @@ export const api = {
   },
   getAgent(id: string) {
     return request<AgentRecord>(`/api/admin/agents/${id}`);
+  },
+  getAgentHAProxyConfig(id: string) {
+    return request<AgentHAProxyConfigRecord>(`/api/admin/agents/${id}/haproxy-config`);
   },
   createAgent() {
     return request<AgentCredentialRecord>("/api/admin/agents", {

@@ -38,6 +38,7 @@ type managedProxyRuntimeAPI interface {
 
 type managedProxyDataPlaneAPI interface {
 	ConfigurationVersion(context.Context) (string, error)
+	ShowRawConfig(context.Context) (string, error)
 	StartTransaction(context.Context, string) (string, error)
 	CommitTransaction(context.Context, string) error
 	AbortTransaction(context.Context, string) error
@@ -197,6 +198,20 @@ func (m *ManagedProxyRuntime) ShowStats(ctx context.Context) ([]*grpcapi.Backend
 		return nil, fmt.Errorf("%w: %s", application.ErrProxyNotReady, lastErr)
 	}
 	return m.runtime.ShowStats(ctx)
+}
+
+func (m *ManagedProxyRuntime) ShowConfig(ctx context.Context) (string, error) {
+	m.mu.Lock()
+	prepared := m.prepared
+	prepareErr := m.lastPrepareError
+	m.mu.Unlock()
+	if !prepared {
+		if strings.TrimSpace(prepareErr) == "" {
+			prepareErr = "proxy stack is still preparing"
+		}
+		return "", fmt.Errorf("%w: %s", application.ErrProxyNotReady, prepareErr)
+	}
+	return m.dataplane.ShowRawConfig(ctx)
 }
 
 func (m *ManagedProxyRuntime) SetServerAddress(ctx context.Context, backend string, server string, address string, port int) error {

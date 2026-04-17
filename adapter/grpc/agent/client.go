@@ -174,6 +174,10 @@ func (c *Client) connectOnce(ctx context.Context) error {
 				c.logger.Errorf(err, "failed to apply proxy snapshot: agentId=%s services=%d", c.cfg.AgentID, len(msg.GetProxyConfig().GetServices()))
 				continue
 			}
+			continue
+		}
+		if msg.GetHaproxyConfigRequest() != nil {
+			go c.handleHAProxyConfigRequest(ctx, msg.GetHaproxyConfigRequest(), outbound)
 		}
 	}
 }
@@ -221,4 +225,25 @@ func (c *Client) handleTask(ctx context.Context, task *grpcapi.TaskCommand, outb
 		return
 	}
 	c.logger.Infof("waiting for next task: agentId=%s taskId=%s type=%s", c.cfg.AgentID, task.GetTaskId(), task.GetType().String())
+}
+
+func (c *Client) handleHAProxyConfigRequest(ctx context.Context, req *grpcapi.HAProxyConfigRequest, outbound chan<- *grpcapi.AgentMessage) {
+	if req == nil {
+		return
+	}
+	response := &grpcapi.HAProxyConfigResponse{
+		RequestId: req.GetRequestId(),
+		AgentId:   c.cfg.AgentID,
+	}
+	configText, err := c.proxy.ShowConfig(ctx)
+	if err != nil {
+		response.ErrorMessage = err.Error()
+	} else {
+		response.Config = configText
+	}
+	outbound <- &grpcapi.AgentMessage{
+		Payload: &grpcapi.AgentMessage_HaproxyConfigResponse{
+			HaproxyConfigResponse: response,
+		},
+	}
 }

@@ -42,6 +42,7 @@ var ControlPlaneModule = fx.Module(
 		config.LoadAgentAuthConfig,
 		infra.NewRepository,
 		provideRegistryService,
+		application.NewHAProxyConfigService,
 	),
 )
 

@@ -24,13 +24,17 @@ type agentAdminActions interface {
 	Delete(string) error
 }
 
-func SetAdminAgentRoutes(engine *gin.Engine, agents *agentapp.RegistryService, auth *adminauthapp.Service, cfg *config.AdminAuthConfig) {
-	admin := engine.Group("/api/admin")
-	admin.Use(adaptermiddleware.RequireAdminSession(auth, cfg))
-	registerAdminAgentRoutes(admin, agents)
+type agentHAProxyConfigActions interface {
+	GetHAProxyConfig(string) (*dto.AgentHAProxyConfigOutput, error)
 }
 
-func registerAdminAgentRoutes(admin *gin.RouterGroup, agents agentAdminActions) {
+func SetAdminAgentRoutes(engine *gin.Engine, agents *agentapp.RegistryService, haproxyConfigs *agentapp.HAProxyConfigService, auth *adminauthapp.Service, cfg *config.AdminAuthConfig) {
+	admin := engine.Group("/api/admin")
+	admin.Use(adaptermiddleware.RequireAdminSession(auth, cfg))
+	registerAdminAgentRoutes(admin, agents, haproxyConfigs)
+}
+
+func registerAdminAgentRoutes(admin *gin.RouterGroup, agents agentAdminActions, haproxyConfigs agentHAProxyConfigActions) {
 	admin.POST("/agents", func(c *gin.Context) {
 		output, err := agents.CreateAgent()
 		if err != nil {
@@ -44,6 +48,9 @@ func registerAdminAgentRoutes(admin *gin.RouterGroup, agents agentAdminActions) 
 	}))
 	admin.GET("/agents/:id", api.SingleParamUUIDFunc(func(id uuid.UUID) (*dto.AgentOutput, error) {
 		return agents.GetAgent(id.String())
+	}, "id"))
+	admin.GET("/agents/:id/haproxy-config", api.SingleParamUUIDFunc(func(id uuid.UUID) (*dto.AgentHAProxyConfigOutput, error) {
+		return haproxyConfigs.GetHAProxyConfig(id.String())
 	}, "id"))
 	admin.POST("/agents/:id/reset-token", api.SingleParamUUIDFunc(func(id uuid.UUID) (*dto.AgentCredentialOutput, error) {
 		return agents.ResetToken(id.String())

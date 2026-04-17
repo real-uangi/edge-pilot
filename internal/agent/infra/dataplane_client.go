@@ -105,6 +105,36 @@ func (c *DataPlaneAPIClient) ConfigurationVersion(ctx context.Context) (string, 
 	return strings.Trim(trimmed, `"`), nil
 }
 
+func (c *DataPlaneAPIClient) ShowRawConfig(ctx context.Context) (string, error) {
+	respBody, err := c.do(ctx, http.MethodGet, "/v3/services/haproxy/configuration/raw", nil)
+	if err != nil {
+		return "", err
+	}
+	rawText := string(respBody)
+	trimmed := strings.TrimSpace(rawText)
+	if trimmed == "" {
+		return "", nil
+	}
+	if strings.HasPrefix(trimmed, "{") {
+		var payload map[string]any
+		if err := json.Unmarshal(respBody, &payload); err != nil {
+			return "", err
+		}
+		switch value := payload["data"].(type) {
+		case string:
+			return value, nil
+		}
+		switch value := payload["_data"].(type) {
+		case string:
+			return value, nil
+		}
+	}
+	if strings.HasPrefix(trimmed, `"`) && strings.HasSuffix(trimmed, `"`) {
+		return strings.Trim(trimmed, `"`), nil
+	}
+	return rawText, nil
+}
+
 func (c *DataPlaneAPIClient) ReplaceFrontend(ctx context.Context, section frontendSection) error {
 	version, err := c.ConfigurationVersion(ctx)
 	if err != nil {

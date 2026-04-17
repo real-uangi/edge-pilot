@@ -28,6 +28,11 @@ export function AgentDetailPage() {
     queryKey: ["services"],
     queryFn: api.listServices,
   });
+  const haproxyConfigQuery = useQuery({
+    queryKey: ["agent-haproxy-config", id],
+    queryFn: () => api.getAgentHAProxyConfig(id!),
+    enabled: false,
+  });
 
   const refreshQueries = async () => {
     await Promise.all([
@@ -209,6 +214,44 @@ export function AgentDetailPage() {
           </div>
         </div>
         <StatusPill label={agent.lastError || "最近没有错误"} tone={agent.lastError ? "danger" : "success"} />
+      </section>
+
+      <section className={styles.sectionCard}>
+        <div className={styles.sectionHeader}>
+          <div>
+            <h2 className={styles.sectionTitle}>HAProxy 实时配置</h2>
+            <p className={styles.sectionCopy}>读取当前节点生效中的 haproxy.cfg。</p>
+          </div>
+          <div className={styles.buttonRow}>
+            <ActionButton
+              label="刷新配置"
+              pending={haproxyConfigQuery.isFetching}
+              pendingLabel="刷新中"
+              onClick={() => haproxyConfigQuery.refetch()}
+              disabled={agent.online !== true}
+            />
+          </div>
+        </div>
+        {agent.online !== true ? <InlineNotice message="节点离线，当前不可获取实时配置。" tone="info" /> : null}
+        {haproxyConfigQuery.isError ? (
+          <ErrorState
+            title="配置读取失败"
+            message={getErrorMessage(haproxyConfigQuery.error)}
+            onRetry={() => haproxyConfigQuery.refetch()}
+          />
+        ) : null}
+        {haproxyConfigQuery.isFetching ? <LoadingState title="正在读取配置" message="正在从在线节点拉取实时配置。" /> : null}
+        {!haproxyConfigQuery.isFetching && haproxyConfigQuery.isSuccess && !haproxyConfigQuery.data.config.trim() ? (
+          <EmptyState title="配置为空" message="节点返回了空配置内容。" />
+        ) : null}
+        {!haproxyConfigQuery.isFetching && haproxyConfigQuery.isSuccess && haproxyConfigQuery.data.config.trim() ? (
+          <div className={styles.logCard}>
+            <div className={styles.logMeta}>
+              <span>刷新时间：{formatDateTime(haproxyConfigQuery.data.fetchedAt)}</span>
+            </div>
+            <pre className={styles.configBlock}>{haproxyConfigQuery.data.config}</pre>
+          </div>
+        ) : null}
       </section>
     </div>
   );
