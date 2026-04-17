@@ -580,7 +580,7 @@ func (m *ManagedProxyRuntime) frontendSection(snapshot *grpcapi.ProxyConfigSnaps
 			Header:   "Set-Cookie",
 			Format:   servicecatalogapp.BuildStickyCookie(cookieName, blueReleaseID, service.GetRoutePathPrefix()),
 			Cond:     "if",
-			CondTest: prefixedCondTest(hostACL + " " + pathACL + " " + queryBlueACL),
+			CondTest: hostACL + " " + pathACL + " " + queryBlueACL,
 			Index:    responseBase,
 		})
 		responseRules = append(responseRules, httpAfterResponseRule{
@@ -589,7 +589,7 @@ func (m *ManagedProxyRuntime) frontendSection(snapshot *grpcapi.ProxyConfigSnaps
 			Header:   "Set-Cookie",
 			Format:   servicecatalogapp.BuildStickyCookie(cookieName, greenReleaseID, service.GetRoutePathPrefix()),
 			Cond:     "if",
-			CondTest: prefixedCondTest(hostACL + " " + pathACL + " " + queryGreenACL),
+			CondTest: hostACL + " " + pathACL + " " + queryGreenACL,
 			Index:    responseBase + 1,
 		})
 		responseRules = append(responseRules, httpAfterResponseRule{
@@ -598,7 +598,7 @@ func (m *ManagedProxyRuntime) frontendSection(snapshot *grpcapi.ProxyConfigSnaps
 			Header:   "Set-Cookie",
 			Format:   servicecatalogapp.BuildStickyCookie(cookieName, liveReleaseID, service.GetRoutePathPrefix()),
 			Cond:     "if",
-			CondTest: prefixedCondTest(hostACL + " " + pathACL + " !" + queryBlueACL + " !" + queryGreenACL + " !" + cookieBlueACL + " !" + cookieGreenACL),
+			CondTest: hostACL + " " + pathACL + " !" + queryBlueACL + " !" + queryGreenACL + " !" + cookieBlueACL + " !" + cookieGreenACL,
 			Index:    responseBase + 2,
 		})
 		responseRules = append(responseRules, httpAfterResponseRule{
@@ -607,7 +607,7 @@ func (m *ManagedProxyRuntime) frontendSection(snapshot *grpcapi.ProxyConfigSnaps
 			Header:   servicecatalogapp.CurrentReleaseIDHeaderName,
 			Format:   blueReleaseID,
 			Cond:     "if",
-			CondTest: prefixedCondTest(hostACL + " " + pathACL + " (" + queryBlueACL + " || (!" + queryGreenACL + " " + cookieBlueACL + "))"),
+			CondTest: hostACL + " " + pathACL + " (" + queryBlueACL + " || (!" + queryGreenACL + " " + cookieBlueACL + "))",
 			Index:    responseBase + 3,
 		})
 		responseRules = append(responseRules, httpAfterResponseRule{
@@ -616,7 +616,7 @@ func (m *ManagedProxyRuntime) frontendSection(snapshot *grpcapi.ProxyConfigSnaps
 			Header:   servicecatalogapp.CurrentReleaseIDHeaderName,
 			Format:   greenReleaseID,
 			Cond:     "if",
-			CondTest: prefixedCondTest(hostACL + " " + pathACL + " (" + queryGreenACL + " || (!" + queryBlueACL + " " + cookieGreenACL + "))"),
+			CondTest: hostACL + " " + pathACL + " (" + queryGreenACL + " || (!" + queryBlueACL + " " + cookieGreenACL + "))",
 			Index:    responseBase + 4,
 		})
 		responseRules = append(responseRules, httpAfterResponseRule{
@@ -625,7 +625,7 @@ func (m *ManagedProxyRuntime) frontendSection(snapshot *grpcapi.ProxyConfigSnaps
 			Header:   servicecatalogapp.CurrentReleaseIDHeaderName,
 			Format:   liveReleaseID,
 			Cond:     "if",
-			CondTest: prefixedCondTest(hostACL + " " + pathACL + " !" + queryBlueACL + " !" + queryGreenACL + " !" + cookieBlueACL + " !" + cookieGreenACL),
+			CondTest: hostACL + " " + pathACL + " !" + queryBlueACL + " !" + queryGreenACL + " !" + cookieBlueACL + " !" + cookieGreenACL,
 			Index:    responseBase + 5,
 		})
 		responseRules = append(responseRules, httpAfterResponseRule{
@@ -634,7 +634,7 @@ func (m *ManagedProxyRuntime) frontendSection(snapshot *grpcapi.ProxyConfigSnaps
 			Header:   servicecatalogapp.LiveReleaseIDHeaderName,
 			Format:   liveReleaseID,
 			Cond:     "if",
-			CondTest: prefixedCondTest(hostACL + " " + pathACL),
+			CondTest: hostACL + " " + pathACL,
 			Index:    responseBase + 6,
 		})
 	}
@@ -956,14 +956,6 @@ func aclName(serviceID string, suffix string) string {
 		base = "service"
 	}
 	return base + "_" + suffix
-}
-
-func prefixedCondTest(expr string) string {
-	expr = strings.TrimSpace(expr)
-	if expr == "" {
-		return "if"
-	}
-	return "if " + expr
 }
 
 func retry(ctx context.Context, attempts int, delay time.Duration, fn func() error) error {
