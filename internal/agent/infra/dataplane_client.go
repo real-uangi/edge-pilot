@@ -193,12 +193,31 @@ func filterHTTPAfterResponseRules(rules []httpAfterResponseRule) []httpAfterResp
 		if strings.TrimSpace(rule.Format) == "" {
 			continue
 		}
+		rule.Format = normalizeHAProxyFmt(rule.Format)
 		out = append(out, rule)
 	}
 	for i := range out {
 		out[i].Index = i
 	}
 	return out
+}
+
+func normalizeHAProxyFmt(value string) string {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return ""
+	}
+	if isQuotedHAProxyString(value) {
+		return value
+	}
+	if strings.ContainsAny(value, " \t;") {
+		return strconv.Quote(value)
+	}
+	return value
+}
+
+func isQuotedHAProxyString(value string) bool {
+	return len(value) >= 2 && value[0] == '"' && value[len(value)-1] == '"'
 }
 
 func (c *DataPlaneAPIClient) EnsureBackend(ctx context.Context, section backendSection) error {

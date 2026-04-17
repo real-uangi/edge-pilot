@@ -194,8 +194,8 @@ func TestDataPlaneClientReplaceFrontendInTransactionFiltersInvalidResponseRules(
 			{
 				Type:     "set-header",
 				Action:   "set-header",
-				Header:   "X-Test",
-				Format:   "release-1",
+				Header:   "Set-Cookie",
+				Format:   "release-1;Max-Age=600;Path=/;HttpOnly;SameSite=Lax",
 				Cond:     "if",
 				CondTest: "blue_acl",
 				Index:    1,
@@ -223,8 +223,8 @@ func TestDataPlaneClientReplaceFrontendInTransactionFiltersInvalidResponseRules(
 	if !ok {
 		t.Fatalf("expected first rule object, got %#v", rawRules[0])
 	}
-	if got := firstRule["hdr_fmt"]; got != "release-1" {
-		t.Fatalf("expected hdr_fmt release-1, got %#v", got)
+	if got := firstRule["hdr_fmt"]; got != `"release-1;Max-Age=600;Path=/;HttpOnly;SameSite=Lax"` {
+		t.Fatalf("expected quoted hdr_fmt for Set-Cookie, got %#v", got)
 	}
 	if got := firstRule["index"]; got != float64(0) {
 		t.Fatalf("expected filtered rule reindexed to 0, got %#v", got)

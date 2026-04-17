@@ -310,7 +310,7 @@ func TestFormatDataplaneFailureContextIncludesRenderedFrontendConfig(t *testing.
 	if !strings.Contains(contextText, "\"expectedFrontendConfig\":\"frontend ep_http") {
 		t.Fatalf("expected rendered frontend config in context, got %s", contextText)
 	}
-	if !strings.Contains(contextText, "http-after-response set-header Set-Cookie") {
+	if !strings.Contains(contextText, "http-after-response set-header Set-Cookie \\\"") {
 		t.Fatalf("expected response rule line in rendered config, got %s", contextText)
 	}
 }
@@ -387,6 +387,9 @@ func TestFrontendSectionAddsStickyPreviewAndDiagnosticRules(t *testing.T) {
 	}
 	if strings.Contains(section.HTTPAfterResponseRules[0].Format, "; ") {
 		t.Fatalf("expected response rule hdr_fmt to avoid spaces after ';', got %#v", section.HTTPAfterResponseRules[0])
+	}
+	if !strings.HasPrefix(section.HTTPAfterResponseRules[0].Format, `"`) || !strings.HasSuffix(section.HTTPAfterResponseRules[0].Format, `"`) {
+		t.Fatalf("expected sticky cookie hdr_fmt to be quoted for haproxy parsing, got %#v", section.HTTPAfterResponseRules[0])
 	}
 	if section.HTTPAfterResponseRules[3].Header != servicecatalogapp.CurrentReleaseIDHeaderName {
 		t.Fatalf("expected current release header, got %#v", section.HTTPAfterResponseRules[3])
