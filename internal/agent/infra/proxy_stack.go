@@ -390,12 +390,13 @@ func (m *ManagedProxyRuntime) reconcileLocked(ctx context.Context, snapshot *grp
 	}()
 	frontend := m.frontendSection(snapshot)
 	failureContext := dataplaneFailureContext{
-		AgentID:        m.cfg.AgentID,
-		TransactionID:  transactionID,
-		Version:        version,
-		Frontend:       frontend,
-		DefaultBackend: snapshot.GetDefaultBackend(),
-		ServiceCount:   len(snapshot.GetServices()),
+		AgentID:                m.cfg.AgentID,
+		TransactionID:          transactionID,
+		Version:                version,
+		Frontend:               frontend,
+		ExpectedFrontendConfig: renderExpectedFrontendConfig(frontend),
+		DefaultBackend:         snapshot.GetDefaultBackend(),
+		ServiceCount:           len(snapshot.GetServices()),
 	}
 	for _, service := range snapshot.GetServices() {
 		for _, slot := range []grpcapi.Slot{grpcapi.Slot_SLOT_BLUE, grpcapi.Slot_SLOT_GREEN} {
@@ -465,16 +466,17 @@ func (m *ManagedProxyRuntime) reconcileLocked(ctx context.Context, snapshot *grp
 }
 
 type dataplaneFailureContext struct {
-	AgentID         string                   `json:"agentId"`
-	TransactionID   string                   `json:"transactionId"`
-	Version         string                   `json:"version"`
-	Frontend        frontendSection          `json:"frontend"`
-	DefaultBackend  string                   `json:"defaultBackend"`
-	ServiceCount    int                      `json:"serviceCount"`
-	Backends        []backendSection         `json:"backends,omitempty"`
-	Servers         []dataplaneBackendServer `json:"servers,omitempty"`
-	DesiredBackends []string                 `json:"desiredBackends,omitempty"`
-	StaleBackends   []string                 `json:"staleBackends,omitempty"`
+	AgentID                string                   `json:"agentId"`
+	TransactionID          string                   `json:"transactionId"`
+	Version                string                   `json:"version"`
+	Frontend               frontendSection          `json:"frontend"`
+	ExpectedFrontendConfig string                   `json:"expectedFrontendConfig,omitempty"`
+	DefaultBackend         string                   `json:"defaultBackend"`
+	ServiceCount           int                      `json:"serviceCount"`
+	Backends               []backendSection         `json:"backends,omitempty"`
+	Servers                []dataplaneBackendServer `json:"servers,omitempty"`
+	DesiredBackends        []string                 `json:"desiredBackends,omitempty"`
+	StaleBackends          []string                 `json:"staleBackends,omitempty"`
 }
 
 type dataplaneBackendServer struct {
@@ -503,6 +505,39 @@ func formatDataplaneFailureContext(failureContext dataplaneFailureContext) strin
 		return fmt.Sprintf(`{"marshalError":%q}`, err.Error())
 	}
 	return string(encoded)
+}
+
+func renderExpectedFrontendConfig(frontend frontendSection) string {
+	lines := make([]string, 0, len(frontend.ACLList)+len(frontend.BackendSwitchingRuleList)+len(frontend.HTTPAfterResponseRules)+8)
+	lines = append(lines, "frontend "+strings.TrimSpace(frontend.Name))
+	if strings.TrimSpace(frontend.Mode) != "" {
+		lines = append(lines, "  mode "+strings.TrimSpace(frontend.Mode))
+	}
+	bindNames := mapKeys(frontend.Binds)
+	for _, name := range bindNames {
+		bind := frontend.Binds[name]
+		lines = append(lines, fmt.Sprintf("  bind %s:%d", strings.TrimSpace(bind.Address), bind.Port))
+	}
+	for _, acl := range frontend.ACLList {
+		lines = append(lines, fmt.Sprintf("  acl %s %s %s", strings.TrimSpace(acl.Name), strings.TrimSpace(acl.Criterion), strings.TrimSpace(acl.Value)))
+	}
+	for _, rule := range frontend.BackendSwitchingRuleList {
+		switchLine := fmt.Sprintf("  use_backend %s", strings.TrimSpace(rule.Name))
+		condTest := strings.TrimSpace(rule.CondTest)
+		if condTest != "" {
+			switchLine += " " + strings.TrimSpace(rule.Cond) + " " + condTest
+		}
+		lines = append(lines, strings.TrimSpace(strings.ReplaceAll(strings.ReplaceAll(switchLine, "  ", " "), "  ", " ")))
+	}
+	for _, rule := range frontend.HTTPAfterResponseRules {
+		actionLine := fmt.Sprintf("  http-after-response %s %s %s", strings.TrimSpace(rule.Action), strings.TrimSpace(rule.Header), strings.TrimSpace(rule.Format))
+		condTest := strings.TrimSpace(rule.CondTest)
+		if condTest != "" {
+			actionLine += " " + condTest
+		}
+		lines = append(lines, strings.TrimSpace(strings.ReplaceAll(strings.ReplaceAll(actionLine, "  ", " "), "  ", " ")))
+	}
+	return strings.Join(lines, "\n")
 }
 
 func sortedBackendNames(values map[string]struct{}) []string {
@@ -648,24 +683,24 @@ func (m *ManagedProxyRuntime) frontendSection(snapshot *grpcapi.ProxyConfigSnaps
 		})
 		responseBase := idx * 7
 		responseRules = append(responseRules, httpAfterResponseRule{
-			Type:     "add-header",
-			Action:   "add-header",
+			Type:     "set-header",
+			Action:   "set-header",
 			Header:   "Set-Cookie",
 			Format:   servicecatalogapp.BuildStickyCookie(cookieName, blueReleaseID, service.GetRoutePathPrefix()),
 			CondTest: prefixedCondTest(hostACL + " " + pathACL + " " + queryBlueACL),
 			Index:    responseBase,
 		})
 		responseRules = append(responseRules, httpAfterResponseRule{
-			Type:     "add-header",
-			Action:   "add-header",
+			Type:     "set-header",
+			Action:   "set-header",
 			Header:   "Set-Cookie",
 			Format:   servicecatalogapp.BuildStickyCookie(cookieName, greenReleaseID, service.GetRoutePathPrefix()),
 			CondTest: prefixedCondTest(hostACL + " " + pathACL + " " + queryGreenACL),
 			Index:    responseBase + 1,
 		})
 		responseRules = append(responseRules, httpAfterResponseRule{
-			Type:     "add-header",
-			Action:   "add-header",
+			Type:     "set-header",
+			Action:   "set-header",
 			Header:   "Set-Cookie",
 			Format:   servicecatalogapp.BuildStickyCookie(cookieName, liveReleaseID, service.GetRoutePathPrefix()),
 			CondTest: prefixedCondTest(hostACL + " " + pathACL + " !" + queryBlueACL + " !" + queryGreenACL + " !" + cookieBlueACL + " !" + cookieGreenACL),

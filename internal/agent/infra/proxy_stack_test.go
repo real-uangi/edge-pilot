@@ -294,6 +294,27 @@ func TestFormatDataplaneFailureContextIncludesServerDetails(t *testing.T) {
 	}
 }
 
+func TestFormatDataplaneFailureContextIncludesRenderedFrontendConfig(t *testing.T) {
+	proxy := newTestManagedProxyRuntime(&fakeManagedProxyDataplane{}, &fakeManagedProxyRuntime{})
+	frontend := proxy.frontendSection(testProxySnapshotWithService(grpcapi.Slot_SLOT_BLUE))
+	contextText := formatDataplaneFailureContext(dataplaneFailureContext{
+		AgentID:                "agent-1",
+		TransactionID:          "tx-render",
+		Version:                "12",
+		Frontend:               frontend,
+		ExpectedFrontendConfig: renderExpectedFrontendConfig(frontend),
+		DefaultBackend:         "ep_default",
+		ServiceCount:           1,
+	})
+
+	if !strings.Contains(contextText, "\"expectedFrontendConfig\":\"frontend ep_http") {
+		t.Fatalf("expected rendered frontend config in context, got %s", contextText)
+	}
+	if !strings.Contains(contextText, "http-after-response set-header Set-Cookie") {
+		t.Fatalf("expected response rule line in rendered config, got %s", contextText)
+	}
+}
+
 func TestReconcileLockedPrecreatesServersWithResolversForEmptyInstances(t *testing.T) {
 	callLog := make([]string, 0, 16)
 	dataplane := &fakeManagedProxyDataplane{
@@ -358,8 +379,8 @@ func TestFrontendSectionAddsStickyPreviewAndDiagnosticRules(t *testing.T) {
 	if section.HTTPAfterResponseRules[0].Header != "Set-Cookie" {
 		t.Fatalf("expected preview response to set cookie, got %#v", section.HTTPAfterResponseRules[0])
 	}
-	if section.HTTPAfterResponseRules[0].Type != "add-header" {
-		t.Fatalf("expected response rule type add-header, got %#v", section.HTTPAfterResponseRules[0])
+	if section.HTTPAfterResponseRules[0].Type != "set-header" {
+		t.Fatalf("expected response rule type set-header, got %#v", section.HTTPAfterResponseRules[0])
 	}
 	if strings.TrimSpace(section.HTTPAfterResponseRules[0].Cond) != "" {
 		t.Fatalf("expected response rule cond to be omitted, got %#v", section.HTTPAfterResponseRules[0])

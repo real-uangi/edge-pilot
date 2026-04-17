@@ -184,8 +184,8 @@ func TestDataPlaneClientReplaceFrontendInTransactionFiltersInvalidResponseRules(
 		Mode: "http",
 		HTTPAfterResponseRules: []httpAfterResponseRule{
 			{
-				Type:     "add-header",
-				Action:   "add-header",
+				Type:     "set-header",
+				Action:   "set-header",
 				Header:   "Set-Cookie",
 				Cond:     "if",
 				CondTest: "green_acl",
