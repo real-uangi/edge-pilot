@@ -7,6 +7,7 @@ import (
 	"edge-pilot/internal/shared/grpcapi"
 	"errors"
 	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/real-uangi/allingo/common/log"
@@ -224,6 +225,9 @@ func TestFrontendSectionAddsStickyPreviewAndDiagnosticRules(t *testing.T) {
 	proxy := newTestManagedProxyRuntime(&fakeManagedProxyDataplane{}, &fakeManagedProxyRuntime{})
 
 	section := proxy.frontendSection(testProxySnapshotWithService(grpcapi.Slot_SLOT_GREEN))
+	hostACL := aclName("svc-1", "host")
+	pathACL := aclName("svc-1", "path")
+	queryBlueACL := aclName("svc-1", "query_blue")
 
 	if len(section.BackendSwitchingRuleList) != 5 {
 		t.Fatalf("expected 5 switching rules, got %d", len(section.BackendSwitchingRuleList))
@@ -243,8 +247,11 @@ func TestFrontendSectionAddsStickyPreviewAndDiagnosticRules(t *testing.T) {
 	if section.HTTPAfterResponseRules[0].Type != "add-header" {
 		t.Fatalf("expected response rule type add-header, got %#v", section.HTTPAfterResponseRules[0])
 	}
-	if section.HTTPAfterResponseRules[0].CondTest != "if" {
-		t.Fatalf("expected response rule cond_test if, got %#v", section.HTTPAfterResponseRules[0])
+	if section.HTTPAfterResponseRules[0].Cond != "if" {
+		t.Fatalf("expected response rule cond if, got %#v", section.HTTPAfterResponseRules[0])
+	}
+	if section.HTTPAfterResponseRules[0].CondTest != hostACL+" "+pathACL+" "+queryBlueACL {
+		t.Fatalf("expected response rule cond_test ACL expression, got %#v", section.HTTPAfterResponseRules[0])
 	}
 	if section.HTTPAfterResponseRules[3].Header != servicecatalogapp.CurrentReleaseIDHeaderName {
 		t.Fatalf("expected current release header, got %#v", section.HTTPAfterResponseRules[3])
@@ -252,14 +259,28 @@ func TestFrontendSectionAddsStickyPreviewAndDiagnosticRules(t *testing.T) {
 	if section.HTTPAfterResponseRules[3].Type != "set-header" {
 		t.Fatalf("expected response rule type set-header, got %#v", section.HTTPAfterResponseRules[3])
 	}
-	if section.HTTPAfterResponseRules[3].CondTest != "if" {
-		t.Fatalf("expected response rule cond_test if, got %#v", section.HTTPAfterResponseRules[3])
+	if section.HTTPAfterResponseRules[3].Cond != "if" {
+		t.Fatalf("expected response rule cond if, got %#v", section.HTTPAfterResponseRules[3])
+	}
+	if section.HTTPAfterResponseRules[3].CondTest == "if" || section.HTTPAfterResponseRules[3].CondTest == "unless" {
+		t.Fatalf("expected response rule cond_test ACL expression, got %#v", section.HTTPAfterResponseRules[3])
 	}
 	if section.HTTPAfterResponseRules[6].Header != servicecatalogapp.LiveReleaseIDHeaderName {
 		t.Fatalf("expected live release header, got %#v", section.HTTPAfterResponseRules[6])
 	}
 	if section.HTTPAfterResponseRules[6].Type != "set-header" {
 		t.Fatalf("expected response rule type set-header, got %#v", section.HTTPAfterResponseRules[6])
+	}
+	for i, rule := range section.HTTPAfterResponseRules {
+		if rule.Cond != "if" && rule.Cond != "unless" {
+			t.Fatalf("response rule[%d] cond should be if/unless, got %#v", i, rule)
+		}
+		if strings.TrimSpace(rule.CondTest) == "" {
+			t.Fatalf("response rule[%d] cond_test should not be empty, got %#v", i, rule)
+		}
+		if rule.CondTest == "if" || rule.CondTest == "unless" {
+			t.Fatalf("response rule[%d] cond_test should be ACL expression, got %#v", i, rule)
+		}
 	}
 }
 

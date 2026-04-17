@@ -72,12 +72,13 @@ func TestDataPlaneClientTransactionWritesIncludeTransactionID(t *testing.T) {
 		Mode: "http",
 		HTTPAfterResponseRules: []httpAfterResponseRule{
 			{
-				Type:   "set-header",
-				Action: "set-header",
-				Header: "X-Test",
-				Format: "release-1",
-				Cond:   "if",
-				Index:  0,
+				Type:     "set-header",
+				Action:   "set-header",
+				Header:   "X-Test",
+				Format:   "release-1",
+				Cond:     "if",
+				CondTest: "test_acl_expr",
+				Index:    0,
 			},
 		},
 	}); err != nil {
@@ -100,7 +101,7 @@ func TestDataPlaneClientTransactionWritesIncludeTransactionID(t *testing.T) {
 	assertTransactionRequest(t, requests[1], http.MethodPut, "/v3/services/haproxy/configuration/backends/be-api/servers/blue", "tx-1", false)
 	assertServerPayload(t, requests[1], managedProxyResolversName, managedProxyInitAddrFallback)
 	assertTransactionRequest(t, requests[2], http.MethodPut, "/v3/services/haproxy/configuration/frontends/ep_http", "tx-1", true)
-	assertFrontendResponseRulePayload(t, requests[2], "set-header")
+	assertFrontendResponseRulePayload(t, requests[2], "set-header", "if", "test_acl_expr")
 	assertTransactionRequest(t, requests[3], http.MethodDelete, "/v3/services/haproxy/configuration/backends/stale-api", "tx-1", false)
 	assertTransactionLifecycleRequest(t, requests[4], http.MethodPut, "/v3/services/haproxy/transactions/tx-1")
 	assertTransactionLifecycleRequest(t, requests[5], http.MethodDelete, "/v3/services/haproxy/transactions/tx-1")
@@ -174,7 +175,7 @@ func assertServerPayload(t *testing.T, request recordedRequest, resolvers string
 	}
 }
 
-func assertFrontendResponseRulePayload(t *testing.T, request recordedRequest, ruleType string) {
+func assertFrontendResponseRulePayload(t *testing.T, request recordedRequest, ruleType string, cond string, condTest string) {
 	t.Helper()
 	var payload map[string]any
 	if err := json.Unmarshal([]byte(request.body), &payload); err != nil {
@@ -190,6 +191,12 @@ func assertFrontendResponseRulePayload(t *testing.T, request recordedRequest, ru
 	}
 	if got := firstRule["type"]; got != ruleType {
 		t.Fatalf("expected first response rule type %q, got %#v", ruleType, got)
+	}
+	if got := firstRule["cond"]; got != cond {
+		t.Fatalf("expected first response rule cond %q, got %#v", cond, got)
+	}
+	if got := firstRule["cond_test"]; got != condTest {
+		t.Fatalf("expected first response rule cond_test %q, got %#v", condTest, got)
 	}
 }
 
