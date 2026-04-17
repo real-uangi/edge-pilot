@@ -9,6 +9,7 @@ import (
 	"edge-pilot/internal/shared/grpcapi"
 	"edge-pilot/internal/shared/model"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"net"
 	"os"
@@ -387,6 +388,15 @@ func (m *ManagedProxyRuntime) reconcileLocked(ctx context.Context, snapshot *grp
 			m.logger.Errorf(abortErr, "aborting dataplane transaction failed: transactionId=%s", transactionID)
 		}
 	}()
+	frontend := m.frontendSection(snapshot)
+	failureContext := dataplaneFailureContext{
+		AgentID:        m.cfg.AgentID,
+		TransactionID:  transactionID,
+		Version:        version,
+		Frontend:       frontend,
+		DefaultBackend: snapshot.GetDefaultBackend(),
+		ServiceCount:   len(snapshot.GetServices()),
+	}
 	for _, service := range snapshot.GetServices() {
 		for _, slot := range []grpcapi.Slot{grpcapi.Slot_SLOT_BLUE, grpcapi.Slot_SLOT_GREEN} {
 			backend := backendSection{
@@ -396,22 +406,31 @@ func (m *ManagedProxyRuntime) reconcileLocked(ctx context.Context, snapshot *grp
 					Algorithm: "roundrobin",
 				},
 			}
+			failureContext.Backends = append(failureContext.Backends, backend)
 			if err := m.dataplane.EnsureBackendInTransaction(ctx, transactionID, backend); err != nil {
+				m.logDataplaneFailure(err, "dataplane ensure backend failed", failureContext)
 				return err
 			}
-			if err := m.dataplane.EnsureServerInTransaction(ctx, backend.Name, transactionID, backendServer{
+			server := backendServer{
 				Name:      serviceServerName(service, slot),
 				Address:   application.ManagedContainerName(service.GetServiceKey(), slot),
 				Port:      int(service.GetContainerPort()),
 				Check:     "enabled",
 				Resolvers: managedProxyResolversName,
 				InitAddr:  managedProxyInitAddrFallback,
-			}); err != nil {
+			}
+			failureContext.Servers = append(failureContext.Servers, dataplaneBackendServer{
+				Backend: backend.Name,
+				Server:  server,
+			})
+			if err := m.dataplane.EnsureServerInTransaction(ctx, backend.Name, transactionID, server); err != nil {
+				m.logDataplaneFailure(err, "dataplane ensure server failed", failureContext)
 				return err
 			}
 		}
 	}
-	if err := m.dataplane.ReplaceFrontendInTransaction(ctx, transactionID, m.frontendSection(snapshot)); err != nil {
+	if err := m.dataplane.ReplaceFrontendInTransaction(ctx, transactionID, frontend); err != nil {
+		m.logDataplaneFailure(err, "dataplane replace frontend failed", failureContext)
 		return err
 	}
 	existing, err := m.dataplane.ListBackends(ctx)
@@ -425,20 +444,74 @@ func (m *ManagedProxyRuntime) reconcileLocked(ctx context.Context, snapshot *grp
 		desiredBackends[serviceBackendName(service, grpcapi.Slot_SLOT_BLUE)] = struct{}{}
 		desiredBackends[serviceBackendName(service, grpcapi.Slot_SLOT_GREEN)] = struct{}{}
 	}
+	failureContext.DesiredBackends = sortedBackendNames(desiredBackends)
 	for _, name := range existing {
 		if _, ok := desiredBackends[name]; ok {
 			continue
 		}
+		failureContext.StaleBackends = append(failureContext.StaleBackends, name)
 		m.logger.Infof("removing stale backend from dataplane: backend=%s", name)
 		if err := m.dataplane.DeleteBackendInTransaction(ctx, name, transactionID); err != nil {
+			m.logDataplaneFailure(err, "dataplane delete backend failed", failureContext)
 			return err
 		}
 	}
 	if err := m.dataplane.CommitTransaction(ctx, transactionID); err != nil {
+		m.logDataplaneFailure(err, "dataplane commit transaction failed", failureContext)
 		return err
 	}
 	committed = true
 	return nil
+}
+
+type dataplaneFailureContext struct {
+	AgentID         string                   `json:"agentId"`
+	TransactionID   string                   `json:"transactionId"`
+	Version         string                   `json:"version"`
+	Frontend        frontendSection          `json:"frontend"`
+	DefaultBackend  string                   `json:"defaultBackend"`
+	ServiceCount    int                      `json:"serviceCount"`
+	Backends        []backendSection         `json:"backends,omitempty"`
+	Servers         []dataplaneBackendServer `json:"servers,omitempty"`
+	DesiredBackends []string                 `json:"desiredBackends,omitempty"`
+	StaleBackends   []string                 `json:"staleBackends,omitempty"`
+}
+
+type dataplaneBackendServer struct {
+	Backend string        `json:"backend"`
+	Server  backendServer `json:"server"`
+}
+
+func (m *ManagedProxyRuntime) logDataplaneFailure(err error, message string, failureContext dataplaneFailureContext) {
+	m.logger.Errorf(
+		err,
+		"%s: agentId=%s transactionId=%s version=%s frontend=%s defaultBackend=%s services=%d details=%s",
+		message,
+		failureContext.AgentID,
+		failureContext.TransactionID,
+		failureContext.Version,
+		failureContext.Frontend.Name,
+		failureContext.DefaultBackend,
+		failureContext.ServiceCount,
+		formatDataplaneFailureContext(failureContext),
+	)
+}
+
+func formatDataplaneFailureContext(failureContext dataplaneFailureContext) string {
+	encoded, err := json.Marshal(failureContext)
+	if err != nil {
+		return fmt.Sprintf(`{"marshalError":%q}`, err.Error())
+	}
+	return string(encoded)
+}
+
+func sortedBackendNames(values map[string]struct{}) []string {
+	names := make([]string, 0, len(values))
+	for name := range values {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	return names
 }
 
 func (m *ManagedProxyRuntime) ensureReservedProxyIPLocked(ctx context.Context) error {

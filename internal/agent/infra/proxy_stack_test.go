@@ -5,6 +5,7 @@ import (
 	servicecatalogapp "edge-pilot/internal/servicecatalog/application"
 	"edge-pilot/internal/shared/config"
 	"edge-pilot/internal/shared/grpcapi"
+	"encoding/json"
 	"errors"
 	"reflect"
 	"strings"
@@ -174,6 +175,122 @@ func TestReconcileLockedPreservesPrimaryErrorWhenAbortFails(t *testing.T) {
 	}
 	if !reflect.DeepEqual(callLog, expected) {
 		t.Fatalf("unexpected call order: %#v", callLog)
+	}
+}
+
+func TestReconcileLockedAbortsTransactionWhenEnsureServerFails(t *testing.T) {
+	callLog := make([]string, 0, 16)
+	expectedErr := errors.New("ensure server failed")
+	dataplane := &fakeManagedProxyDataplane{
+		version:         "13",
+		txID:            "tx-7",
+		ensureServerErr: expectedErr,
+		callLog:         &callLog,
+	}
+	runtime := &fakeManagedProxyRuntime{callLog: &callLog}
+	proxy := newTestManagedProxyRuntime(dataplane, runtime)
+
+	err := proxy.reconcileLocked(context.Background(), testProxySnapshotWithService(grpcapi.Slot_SLOT_BLUE))
+	if !errors.Is(err, expectedErr) {
+		t.Fatalf("expected %v, got %v", expectedErr, err)
+	}
+
+	expected := []string{
+		"version",
+		"start-transaction:13",
+		"ensure-backend:be-api_blue@tx-7",
+		"ensure-server:be-api_blue/blue@tx-7",
+		"abort:tx-7",
+	}
+	if !reflect.DeepEqual(callLog, expected) {
+		t.Fatalf("unexpected call order: %#v", callLog)
+	}
+}
+
+func TestFormatDataplaneFailureContextIncludesCommitFailureDetails(t *testing.T) {
+	contextText := formatDataplaneFailureContext(dataplaneFailureContext{
+		AgentID:        "agent-1",
+		TransactionID:  "tx-4",
+		Version:        "10",
+		Frontend:       newTestManagedProxyRuntime(&fakeManagedProxyDataplane{}, &fakeManagedProxyRuntime{}).frontendSection(testProxySnapshotWithService(grpcapi.Slot_SLOT_GREEN)),
+		DefaultBackend: "ep_default",
+		ServiceCount:   1,
+		Backends: []backendSection{
+			{Name: "be-api_blue", Mode: "http", Balance: backendBalance{Algorithm: "roundrobin"}},
+			{Name: "be-api_green", Mode: "http", Balance: backendBalance{Algorithm: "roundrobin"}},
+		},
+		Servers: []dataplaneBackendServer{
+			{Backend: "be-api_blue", Server: backendServer{Name: "blue", Address: "svc-a-blue", Port: 8080}},
+			{Backend: "be-api_green", Server: backendServer{Name: "green", Address: "svc-a-green", Port: 8080}},
+		},
+		DesiredBackends: []string{"be-api_blue", "be-api_green", "ep_default"},
+		StaleBackends:   []string{"stale-api"},
+	})
+
+	if !strings.Contains(contextText, `"transactionId":"tx-4"`) {
+		t.Fatalf("expected transaction id in context, got %s", contextText)
+	}
+	if !strings.Contains(contextText, `"desiredBackends":["be-api_blue","be-api_green","ep_default"]`) {
+		t.Fatalf("expected desired backends in context, got %s", contextText)
+	}
+	if !strings.Contains(contextText, `"staleBackends":["stale-api"]`) {
+		t.Fatalf("expected stale backends in context, got %s", contextText)
+	}
+	if !strings.Contains(contextText, `"frontend":{"name":"ep_http"`) {
+		t.Fatalf("expected frontend payload in context, got %s", contextText)
+	}
+}
+
+func TestFormatDataplaneFailureContextIncludesFrontendDetails(t *testing.T) {
+	proxy := newTestManagedProxyRuntime(&fakeManagedProxyDataplane{}, &fakeManagedProxyRuntime{})
+	contextText := formatDataplaneFailureContext(dataplaneFailureContext{
+		AgentID:        "agent-1",
+		TransactionID:  "tx-3",
+		Version:        "9",
+		Frontend:       proxy.frontendSection(testProxySnapshotWithService(grpcapi.Slot_SLOT_BLUE)),
+		DefaultBackend: "ep_default",
+		ServiceCount:   1,
+	})
+
+	if !strings.Contains(contextText, `"http_after_response_rule_list"`) {
+		t.Fatalf("expected response rules in frontend context, got %s", contextText)
+	}
+	if !strings.Contains(contextText, servicecatalogapp.CurrentReleaseIDHeaderName) {
+		t.Fatalf("expected current release header in frontend context, got %s", contextText)
+	}
+}
+
+func TestFormatDataplaneFailureContextIncludesServerDetails(t *testing.T) {
+	contextText := formatDataplaneFailureContext(dataplaneFailureContext{
+		AgentID:        "agent-1",
+		TransactionID:  "tx-7",
+		Version:        "11",
+		Frontend:       frontendSection{Name: "ep_http"},
+		DefaultBackend: "ep_default",
+		ServiceCount:   1,
+		Servers: []dataplaneBackendServer{
+			{
+				Backend: "be-api_blue",
+				Server: backendServer{
+					Name:      "blue",
+					Address:   "svc-a-blue",
+					Port:      8080,
+					Check:     "enabled",
+					Resolvers: managedProxyResolversName,
+					InitAddr:  managedProxyInitAddrFallback,
+				},
+			},
+		},
+	})
+
+	if !strings.Contains(contextText, `"backend":"be-api_blue"`) {
+		t.Fatalf("expected backend name in server context, got %s", contextText)
+	}
+	if !strings.Contains(contextText, `"resolvers":"`+managedProxyResolversName+`"`) {
+		t.Fatalf("expected server resolvers in context, got %s", contextText)
+	}
+	if !json.Valid([]byte(contextText)) {
+		t.Fatalf("expected valid json context, got %s", contextText)
 	}
 }
 
@@ -349,14 +466,16 @@ func testProxySnapshotWithoutServices() *grpcapi.ProxyConfigSnapshot {
 }
 
 type fakeManagedProxyDataplane struct {
-	version       string
-	txID          string
-	backends      []string
-	replaceErr    error
-	commitErr     error
-	abortErr      error
-	callLog       *[]string
-	serverConfigs []backendServer
+	version          string
+	txID             string
+	backends         []string
+	ensureBackendErr error
+	ensureServerErr  error
+	replaceErr       error
+	commitErr        error
+	abortErr         error
+	callLog          *[]string
+	serverConfigs    []backendServer
 }
 
 func (f *fakeManagedProxyDataplane) ConfigurationVersion(context.Context) (string, error) {
@@ -391,13 +510,13 @@ func (f *fakeManagedProxyDataplane) ReplaceFrontendInTransaction(_ context.Conte
 
 func (f *fakeManagedProxyDataplane) EnsureBackendInTransaction(_ context.Context, transactionID string, section backendSection) error {
 	*f.callLog = append(*f.callLog, "ensure-backend:"+section.Name+"@"+transactionID)
-	return nil
+	return f.ensureBackendErr
 }
 
 func (f *fakeManagedProxyDataplane) EnsureServerInTransaction(_ context.Context, backendName string, transactionID string, server backendServer) error {
 	*f.callLog = append(*f.callLog, "ensure-server:"+backendName+"/"+server.Name+"@"+transactionID)
 	f.serverConfigs = append(f.serverConfigs, server)
-	return nil
+	return f.ensureServerErr
 }
 
 func (f *fakeManagedProxyDataplane) ListBackends(context.Context) ([]string, error) {
