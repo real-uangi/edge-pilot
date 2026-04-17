@@ -155,6 +155,9 @@ func (s *Service) Start(id uuid.UUID, operator string) (*dto.ReleaseOutput, erro
 	if !spec.Enabled {
 		return nil, business.NewBadRequest("service 已禁用")
 	}
+	if err := validateDeploymentSpec(spec); err != nil {
+		return nil, err
+	}
 	online, err := s.agentRegistry.IsOnline(spec.AgentID)
 	if err != nil {
 		return nil, err
@@ -223,6 +226,9 @@ func (s *Service) Retry(id uuid.UUID, operator string) (*dto.ReleaseOutput, erro
 	}
 	if !spec.Enabled {
 		return nil, business.NewBadRequest("service 已禁用")
+	}
+	if err := validateDeploymentSpec(spec); err != nil {
+		return nil, err
 	}
 	online, err := s.agentRegistry.IsOnline(spec.AgentID)
 	if err != nil {
@@ -895,6 +901,16 @@ func (s *Service) newDeployTask(release *model.Release, spec *dto.ServiceDeploym
 		SensitiveCiphertext: ciphertext,
 		SensitiveKeyVersion: keyVersion,
 	}, nil
+}
+
+func validateDeploymentSpec(spec *dto.ServiceDeploymentSpec) error {
+	if spec == nil {
+		return business.NewBadRequest("service 配置不存在")
+	}
+	if spec.ContainerPort <= 0 || spec.ContainerPort > 65535 {
+		return business.NewBadRequest("service.containerPort 非法，请先更新服务配置后再发布")
+	}
+	return nil
 }
 
 func (s *Service) newSwitchTask(release *model.Release, spec *dto.ServiceDeploymentSpec, taskType model.TaskType) (*model.Task, error) {

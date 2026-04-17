@@ -246,6 +246,57 @@ func TestStartQueuedReleaseDispatchesDeployTask(t *testing.T) {
 	}
 }
 
+func TestStartRejectsInvalidServiceContainerPort(t *testing.T) {
+	serviceRepo := &fakeServiceRepo{}
+	agentRepo := &fakeAgentRepo{nodes: map[string]*model.AgentNode{}}
+	releaseRepo := newFakeReleaseRepo()
+	dispatcher := &fakeDispatcher{}
+
+	serviceCatalog := servicecatalogapp.NewService(serviceRepo)
+	registry := agentapp.NewRegistryService(config.LoadAgentAuthConfig(), agentRepo)
+	releaseService := NewService(releaseRepo, dispatcher, serviceCatalog, registry)
+
+	enabled := true
+	dockerHealth := true
+	online := true
+	now := time.Now()
+	service := &model.Service{
+		ID:                uuid.New(),
+		ServiceKey:        "svc-a",
+		Name:              "svc-a",
+		AgentID:           "agent-a",
+		ImageRepo:         "repo/app",
+		ContainerPort:     0,
+		DockerHealthCheck: &dockerHealth,
+		RouteHost:         "svc-a.example.com",
+		RoutePathPrefix:   "/",
+		Enabled:           &enabled,
+	}
+	serviceRepo.ensure()
+	serviceRepo.byID[service.ID] = service
+	serviceRepo.byKey[service.ServiceKey] = service
+	agentRepo.nodes["agent-a"] = &model.AgentNode{
+		ID:              "agent-a",
+		Enabled:         &enabled,
+		Online:          &online,
+		LastHeartbeatAt: &now,
+	}
+
+	queued, err := releaseService.CreateFromCI(dto.CreateReleaseFromCIRequest{
+		ServiceKey: "svc-a",
+		ImageTag:   "v1.0.0",
+	})
+	if err != nil {
+		t.Fatalf("CreateFromCI() error = %v", err)
+	}
+	if _, err := releaseService.Start(queued.ID, "admin"); err == nil {
+		t.Fatal("expected invalid service containerPort to be rejected")
+	}
+	if len(dispatcher.tasks) != 0 {
+		t.Fatalf("expected no dispatched task, got %d", len(dispatcher.tasks))
+	}
+}
+
 func TestStartQueuedReleaseEncryptsSensitiveTaskPayload(t *testing.T) {
 	serviceRepo := &fakeServiceRepo{}
 	agentRepo := &fakeAgentRepo{nodes: map[string]*model.AgentNode{}}

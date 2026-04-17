@@ -473,11 +473,13 @@
 .logBlock {
   margin: 10px 0 0;
   padding: 12px;
+  height: 280px;
   border-radius: 8px;
   background: #000000;
   color: #ffffff;
   font-size: 12px;
   line-height: 1.45;
+  overflow-y: auto;
   overflow-x: auto;
   white-space: pre-wrap;
   word-break: break-word;

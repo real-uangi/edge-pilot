@@ -398,13 +398,19 @@ func (e *Executor) verifyHealth(ctx context.Context, task *grpcapi.TaskCommand, 
 			return fmt.Errorf("docker health not ready: %s", health)
 		}
 	}
-	return e.httpProbe(
+	path := defaultString(task.GetHttpHealthPath(), "/health")
+	expectedCode := defaultCode(task.GetHttpExpectedCode())
+	timeoutSeconds := defaultProbeTimeout(task.GetHttpProbeTimeoutSecond())
+	if err := e.httpProbe(
 		listenAddress,
-		defaultString(task.GetHttpHealthPath(), "/health"),
+		path,
 		task.GetHttpHealthHeaders(),
-		defaultCode(task.GetHttpExpectedCode()),
-		defaultProbeTimeout(task.GetHttpProbeTimeoutSecond()),
-	)
+		expectedCode,
+		timeoutSeconds,
+	); err != nil {
+		return fmt.Errorf("http health probe failed: target=http://%s%s expected=%d timeout=%ds: %w", listenAddress, path, expectedCode, timeoutSeconds, err)
+	}
+	return nil
 }
 
 func (e *Executor) wrapTaskFailure(ctx context.Context, runtime *ContainerRuntime, err error) error {

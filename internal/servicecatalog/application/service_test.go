@@ -242,6 +242,22 @@ func TestCreateNormalizesHTTPHealthHeaders(t *testing.T) {
 	}
 }
 
+func TestCreateRejectsInvalidContainerPort(t *testing.T) {
+	repo := newFakeServiceCatalogRepo()
+	svc := NewService(repo)
+
+	if _, err := svc.Create(dto.UpsertServiceRequest{
+		Name:          "svc-a",
+		ServiceKey:    "svc-a",
+		AgentID:       "11111111-1111-1111-1111-111111111111",
+		ImageRepo:     "repo/app",
+		ContainerPort: 0,
+		RouteHost:     "a.example.com",
+	}); err == nil {
+		t.Fatal("expected invalid containerPort to be rejected")
+	}
+}
+
 func TestGetFallsBackToPlaintextEnvForLegacyData(t *testing.T) {
 	repo := newFakeServiceCatalogRepo()
 	svc := NewService(repo)

@@ -184,6 +184,9 @@ func (s *Service) UpdateLiveSlot(id uuid.UUID, slot model.Slot) error {
 }
 
 func (s *Service) buildServiceEntity(id uuid.UUID, req dto.UpsertServiceRequest) (*model.Service, error) {
+	if err := validateContainerPort(req.ContainerPort); err != nil {
+		return nil, err
+	}
 	dockerHealth := req.DockerHealthCheck
 	if dockerHealth == nil {
 		dockerHealth = boolPointer(true)
@@ -455,6 +458,13 @@ func validatePublishedPorts(items []model.PublishedPort) error {
 			return business.NewBadRequest("publishedPorts.hostPort 重复")
 		}
 		seen[item.HostPort] = struct{}{}
+	}
+	return nil
+}
+
+func validateContainerPort(port int) error {
+	if port <= 0 || port > 65535 {
+		return business.NewBadRequest("containerPort 非法")
 	}
 	return nil
 }

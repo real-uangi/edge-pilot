@@ -1,3 +1,4 @@
+import { useEffect, useRef } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate, useParams } from "react-router-dom";
 import { api, getErrorMessage } from "../lib/api";
@@ -27,6 +28,59 @@ function cleanupLabel(value: boolean | null) {
     return "—";
   }
   return value ? "已清理" : "未清理";
+}
+
+type ReleaseTaskLogInfo = {
+  lastStep: string;
+  dockerHealth: string;
+  cleanupCompleted: boolean | null;
+  lastError: string;
+  failureLogs: string;
+};
+
+function TaskLogDetails({ task }: { task: ReleaseTaskLogInfo }) {
+  const detailsRef = useRef<HTMLDetailsElement | null>(null);
+  const logRef = useRef<HTMLPreElement | null>(null);
+
+  const scrollLogToBottom = () => {
+    if (!logRef.current) {
+      return;
+    }
+    logRef.current.scrollTop = logRef.current.scrollHeight;
+  };
+
+  useEffect(() => {
+    if (detailsRef.current?.open) {
+      scrollLogToBottom();
+    }
+  }, [task.failureLogs]);
+
+  return (
+    <details
+      className={styles.logCard}
+      ref={detailsRef}
+      onToggle={() => {
+        if (detailsRef.current?.open) {
+          scrollLogToBottom();
+        }
+      }}
+    >
+      <summary className={styles.logSummary}>查看详情和日志</summary>
+      <div className={styles.logMeta}>
+        <span>阶段：{task.lastStep || "—"}</span>
+        <span>Docker 状态：{task.dockerHealth || "—"}</span>
+        <span>清理：{cleanupLabel(task.cleanupCompleted)}</span>
+        <span>错误：{task.lastError || "—"}</span>
+      </div>
+      {task.failureLogs ? (
+        <pre className={styles.logBlock} ref={logRef}>
+          {task.failureLogs}
+        </pre>
+      ) : (
+        <div className={styles.logEmpty}>暂无失败日志</div>
+      )}
+    </details>
+  );
 }
 
 export function ReleaseDetailPage() {
@@ -234,20 +288,7 @@ export function ReleaseDetailPage() {
                     </tr>,
                     <tr className={styles.timelineDetailRow} key={task.id + "-details"}>
                       <td className={styles.timelineDetailCell} colSpan={5}>
-                        <details className={styles.logCard}>
-                          <summary className={styles.logSummary}>查看详情和日志</summary>
-                          <div className={styles.logMeta}>
-                            <span>阶段：{task.lastStep || "—"}</span>
-                            <span>Docker 状态：{task.dockerHealth || "—"}</span>
-                            <span>清理：{cleanupLabel(task.cleanupCompleted)}</span>
-                            <span>错误：{task.lastError || "—"}</span>
-                          </div>
-                          {task.failureLogs ? (
-                            <pre className={styles.logBlock}>{task.failureLogs}</pre>
-                          ) : (
-                            <div className={styles.logEmpty}>暂无失败日志</div>
-                          )}
-                        </details>
+                        <TaskLogDetails task={task} />
                       </td>
                     </tr>,
                   ]
