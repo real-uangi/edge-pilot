@@ -342,9 +342,6 @@ func TestFrontendSectionAddsStickyPreviewAndDiagnosticRules(t *testing.T) {
 	proxy := newTestManagedProxyRuntime(&fakeManagedProxyDataplane{}, &fakeManagedProxyRuntime{})
 
 	section := proxy.frontendSection(testProxySnapshotWithService(grpcapi.Slot_SLOT_GREEN))
-	hostACL := aclName("svc-1", "host")
-	pathACL := aclName("svc-1", "path")
-	queryBlueACL := aclName("svc-1", "query_blue")
 
 	if len(section.BackendSwitchingRuleList) != 5 {
 		t.Fatalf("expected 5 switching rules, got %d", len(section.BackendSwitchingRuleList))
@@ -367,8 +364,8 @@ func TestFrontendSectionAddsStickyPreviewAndDiagnosticRules(t *testing.T) {
 	if strings.TrimSpace(section.HTTPAfterResponseRules[0].Cond) != "" {
 		t.Fatalf("expected response rule cond to be omitted, got %#v", section.HTTPAfterResponseRules[0])
 	}
-	if section.HTTPAfterResponseRules[0].CondTest != "if "+hostACL+" "+pathACL+" "+queryBlueACL {
-		t.Fatalf("expected response rule cond_test ACL expression, got %#v", section.HTTPAfterResponseRules[0])
+	if strings.Contains(section.HTTPAfterResponseRules[0].Format, "; ") {
+		t.Fatalf("expected response rule hdr_fmt to avoid spaces after ';', got %#v", section.HTTPAfterResponseRules[0])
 	}
 	if section.HTTPAfterResponseRules[3].Header != servicecatalogapp.CurrentReleaseIDHeaderName {
 		t.Fatalf("expected current release header, got %#v", section.HTTPAfterResponseRules[3])
