@@ -653,7 +653,7 @@ func (m *ManagedProxyRuntime) frontendSection(snapshot *grpcapi.ProxyConfigSnaps
 			Header:   "Set-Cookie",
 			Format:   servicecatalogapp.BuildStickyCookie(cookieName, blueReleaseID, service.GetRoutePathPrefix()),
 			Cond:     "if",
-			CondTest: hostACL + " " + pathACL + " " + queryBlueACL,
+			CondTest: prefixedCondTest(hostACL + " " + pathACL + " " + queryBlueACL),
 			Index:    responseBase,
 		})
 		responseRules = append(responseRules, httpAfterResponseRule{
@@ -662,7 +662,7 @@ func (m *ManagedProxyRuntime) frontendSection(snapshot *grpcapi.ProxyConfigSnaps
 			Header:   "Set-Cookie",
 			Format:   servicecatalogapp.BuildStickyCookie(cookieName, greenReleaseID, service.GetRoutePathPrefix()),
 			Cond:     "if",
-			CondTest: hostACL + " " + pathACL + " " + queryGreenACL,
+			CondTest: prefixedCondTest(hostACL + " " + pathACL + " " + queryGreenACL),
 			Index:    responseBase + 1,
 		})
 		responseRules = append(responseRules, httpAfterResponseRule{
@@ -671,7 +671,7 @@ func (m *ManagedProxyRuntime) frontendSection(snapshot *grpcapi.ProxyConfigSnaps
 			Header:   "Set-Cookie",
 			Format:   servicecatalogapp.BuildStickyCookie(cookieName, liveReleaseID, service.GetRoutePathPrefix()),
 			Cond:     "if",
-			CondTest: hostACL + " " + pathACL + " !" + queryBlueACL + " !" + queryGreenACL + " !" + cookieBlueACL + " !" + cookieGreenACL,
+			CondTest: prefixedCondTest(hostACL + " " + pathACL + " !" + queryBlueACL + " !" + queryGreenACL + " !" + cookieBlueACL + " !" + cookieGreenACL),
 			Index:    responseBase + 2,
 		})
 		responseRules = append(responseRules, httpAfterResponseRule{
@@ -680,7 +680,7 @@ func (m *ManagedProxyRuntime) frontendSection(snapshot *grpcapi.ProxyConfigSnaps
 			Header:   servicecatalogapp.CurrentReleaseIDHeaderName,
 			Format:   blueReleaseID,
 			Cond:     "if",
-			CondTest: hostACL + " " + pathACL + " (" + queryBlueACL + " || (!" + queryGreenACL + " " + cookieBlueACL + "))",
+			CondTest: prefixedCondTest(hostACL + " " + pathACL + " (" + queryBlueACL + " || (!" + queryGreenACL + " " + cookieBlueACL + "))"),
 			Index:    responseBase + 3,
 		})
 		responseRules = append(responseRules, httpAfterResponseRule{
@@ -689,7 +689,7 @@ func (m *ManagedProxyRuntime) frontendSection(snapshot *grpcapi.ProxyConfigSnaps
 			Header:   servicecatalogapp.CurrentReleaseIDHeaderName,
 			Format:   greenReleaseID,
 			Cond:     "if",
-			CondTest: hostACL + " " + pathACL + " (" + queryGreenACL + " || (!" + queryBlueACL + " " + cookieGreenACL + "))",
+			CondTest: prefixedCondTest(hostACL + " " + pathACL + " (" + queryGreenACL + " || (!" + queryBlueACL + " " + cookieGreenACL + "))"),
 			Index:    responseBase + 4,
 		})
 		responseRules = append(responseRules, httpAfterResponseRule{
@@ -698,7 +698,7 @@ func (m *ManagedProxyRuntime) frontendSection(snapshot *grpcapi.ProxyConfigSnaps
 			Header:   servicecatalogapp.CurrentReleaseIDHeaderName,
 			Format:   liveReleaseID,
 			Cond:     "if",
-			CondTest: hostACL + " " + pathACL + " !" + queryBlueACL + " !" + queryGreenACL + " !" + cookieBlueACL + " !" + cookieGreenACL,
+			CondTest: prefixedCondTest(hostACL + " " + pathACL + " !" + queryBlueACL + " !" + queryGreenACL + " !" + cookieBlueACL + " !" + cookieGreenACL),
 			Index:    responseBase + 5,
 		})
 		responseRules = append(responseRules, httpAfterResponseRule{
@@ -707,7 +707,7 @@ func (m *ManagedProxyRuntime) frontendSection(snapshot *grpcapi.ProxyConfigSnaps
 			Header:   servicecatalogapp.LiveReleaseIDHeaderName,
 			Format:   liveReleaseID,
 			Cond:     "if",
-			CondTest: hostACL + " " + pathACL,
+			CondTest: prefixedCondTest(hostACL + " " + pathACL),
 			Index:    responseBase + 6,
 		})
 	}
@@ -1029,6 +1029,17 @@ func aclName(serviceID string, suffix string) string {
 		base = "service"
 	}
 	return base + "_" + suffix
+}
+
+func prefixedCondTest(expr string) string {
+	expr = strings.TrimSpace(expr)
+	if expr == "" {
+		return "if"
+	}
+	if strings.HasPrefix(expr, "if ") || strings.HasPrefix(expr, "unless ") {
+		return expr
+	}
+	return "if " + expr
 }
 
 func retry(ctx context.Context, attempts int, delay time.Duration, fn func() error) error {
