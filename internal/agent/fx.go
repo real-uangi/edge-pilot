@@ -26,6 +26,10 @@ func provideRegistryService(deps registryServiceDeps) *registry.RegistryService 
 	return registry.NewRegistryServiceWithBindingChecker(deps.Auth, deps.Repo, deps.Bindings)
 }
 
+func provideProxyConfigAgentOnlineChecker(reg *registry.RegistryService) proxyconfig.AgentOnlineChecker {
+	return reg
+}
+
 func startManagedContainerStartupReconcile(lc fx.Lifecycle, cfg *config.AgentRuntimeConfig, executor *taskexec.Executor) {
 	logger := log.NewStdLogger("agent.executor")
 	lc.Append(fx.Hook{
@@ -45,6 +49,7 @@ var ControlPlaneModule = fx.Module(
 		config.LoadAgentAuthConfig,
 		persistence.NewRepository,
 		provideRegistryService,
+		provideProxyConfigAgentOnlineChecker,
 		proxyconfig.NewHAProxyConfigService,
 	),
 )
