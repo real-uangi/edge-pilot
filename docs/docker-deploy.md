@@ -110,7 +110,8 @@ docker run -d \
 
 - `REGISTRY_SECRET_MASTER_KEY`：仅 control-plane 使用；base64 编码后的 32 字节主密钥，用于加密存储私有镜像仓库密码/令牌
 - `SERVICE_SECRET_MASTER_KEY`：仅 control-plane 使用；base64 编码后的 32 字节主密钥，用于加密存储服务环境变量以及发布任务中的敏感片段
-- `DOCKER_SOCKET_PATH`：默认 `/var/run/docker.sock`
+- `DOCKER_HOST`：优先于 `DOCKER_SOCKET_PATH`。本地 socket 可写成 `unix:///var/run/docker.sock` 或直接写 `/var/run/docker.sock`；远程 daemon 可写成 `tcp://127.0.0.1:2375`
+- `DOCKER_SOCKET_PATH`：兼容旧配置；当未设置 `DOCKER_HOST` 时作为 fallback，默认 `/var/run/docker.sock`
 - `HTTP_PROBE_TIMEOUT_SECONDS`：默认 `5`
 - `PROXY_NETWORK_NAME`：默认 `epNet`
 - `PROXY_NETWORK_SUBNET`：默认 `172.29.0.0/24`
@@ -148,7 +149,7 @@ docker run -d \
   -e AGENT_ID='replace-with-control-plane-issued-uuid' \
   -e AGENT_TOKEN='replace-with-control-plane-issued-token' \
   -e CONTROL_PLANE_GRPC_ADDR='127.0.0.1:9090' \
-  -e DOCKER_SOCKET_PATH='/var/run/docker.sock' \
+  -e DOCKER_HOST='unix:///var/run/docker.sock' \
   ghcr.io/real-uangi/edge-pilot-agent:latest
 ```
 

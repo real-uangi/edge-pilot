@@ -18,6 +18,7 @@ type AgentRuntimeConfig struct {
 	AgentVersion           string
 	Hostname               string
 	ReportedIP             string
+	DockerHost             string
 	DockerSocketPath       string
 	HTTPProbeTimeoutS      int
 	ProxyNetworkName       string
@@ -37,6 +38,10 @@ type AgentRuntimeConfig struct {
 func LoadAgentRuntimeConfig() (*AgentRuntimeConfig, error) {
 	hostname, _ := os.Hostname()
 	haproxyImage := defaultString(os.Getenv("HAPROXY_IMAGE"), "haproxytech/haproxy-debian:s6-3.4")
+	dockerHost, dockerSocketPath := ResolveDockerEndpointConfig(
+		os.Getenv("DOCKER_HOST"),
+		os.Getenv("DOCKER_SOCKET_PATH"),
+	)
 	cfg := &AgentRuntimeConfig{
 		AgentID:                strings.TrimSpace(os.Getenv("AGENT_ID")),
 		AgentToken:             strings.TrimSpace(os.Getenv("AGENT_TOKEN")),
@@ -44,7 +49,8 @@ func LoadAgentRuntimeConfig() (*AgentRuntimeConfig, error) {
 		AgentVersion:           buildinfo.Version,
 		Hostname:               hostname,
 		ReportedIP:             detectReportedIP(defaultString(os.Getenv("CONTROL_PLANE_GRPC_ADDR"), "127.0.0.1:9090"), func(network string, address string) (net.Conn, error) { return net.Dial(network, address) }),
-		DockerSocketPath:       defaultString(os.Getenv("DOCKER_SOCKET_PATH"), "/var/run/docker.sock"),
+		DockerHost:             dockerHost,
+		DockerSocketPath:       dockerSocketPath,
 		HTTPProbeTimeoutS:      defaultInt(os.Getenv("HTTP_PROBE_TIMEOUT_SECONDS"), 5),
 		ProxyNetworkName:       defaultString(os.Getenv("PROXY_NETWORK_NAME"), "epNet"),
 		ProxyNetworkSubnet:     defaultString(os.Getenv("PROXY_NETWORK_SUBNET"), "172.29.0.0/24"),
@@ -76,6 +82,22 @@ func LoadAgentRuntimeConfig() (*AgentRuntimeConfig, error) {
 		return nil, err
 	}
 	return cfg, nil
+}
+
+func ResolveDockerEndpointConfig(rawHost string, rawSocketPath string) (string, string) {
+	host := strings.TrimSpace(rawHost)
+	socketPath := strings.TrimSpace(rawSocketPath)
+	if host != "" {
+		return host, socketPath
+	}
+	if socketPath != "" {
+		return socketPath, socketPath
+	}
+	return "/var/run/docker.sock", "/var/run/docker.sock"
+}
+
+func resolveDockerEndpointConfig(rawHost string, rawSocketPath string) (string, string) {
+	return ResolveDockerEndpointConfig(rawHost, rawSocketPath)
 }
 
 func defaultString(v string, fallback string) string {

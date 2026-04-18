@@ -166,7 +166,8 @@ Edge Pilot 是一个面向单机 Docker 多服务场景的控制面，用来解�
 - `AGENT_ID`：必填，必须是 control-plane 创建 agent 后签发的 UUID
 - `AGENT_TOKEN`：必填，必须是 control-plane 创建或重置 agent 后一次性拿到的随机 token
 - `CONTROL_PLANE_GRPC_ADDR`：control-plane gRPC 地址，默认 `127.0.0.1:9090`
-- `DOCKER_SOCKET_PATH`：默认 `/var/run/docker.sock`
+- `DOCKER_HOST`：优先于 `DOCKER_SOCKET_PATH`。支持 `unix:///var/run/docker.sock`、裸路径 `/var/run/docker.sock`、`tcp://127.0.0.1:2375`、`http://127.0.0.1:2375`
+- `DOCKER_SOCKET_PATH`：兼容旧配置；当未设置 `DOCKER_HOST` 时作为 fallback，默认 `/var/run/docker.sock`
 - `HTTP_PROBE_TIMEOUT_SECONDS`：默认 `5`
 - `PROXY_NETWORK_NAME`：默认 `epNet`
 - `PROXY_NETWORK_SUBNET`：默认 `172.29.0.0/24`

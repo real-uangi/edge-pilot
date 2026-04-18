@@ -20,6 +20,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/real-uangi/allingo/common/env"
 	"github.com/real-uangi/allingo/common/log"
 	"go.uber.org/fx"
 	"google.golang.org/protobuf/proto"
@@ -91,10 +92,10 @@ func StartManagedProxyRuntime(lc fx.Lifecycle, runtime *ManagedProxyRuntime) {
 		OnStart: func(startCtx context.Context) error {
 			runtime.logger.Infof("checking docker socket connectivity: agentId=%s", runtime.cfg.AgentID)
 			if err := runtime.docker.Ping(startCtx); err != nil {
-				runtime.logger.Errorf(err, "docker socket is not accessible: agentId=%s socket=%s", runtime.cfg.AgentID, runtime.cfg.DockerSocketPath)
+				runtime.logger.Errorf(err, "docker endpoint is not accessible: agentId=%s endpoint=%s", runtime.cfg.AgentID, runtime.docker.endpoint.display())
 				return err
 			}
-			runtime.logger.Infof("docker socket is accessible: agentId=%s socket=%s", runtime.cfg.AgentID, runtime.cfg.DockerSocketPath)
+			runtime.logger.Infof("docker endpoint is accessible: agentId=%s endpoint=%s", runtime.cfg.AgentID, runtime.docker.endpoint.display())
 			prepareCtx, cancelPrepare := context.WithTimeout(context.Background(), 5*time.Minute)
 			defer cancelPrepare()
 			if err := runtime.Prepare(prepareCtx); err != nil {
@@ -757,6 +758,8 @@ func (m *ManagedProxyRuntime) frontendSection(snapshot *grpcapi.ProxyConfigSnaps
 }
 
 func (m *ManagedProxyRuntime) proxySpec() managedContainerSpec {
+	//兼容远程docker
+	haproxyApiListenAddr := env.GetOrDefault("HAPROXY_API_LISTEN_ADDR", "127.0.0.1")
 	return managedContainerSpec{
 		Name:  m.cfg.ProxyContainerName,
 		Image: m.cfg.HAProxyImage,
@@ -782,10 +785,10 @@ func (m *ManagedProxyRuntime) proxySpec() managedContainerSpec {
 				{HostIP: "0.0.0.0", HostPort: strconv.Itoa(servicecatalogapp.SharedFrontendBindPort)},
 			},
 			portKey(m.cfg.HAProxyRuntimePort): {
-				{HostIP: "127.0.0.1", HostPort: strconv.Itoa(m.cfg.HAProxyRuntimePort)},
+				{HostIP: haproxyApiListenAddr, HostPort: strconv.Itoa(m.cfg.HAProxyRuntimePort)},
 			},
 			portKey(m.cfg.DataPlaneAPIPort): {
-				{HostIP: "127.0.0.1", HostPort: strconv.Itoa(m.cfg.DataPlaneAPIPort)},
+				{HostIP: haproxyApiListenAddr, HostPort: strconv.Itoa(m.cfg.DataPlaneAPIPort)},
 			},
 		},
 		Network:   m.cfg.ProxyNetworkName,
@@ -848,7 +851,8 @@ func (m *ManagedProxyRuntime) detectSelfContainerID(ctx context.Context) (string
 }
 
 func (m *ManagedProxyRuntime) runtimeAddress() string {
-	host := "127.0.0.1"
+	// 兼容远程docker
+	host := env.GetOrDefault("HAPROXY_API_ADDR", "127.0.0.1")
 	if m.attachedToNetwork {
 		host = m.cfg.ProxyIPAddress
 	}
@@ -856,7 +860,8 @@ func (m *ManagedProxyRuntime) runtimeAddress() string {
 }
 
 func (m *ManagedProxyRuntime) dataplaneBaseURL() string {
-	host := "127.0.0.1"
+	// 兼容远程docker
+	host := env.GetOrDefault("HAPROXY_API_ADDR", "127.0.0.1")
 	if m.attachedToNetwork {
 		host = m.cfg.ProxyIPAddress
 	}

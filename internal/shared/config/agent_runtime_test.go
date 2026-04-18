@@ -12,6 +12,7 @@ func TestLoadAgentRuntimeConfigUsesBuildVersionByDefault(t *testing.T) {
 	t.Setenv("AGENT_ID", "11111111-1111-1111-1111-111111111111")
 	t.Setenv("AGENT_TOKEN", "token")
 	t.Setenv("CONTROL_PLANE_GRPC_ADDR", "")
+	t.Setenv("DOCKER_HOST", "")
 	t.Setenv("DOCKER_SOCKET_PATH", "")
 	t.Setenv("HTTP_PROBE_TIMEOUT_SECONDS", "")
 
@@ -27,6 +28,48 @@ func TestLoadAgentRuntimeConfigUsesBuildVersionByDefault(t *testing.T) {
 	}
 	if cfg.AgentVersion != "v1.2.3" {
 		t.Fatalf("expected build version fallback, got %q", cfg.AgentVersion)
+	}
+	if cfg.DockerHost != "/var/run/docker.sock" {
+		t.Fatalf("expected default docker host fallback, got %q", cfg.DockerHost)
+	}
+	if cfg.DockerSocketPath != "/var/run/docker.sock" {
+		t.Fatalf("expected default docker socket path fallback, got %q", cfg.DockerSocketPath)
+	}
+}
+
+func TestLoadAgentRuntimeConfigPrefersDockerHostOverSocketPath(t *testing.T) {
+	t.Setenv("AGENT_ID", "11111111-1111-1111-1111-111111111111")
+	t.Setenv("AGENT_TOKEN", "token")
+	t.Setenv("DOCKER_HOST", "tcp://127.0.0.1:2375")
+	t.Setenv("DOCKER_SOCKET_PATH", "/tmp/docker.sock")
+
+	cfg, err := LoadAgentRuntimeConfig()
+	if err != nil {
+		t.Fatalf("LoadAgentRuntimeConfig() error = %v", err)
+	}
+	if cfg.DockerHost != "tcp://127.0.0.1:2375" {
+		t.Fatalf("expected DOCKER_HOST to win, got %q", cfg.DockerHost)
+	}
+	if cfg.DockerSocketPath != "/tmp/docker.sock" {
+		t.Fatalf("expected DOCKER_SOCKET_PATH to remain available as fallback metadata, got %q", cfg.DockerSocketPath)
+	}
+}
+
+func TestLoadAgentRuntimeConfigFallsBackToSocketPath(t *testing.T) {
+	t.Setenv("AGENT_ID", "11111111-1111-1111-1111-111111111111")
+	t.Setenv("AGENT_TOKEN", "token")
+	t.Setenv("DOCKER_HOST", "")
+	t.Setenv("DOCKER_SOCKET_PATH", "/tmp/docker.sock")
+
+	cfg, err := LoadAgentRuntimeConfig()
+	if err != nil {
+		t.Fatalf("LoadAgentRuntimeConfig() error = %v", err)
+	}
+	if cfg.DockerHost != "/tmp/docker.sock" {
+		t.Fatalf("expected socket path fallback to become docker host, got %q", cfg.DockerHost)
+	}
+	if cfg.DockerSocketPath != "/tmp/docker.sock" {
+		t.Fatalf("expected docker socket path fallback to be preserved, got %q", cfg.DockerSocketPath)
 	}
 }
 

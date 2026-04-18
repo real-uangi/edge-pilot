@@ -128,7 +128,7 @@ type dockerNetworkConnectRequest struct {
 }
 
 func (c *DockerClient) inspectManagedContainer(ctx context.Context, name string) (*dockerContainerInspect, error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "http://docker/containers/"+url.PathEscape(name)+"/json", nil)
+	req, err := c.endpoint.newRequest(ctx, http.MethodGet, "/containers/"+url.PathEscape(name)+"/json", nil)
 	if err != nil {
 		return nil, err
 	}
@@ -151,7 +151,7 @@ func (c *DockerClient) inspectManagedContainer(ctx context.Context, name string)
 }
 
 func (c *DockerClient) ensureNetwork(ctx context.Context, name string, subnet string) error {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "http://docker/networks/"+url.PathEscape(name), nil)
+	req, err := c.endpoint.newRequest(ctx, http.MethodGet, "/networks/"+url.PathEscape(name), nil)
 	if err != nil {
 		return err
 	}
@@ -173,7 +173,7 @@ func (c *DockerClient) ensureNetwork(ctx context.Context, name string, subnet st
 		if err != nil {
 			return err
 		}
-		createReq, err := http.NewRequestWithContext(ctx, http.MethodPost, "http://docker/networks/create", bytes.NewReader(body))
+		createReq, err := c.endpoint.newRequest(ctx, http.MethodPost, "/networks/create", bytes.NewReader(body))
 		if err != nil {
 			return err
 		}
@@ -196,7 +196,7 @@ func (c *DockerClient) ensureNetwork(ctx context.Context, name string, subnet st
 }
 
 func (c *DockerClient) inspectNetwork(ctx context.Context, name string) (*dockerNetworkInspect, error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "http://docker/networks/"+url.PathEscape(name), nil)
+	req, err := c.endpoint.newRequest(ctx, http.MethodGet, "/networks/"+url.PathEscape(name), nil)
 	if err != nil {
 		return nil, err
 	}
@@ -219,7 +219,7 @@ func (c *DockerClient) inspectNetwork(ctx context.Context, name string) (*docker
 }
 
 func (c *DockerClient) ensureVolume(ctx context.Context, name string) error {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "http://docker/volumes/"+url.PathEscape(name), nil)
+	req, err := c.endpoint.newRequest(ctx, http.MethodGet, "/volumes/"+url.PathEscape(name), nil)
 	if err != nil {
 		return err
 	}
@@ -234,7 +234,7 @@ func (c *DockerClient) ensureVolume(ctx context.Context, name string) error {
 		if err != nil {
 			return err
 		}
-		createReq, err := http.NewRequestWithContext(ctx, http.MethodPost, "http://docker/volumes/create", bytes.NewReader(body))
+		createReq, err := c.endpoint.newRequest(ctx, http.MethodPost, "/volumes/create", bytes.NewReader(body))
 		if err != nil {
 			return err
 		}
@@ -258,7 +258,7 @@ func (c *DockerClient) ensureVolume(ctx context.Context, name string) error {
 
 func (c *DockerClient) recreateVolume(ctx context.Context, name string) error {
 	c.logger.Infof("recreating docker volume: name=%s", name)
-	req, err := http.NewRequestWithContext(ctx, http.MethodDelete, "http://docker/volumes/"+url.PathEscape(name), nil)
+	req, err := c.endpoint.newRequest(ctx, http.MethodDelete, "/volumes/"+url.PathEscape(name), nil)
 	if err != nil {
 		return err
 	}
@@ -313,7 +313,7 @@ func (c *DockerClient) recreateManagedContainer(ctx context.Context, spec manage
 	if err != nil {
 		return err
 	}
-	createReq, err := http.NewRequestWithContext(ctx, http.MethodPost, "http://docker/containers/create?name="+url.QueryEscape(spec.Name), bytes.NewReader(body))
+	createReq, err := c.endpoint.newRequest(ctx, http.MethodPost, "/containers/create?name="+url.QueryEscape(spec.Name), bytes.NewReader(body))
 	if err != nil {
 		return err
 	}
@@ -331,7 +331,7 @@ func (c *DockerClient) recreateManagedContainer(ctx context.Context, spec manage
 	if err := json.NewDecoder(createResp.Body).Decode(&createOut); err != nil {
 		return err
 	}
-	startReq, err := http.NewRequestWithContext(ctx, http.MethodPost, "http://docker/containers/"+createOut.ID+"/start", nil)
+	startReq, err := c.endpoint.newRequest(ctx, http.MethodPost, "/containers/"+createOut.ID+"/start", nil)
 	if err != nil {
 		return err
 	}
@@ -389,7 +389,7 @@ func (c *DockerClient) ensureManagedContainer(ctx context.Context, spec managedC
 			inspect.RestartCount,
 		)
 	}
-	startReq, err := http.NewRequestWithContext(ctx, http.MethodPost, "http://docker/containers/"+inspect.ID+"/start", nil)
+	startReq, err := c.endpoint.newRequest(ctx, http.MethodPost, "/containers/"+inspect.ID+"/start", nil)
 	if err != nil {
 		return false, err
 	}
@@ -420,7 +420,7 @@ func (c *DockerClient) ensureContainerConnectedToNetwork(ctx context.Context, co
 	if err != nil {
 		return err
 	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, "http://docker/networks/"+url.PathEscape(networkName)+"/connect", bytes.NewReader(body))
+	req, err := c.endpoint.newRequest(ctx, http.MethodPost, "/networks/"+url.PathEscape(networkName)+"/connect", bytes.NewReader(body))
 	if err != nil {
 		return err
 	}
@@ -461,7 +461,7 @@ func (c *DockerClient) writeVolumeFiles(ctx context.Context, helperImage string,
 	if err != nil {
 		return err
 	}
-	createReq, err := http.NewRequestWithContext(ctx, http.MethodPost, "http://docker/containers/create?name="+url.QueryEscape(helperName), bytes.NewReader(body))
+	createReq, err := c.endpoint.newRequest(ctx, http.MethodPost, "/containers/create?name="+url.QueryEscape(helperName), bytes.NewReader(body))
 	if err != nil {
 		return err
 	}
@@ -487,7 +487,7 @@ func (c *DockerClient) writeVolumeFiles(ctx context.Context, helperImage string,
 	if err != nil {
 		return err
 	}
-	putReq, err := http.NewRequestWithContext(ctx, http.MethodPut, "http://docker/containers/"+createOut.ID+"/archive?path=/target", bytes.NewReader(archive))
+	putReq, err := c.endpoint.newRequest(ctx, http.MethodPut, "/containers/"+createOut.ID+"/archive?path=/target", bytes.NewReader(archive))
 	if err != nil {
 		return err
 	}

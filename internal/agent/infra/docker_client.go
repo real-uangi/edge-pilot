@@ -24,28 +24,29 @@ import (
 type DockerClient struct {
 	httpClient *http.Client
 	cfg        *config.AgentRuntimeConfig
+	endpoint   *dockerEndpoint
 	logger     *log.StdLogger
 }
 
-func NewRawDockerClient(cfg *config.AgentRuntimeConfig) *DockerClient {
-	transport := &http.Transport{
-		DialContext: func(ctx context.Context, network string, addr string) (net.Conn, error) {
-			return (&net.Dialer{}).DialContext(ctx, "unix", cfg.DockerSocketPath)
-		},
+func NewRawDockerClient(cfg *config.AgentRuntimeConfig) (*DockerClient, error) {
+	endpoint, err := newDockerEndpoint(cfg)
+	if err != nil {
+		return nil, err
 	}
 	return &DockerClient{
-		httpClient: &http.Client{Transport: transport, Timeout: 15 * time.Second},
+		httpClient: endpoint.newHTTPClient(),
 		cfg:        cfg,
+		endpoint:   endpoint,
 		logger:     log.NewStdLogger("agent.docker"),
-	}
+	}, nil
 }
 
-func NewDockerClient(cfg *config.AgentRuntimeConfig) application.DockerRuntime {
+func NewDockerClient(cfg *config.AgentRuntimeConfig) (application.DockerRuntime, error) {
 	return NewRawDockerClient(cfg)
 }
 
 func (c *DockerClient) Ping(ctx context.Context) error {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "http://docker/_ping", nil)
+	req, err := c.endpoint.newRequest(ctx, http.MethodGet, "/_ping", nil)
 	if err != nil {
 		return err
 	}
@@ -78,8 +79,7 @@ func (c *DockerClient) DeployContainer(ctx context.Context, task *grpcapi.TaskCo
 		createReq.HostConfig.RestartPolicy.Name,
 		createReq.HostConfig.RestartPolicy.MaximumRetryCount,
 	)
-	createURL := "http://docker/containers/create?name=" + url.QueryEscape(name)
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, createURL, bytes.NewReader(body))
+	req, err := c.endpoint.newRequest(ctx, http.MethodPost, "/containers/create?name="+url.QueryEscape(name), bytes.NewReader(body))
 	if err != nil {
 		return nil, err
 	}
@@ -96,7 +96,7 @@ func (c *DockerClient) DeployContainer(ctx context.Context, task *grpcapi.TaskCo
 	if err := json.NewDecoder(resp.Body).Decode(&createResp); err != nil {
 		return nil, err
 	}
-	startReq, err := http.NewRequestWithContext(ctx, http.MethodPost, "http://docker/containers/"+createResp.ID+"/start", nil)
+	startReq, err := c.endpoint.newRequest(ctx, http.MethodPost, "/containers/"+createResp.ID+"/start", nil)
 	if err != nil {
 		return nil, err
 	}
@@ -161,7 +161,7 @@ func (c *DockerClient) ensureImage(ctx context.Context, imageRef string, task *g
 	c.logger.Infof("pulling docker image: image=%s", imageRef)
 	pullCtx, cancel := context.WithTimeout(ctx, 5*time.Minute)
 	defer cancel()
-	pullReq, err := http.NewRequestWithContext(pullCtx, http.MethodPost, "http://docker/images/create?fromImage="+url.QueryEscape(imageRef), nil)
+	pullReq, err := c.endpoint.newRequest(pullCtx, http.MethodPost, "/images/create?fromImage="+url.QueryEscape(imageRef), nil)
 	if err != nil {
 		return err
 	}
@@ -204,7 +204,7 @@ func (c *DockerClient) ensureImage(ctx context.Context, imageRef string, task *g
 }
 
 func (c *DockerClient) imageExists(ctx context.Context, imageRef string) (bool, error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "http://docker/images/"+url.PathEscape(imageRef)+"/json", nil)
+	req, err := c.endpoint.newRequest(ctx, http.MethodGet, "/images/"+url.PathEscape(imageRef)+"/json", nil)
 	if err != nil {
 		return false, err
 	}
@@ -272,7 +272,7 @@ func consumeDockerPullStream(r io.Reader) error {
 }
 
 func (c *DockerClient) InspectContainer(ctx context.Context, containerID string) (*application.ContainerStatus, error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "http://docker/containers/"+containerID+"/json", nil)
+	req, err := c.endpoint.newRequest(ctx, http.MethodGet, "/containers/"+containerID+"/json", nil)
 	if err != nil {
 		return nil, err
 	}
@@ -299,12 +299,7 @@ func (c *DockerClient) InspectContainer(ctx context.Context, containerID string)
 }
 
 func (c *DockerClient) ReadContainerLogs(ctx context.Context, containerID string, tailLines int, maxBytes int) (string, error) {
-	logURL := fmt.Sprintf(
-		"http://docker/containers/%s/logs?stdout=1&stderr=1&tail=%d",
-		url.PathEscape(containerID),
-		tailLines,
-	)
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, logURL, nil)
+	req, err := c.endpoint.newRequest(ctx, http.MethodGet, fmt.Sprintf("/containers/%s/logs?stdout=1&stderr=1&tail=%d", url.PathEscape(containerID), tailLines), nil)
 	if err != nil {
 		return "", err
 	}
@@ -329,7 +324,7 @@ func (c *DockerClient) ReadContainerLogs(ctx context.Context, containerID string
 }
 
 func (c *DockerClient) FindContainerByName(ctx context.Context, name string) (*application.ManagedContainer, error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "http://docker/containers/"+url.PathEscape(name)+"/json", nil)
+	req, err := c.endpoint.newRequest(ctx, http.MethodGet, "/containers/"+url.PathEscape(name)+"/json", nil)
 	if err != nil {
 		return nil, err
 	}
@@ -352,7 +347,7 @@ func (c *DockerClient) FindContainerByName(ctx context.Context, name string) (*a
 }
 
 func (c *DockerClient) ResolveListenAddress(ctx context.Context, containerID string, port int) (string, error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "http://docker/containers/"+url.PathEscape(containerID)+"/json", nil)
+	req, err := c.endpoint.newRequest(ctx, http.MethodGet, "/containers/"+url.PathEscape(containerID)+"/json", nil)
 	if err != nil {
 		return "", err
 	}
@@ -376,7 +371,7 @@ func (c *DockerClient) ResolveListenAddress(ctx context.Context, containerID str
 }
 
 func (c *DockerClient) RemoveContainer(ctx context.Context, containerID string) error {
-	req, err := http.NewRequestWithContext(ctx, http.MethodDelete, "http://docker/containers/"+url.PathEscape(containerID)+"?force=1", nil)
+	req, err := c.endpoint.newRequest(ctx, http.MethodDelete, "/containers/"+url.PathEscape(containerID)+"?force=1", nil)
 	if err != nil {
 		return err
 	}
@@ -395,7 +390,7 @@ func (c *DockerClient) RemoveContainer(ctx context.Context, containerID string) 
 }
 
 func (c *DockerClient) ListManagedContainers(ctx context.Context, agentID string, serviceKey string) ([]*application.ManagedContainer, error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "http://docker/containers/json?all=1", nil)
+	req, err := c.endpoint.newRequest(ctx, http.MethodGet, "/containers/json?all=1", nil)
 	if err != nil {
 		return nil, err
 	}
