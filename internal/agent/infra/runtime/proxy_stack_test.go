@@ -364,6 +364,8 @@ func TestFrontendSectionAddsStickyPreviewAndDiagnosticRules(t *testing.T) {
 
 	section := proxy.frontendSection(testProxySnapshotWithService(grpcapi.Slot_SLOT_GREEN))
 	hostAndPathCond := aclName("svc-1", "host") + " " + aclName("svc-1", "path")
+	blueCond := hostAndPathCond + " { be_name -i be-api_blue }"
+	greenCond := hostAndPathCond + " { be_name -i be-api_green }"
 
 	if len(section.BackendSwitchingRuleList) != 5 {
 		t.Fatalf("expected 5 switching rules, got %d", len(section.BackendSwitchingRuleList))
@@ -374,56 +376,47 @@ func TestFrontendSectionAddsStickyPreviewAndDiagnosticRules(t *testing.T) {
 	if section.BackendSwitchingRuleList[4].Name != "be-api_green" {
 		t.Fatalf("expected live green backend fallback, got %q", section.BackendSwitchingRuleList[4].Name)
 	}
-	if len(section.HTTPAfterResponseRules) != 3 {
-		t.Fatalf("expected 3 response rules, got %d", len(section.HTTPAfterResponseRules))
+	if len(section.HTTPAfterResponseRules) != 6 {
+		t.Fatalf("expected 6 response rules, got %d", len(section.HTTPAfterResponseRules))
 	}
-	if section.HTTPAfterResponseRules[0].Header != "Set-Cookie" {
-		t.Fatalf("expected sticky response to set cookie, got %#v", section.HTTPAfterResponseRules[0])
+	findRule := func(header string, condTest string) *httpAfterResponseRule {
+		for i := range section.HTTPAfterResponseRules {
+			rule := &section.HTTPAfterResponseRules[i]
+			if strings.EqualFold(rule.Header, header) && strings.TrimSpace(rule.CondTest) == condTest {
+				return rule
+			}
+		}
+		return nil
 	}
-	if section.HTTPAfterResponseRules[0].Action != "add-header" {
-		t.Fatalf("expected sticky cookie response rule action add-header, got %#v", section.HTTPAfterResponseRules[0])
+	if rule := findRule("Set-Cookie", blueCond); rule == nil {
+		t.Fatalf("expected blue sticky cookie response rule")
+	} else if !strings.Contains(rule.Format, "=release-blue;") {
+		t.Fatalf("expected blue sticky cookie to carry blue release id, got %#v", *rule)
 	}
-	if section.HTTPAfterResponseRules[0].Type != "add-header" {
-		t.Fatalf("expected sticky cookie response rule type add-header, got %#v", section.HTTPAfterResponseRules[0])
+	if rule := findRule("Set-Cookie", greenCond); rule == nil {
+		t.Fatalf("expected green sticky cookie response rule")
+	} else if !strings.Contains(rule.Format, "=release-green;") {
+		t.Fatalf("expected green sticky cookie to carry green release id, got %#v", *rule)
 	}
-	if strings.TrimSpace(section.HTTPAfterResponseRules[0].Cond) != "if" {
-		t.Fatalf("expected response rule cond to be if, got %#v", section.HTTPAfterResponseRules[0])
+	if rule := findRule(servicecatalogapp.CurrentReleaseIDHeaderName, blueCond); rule == nil {
+		t.Fatalf("expected blue current release header rule")
+	} else if rule.Format != "release-blue" {
+		t.Fatalf("expected blue current release id, got %#v", *rule)
 	}
-	if strings.TrimSpace(section.HTTPAfterResponseRules[0].CondTest) != hostAndPathCond {
-		t.Fatalf("expected response rule cond_test to keep pure acl expression, got %#v", section.HTTPAfterResponseRules[0])
+	if rule := findRule(servicecatalogapp.CurrentReleaseIDHeaderName, greenCond); rule == nil {
+		t.Fatalf("expected green current release header rule")
+	} else if rule.Format != "release-green" {
+		t.Fatalf("expected green current release id, got %#v", *rule)
 	}
-	if strings.Contains(section.HTTPAfterResponseRules[0].Format, "; ") {
-		t.Fatalf("expected response rule hdr_fmt to avoid spaces after ';', got %#v", section.HTTPAfterResponseRules[0])
+	if rule := findRule(servicecatalogapp.LiveReleaseIDHeaderName, blueCond); rule == nil {
+		t.Fatalf("expected blue live release header rule")
+	} else if rule.Format != "release-green" {
+		t.Fatalf("expected live release id to remain green, got %#v", *rule)
 	}
-	if !strings.HasPrefix(section.HTTPAfterResponseRules[0].Format, `%[str(`) || !strings.HasSuffix(section.HTTPAfterResponseRules[0].Format, `)]`) {
-		t.Fatalf("expected sticky cookie hdr_fmt to use haproxy str() expression, got %#v", section.HTTPAfterResponseRules[0])
-	}
-	if section.HTTPAfterResponseRules[1].Header != servicecatalogapp.CurrentReleaseIDHeaderName {
-		t.Fatalf("expected current release header, got %#v", section.HTTPAfterResponseRules[1])
-	}
-	if section.HTTPAfterResponseRules[1].Action != "set-header" {
-		t.Fatalf("expected response rule action set-header, got %#v", section.HTTPAfterResponseRules[1])
-	}
-	if section.HTTPAfterResponseRules[1].Type != "set-header" {
-		t.Fatalf("expected response rule type set-header, got %#v", section.HTTPAfterResponseRules[1])
-	}
-	if strings.TrimSpace(section.HTTPAfterResponseRules[1].Cond) != "if" {
-		t.Fatalf("expected response rule cond to be if, got %#v", section.HTTPAfterResponseRules[1])
-	}
-	if strings.TrimSpace(section.HTTPAfterResponseRules[1].CondTest) != hostAndPathCond {
-		t.Fatalf("expected response rule cond_test to keep pure acl expression, got %#v", section.HTTPAfterResponseRules[1])
-	}
-	if section.HTTPAfterResponseRules[1].Format != "release-green" {
-		t.Fatalf("expected current release hdr to use live release id, got %#v", section.HTTPAfterResponseRules[1])
-	}
-	if section.HTTPAfterResponseRules[2].Header != servicecatalogapp.LiveReleaseIDHeaderName {
-		t.Fatalf("expected live release header, got %#v", section.HTTPAfterResponseRules[2])
-	}
-	if section.HTTPAfterResponseRules[2].Action != "set-header" {
-		t.Fatalf("expected response rule action set-header, got %#v", section.HTTPAfterResponseRules[2])
-	}
-	if section.HTTPAfterResponseRules[2].Type != "set-header" {
-		t.Fatalf("expected response rule type set-header, got %#v", section.HTTPAfterResponseRules[2])
+	if rule := findRule(servicecatalogapp.LiveReleaseIDHeaderName, greenCond); rule == nil {
+		t.Fatalf("expected green live release header rule")
+	} else if rule.Format != "release-green" {
+		t.Fatalf("expected live release id to remain green, got %#v", *rule)
 	}
 	for i, rule := range section.HTTPAfterResponseRules {
 		if strings.TrimSpace(rule.Type) != strings.TrimSpace(rule.Action) {
@@ -438,6 +431,9 @@ func TestFrontendSectionAddsStickyPreviewAndDiagnosticRules(t *testing.T) {
 		if strings.HasPrefix(rule.CondTest, "if ") || strings.HasPrefix(rule.CondTest, "unless ") {
 			t.Fatalf("response rule[%d] cond_test should not include if/unless prefix, got %#v", i, rule)
 		}
+		if strings.Contains(rule.Format, "__edge_pilot_invalid__") {
+			t.Fatalf("response rule[%d] should not expose invalid placeholder value, got %#v", i, rule)
+		}
 	}
 }
 
@@ -449,9 +445,34 @@ func TestFrontendSectionSkipsInvalidResponseHeaderRules(t *testing.T) {
 
 	section := proxy.frontendSection(snapshot)
 	hostAndPathCond := aclName("svc-1", "host") + " " + aclName("svc-1", "path")
+	blueCond := hostAndPathCond + " { be_name -i be-api_blue }"
+	greenCond := hostAndPathCond + " { be_name -i be-api_green }"
 
-	if len(section.HTTPAfterResponseRules) != 3 {
-		t.Fatalf("expected 3 response rules after filtering invalid rules, got %d", len(section.HTTPAfterResponseRules))
+	if len(section.HTTPAfterResponseRules) != 4 {
+		t.Fatalf("expected 4 response rules after filtering invalid rules, got %d", len(section.HTTPAfterResponseRules))
+	}
+	findRule := func(header string, condTest string) *httpAfterResponseRule {
+		for i := range section.HTTPAfterResponseRules {
+			rule := &section.HTTPAfterResponseRules[i]
+			if strings.EqualFold(rule.Header, header) && strings.TrimSpace(rule.CondTest) == condTest {
+				return rule
+			}
+		}
+		return nil
+	}
+	if rule := findRule("Set-Cookie", blueCond); rule == nil {
+		t.Fatalf("expected blue sticky cookie response rule")
+	}
+	if rule := findRule("Set-Cookie", greenCond); rule != nil {
+		t.Fatalf("green sticky cookie response rule should be filtered when green release is empty, got %#v", *rule)
+	}
+	if rule := findRule(servicecatalogapp.CurrentReleaseIDHeaderName, blueCond); rule == nil {
+		t.Fatalf("expected blue current release response rule")
+	} else if rule.Format != "release-blue" {
+		t.Fatalf("expected blue current release id, got %#v", *rule)
+	}
+	if rule := findRule(servicecatalogapp.CurrentReleaseIDHeaderName, greenCond); rule != nil {
+		t.Fatalf("green current release response rule should be filtered when green release is empty, got %#v", *rule)
 	}
 	for i, rule := range section.HTTPAfterResponseRules {
 		if strings.TrimSpace(rule.Format) == "" {
@@ -466,8 +487,11 @@ func TestFrontendSectionSkipsInvalidResponseHeaderRules(t *testing.T) {
 		if strings.TrimSpace(rule.Cond) != "if" {
 			t.Fatalf("response rule[%d] should keep cond as if, got %#v", i, rule)
 		}
-		if strings.TrimSpace(rule.CondTest) != hostAndPathCond {
-			t.Fatalf("response rule[%d] should keep host/path cond_test as pure acl expression, got %#v", i, rule)
+		if strings.TrimSpace(rule.CondTest) != blueCond && strings.TrimSpace(rule.CondTest) != greenCond {
+			t.Fatalf("response rule[%d] should keep backend-aware cond_test, got %#v", i, rule)
+		}
+		if strings.Contains(rule.Format, "__edge_pilot_invalid__") {
+			t.Fatalf("response rule[%d] should not expose invalid placeholder value, got %#v", i, rule)
 		}
 	}
 }

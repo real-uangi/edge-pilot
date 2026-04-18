@@ -627,7 +627,7 @@ func (m *ManagedProxyRuntime) frontendSection(snapshot *grpcapi.ProxyConfigSnaps
 	})
 	acls := make([]frontendACL, 0, len(services)*6)
 	rules := make([]frontendSwitchRule, 0, len(services)*5)
-	responseRules := make([]httpAfterResponseRule, 0, len(services)*3)
+	responseRules := make([]httpAfterResponseRule, 0, len(services)*6)
 	for idx, service := range services {
 		hostACL := aclName(service.GetServiceId(), "host")
 		pathACL := aclName(service.GetServiceId(), "path")
@@ -708,24 +708,27 @@ func (m *ManagedProxyRuntime) frontendSection(snapshot *grpcapi.ProxyConfigSnaps
 			CondTest: hostACL + " " + pathACL + " !" + queryBlueACL + " !" + queryGreenACL + " !" + cookieBlueACL + " !" + cookieGreenACL,
 			Index:    ruleBase + 4,
 		})
-		responseBase := idx * 3
-		responseCondTest := hostACL + " " + pathACL
+		blueBackend := serviceBackendName(service, grpcapi.Slot_SLOT_BLUE)
+		greenBackend := serviceBackendName(service, grpcapi.Slot_SLOT_GREEN)
+		responseBase := idx * 6
+		responseCondBlue := hostACL + " " + pathACL + " { be_name -i " + blueBackend + " }"
+		responseCondGreen := hostACL + " " + pathACL + " { be_name -i " + greenBackend + " }"
 		responseRules = append(responseRules, httpAfterResponseRule{
 			Type:     "add-header",
 			Action:   "add-header",
 			Header:   "Set-Cookie",
-			Format:   servicecatalogapp.BuildStickyCookie(cookieName, liveReleaseID, service.GetRoutePathPrefix()),
+			Format:   servicecatalogapp.BuildStickyCookie(cookieName, blueReleaseID, service.GetRoutePathPrefix()),
 			Cond:     "if",
-			CondTest: responseCondTest,
+			CondTest: responseCondBlue,
 			Index:    responseBase,
 		})
 		responseRules = append(responseRules, httpAfterResponseRule{
 			Type:     "set-header",
 			Action:   "set-header",
 			Header:   servicecatalogapp.CurrentReleaseIDHeaderName,
-			Format:   liveReleaseID,
+			Format:   blueReleaseID,
 			Cond:     "if",
-			CondTest: responseCondTest,
+			CondTest: responseCondBlue,
 			Index:    responseBase + 1,
 		})
 		responseRules = append(responseRules, httpAfterResponseRule{
@@ -734,8 +737,35 @@ func (m *ManagedProxyRuntime) frontendSection(snapshot *grpcapi.ProxyConfigSnaps
 			Header:   servicecatalogapp.LiveReleaseIDHeaderName,
 			Format:   liveReleaseID,
 			Cond:     "if",
-			CondTest: responseCondTest,
+			CondTest: responseCondBlue,
 			Index:    responseBase + 2,
+		})
+		responseRules = append(responseRules, httpAfterResponseRule{
+			Type:     "add-header",
+			Action:   "add-header",
+			Header:   "Set-Cookie",
+			Format:   servicecatalogapp.BuildStickyCookie(cookieName, greenReleaseID, service.GetRoutePathPrefix()),
+			Cond:     "if",
+			CondTest: responseCondGreen,
+			Index:    responseBase + 3,
+		})
+		responseRules = append(responseRules, httpAfterResponseRule{
+			Type:     "set-header",
+			Action:   "set-header",
+			Header:   servicecatalogapp.CurrentReleaseIDHeaderName,
+			Format:   greenReleaseID,
+			Cond:     "if",
+			CondTest: responseCondGreen,
+			Index:    responseBase + 4,
+		})
+		responseRules = append(responseRules, httpAfterResponseRule{
+			Type:     "set-header",
+			Action:   "set-header",
+			Header:   servicecatalogapp.LiveReleaseIDHeaderName,
+			Format:   liveReleaseID,
+			Cond:     "if",
+			CondTest: responseCondGreen,
+			Index:    responseBase + 5,
 		})
 	}
 	return frontendSection{
