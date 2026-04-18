@@ -2,7 +2,8 @@ package controlplane
 
 import (
 	"context"
-	agentapp "edge-pilot/internal/agent/application"
+	"edge-pilot/internal/agent/application/proxyconfig"
+	"edge-pilot/internal/agent/application/registry"
 	observabilityapp "edge-pilot/internal/observability/application"
 	releaseapp "edge-pilot/internal/release/application"
 	releasedomain "edge-pilot/internal/release/domain"
@@ -155,7 +156,7 @@ func (h *sessionHub) RequestHAProxyConfig(ctx context.Context, agentID string) (
 
 	select {
 	case <-ctx.Done():
-		return "", agentapp.ErrHAProxyConfigTimeout
+		return "", proxyconfig.ErrHAProxyConfigTimeout
 	case response := <-responseCh:
 		if response == nil {
 			return "", releasedomain.ErrAgentOffline
@@ -170,7 +171,7 @@ func (h *sessionHub) RequestHAProxyConfig(ctx context.Context, agentID string) (
 type Server struct {
 	grpcapi.UnimplementedAgentControlServer
 	hub           *sessionHub
-	agents        *agentapp.RegistryService
+	agents        *registry.RegistryService
 	releases      *releaseapp.Service
 	observability *observabilityapp.Service
 	proxyConfigs  servicecatalogdomain.ProxyConfigPublisher
@@ -179,7 +180,7 @@ type Server struct {
 
 func NewServer(
 	hub *sessionHub,
-	agents *agentapp.RegistryService,
+	agents *registry.RegistryService,
 	releases *releaseapp.Service,
 	observability *observabilityapp.Service,
 	proxyConfigs servicecatalogdomain.ProxyConfigPublisher,

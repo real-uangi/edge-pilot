@@ -1,7 +1,8 @@
-package application
+package proxyconfig
 
 import (
 	"context"
+	registryapp "edge-pilot/internal/agent/application/registry"
 	"edge-pilot/internal/shared/config"
 	"edge-pilot/internal/shared/model"
 	"testing"
@@ -19,7 +20,7 @@ func TestHAProxyConfigServiceGetHAProxyConfigSuccess(t *testing.T) {
 			Enabled: &enabled,
 		},
 	}
-	registry := NewRegistryService(auth, repo)
+	registry := registryapp.NewRegistryService(auth, repo)
 	service := NewHAProxyConfigService(registry, fakeHAProxyConfigRequester{
 		configText: "global\n  daemon\n",
 	})
@@ -47,7 +48,7 @@ func TestHAProxyConfigServiceGetHAProxyConfigOffline(t *testing.T) {
 			Enabled: &enabled,
 		},
 	}
-	registry := NewRegistryService(auth, repo)
+	registry := registryapp.NewRegistryService(auth, repo)
 	service := NewHAProxyConfigService(registry, fakeHAProxyConfigRequester{})
 
 	if _, err := service.GetHAProxyConfig("agent-a"); err == nil {
@@ -66,7 +67,7 @@ func TestHAProxyConfigServiceGetHAProxyConfigTimeout(t *testing.T) {
 			Enabled: &enabled,
 		},
 	}
-	registry := NewRegistryService(auth, repo)
+	registry := registryapp.NewRegistryService(auth, repo)
 	service := NewHAProxyConfigService(registry, fakeHAProxyConfigRequester{
 		err: ErrHAProxyConfigTimeout,
 	})

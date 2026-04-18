@@ -1,9 +1,9 @@
-package infra
+package runtime
 
 import (
 	"context"
 	"crypto/sha256"
-	"edge-pilot/internal/agent/application"
+	agentdomain "edge-pilot/internal/agent/domain"
 	servicecatalogapp "edge-pilot/internal/servicecatalog/application"
 	"edge-pilot/internal/shared/config"
 	"edge-pilot/internal/shared/grpcapi"
@@ -163,7 +163,7 @@ func (m *ManagedProxyRuntime) ApplySnapshot(ctx context.Context, snapshot *grpca
 		if m.lastPrepareError == "" {
 			m.lastPrepareError = "proxy stack is not prepared"
 		}
-		return fmt.Errorf("%w: %s", application.ErrProxyNotReady, m.lastPrepareError)
+		return fmt.Errorf("%w: %s", agentdomain.ErrProxyNotReady, m.lastPrepareError)
 	}
 	if err := m.reconcileLocked(ctx, m.desired); err != nil {
 		m.ready = false
@@ -193,13 +193,13 @@ func (m *ManagedProxyRuntime) ShowStats(ctx context.Context) ([]*grpcapi.Backend
 		if strings.TrimSpace(prepareErr) == "" {
 			prepareErr = "proxy stack is still preparing"
 		}
-		return nil, fmt.Errorf("%w: %s", application.ErrProxyNotReady, prepareErr)
+		return nil, fmt.Errorf("%w: %s", agentdomain.ErrProxyNotReady, prepareErr)
 	}
 	if !ready {
 		if strings.TrimSpace(lastErr) == "" {
 			lastErr = "proxy stack is still bootstrapping"
 		}
-		return nil, fmt.Errorf("%w: %s", application.ErrProxyNotReady, lastErr)
+		return nil, fmt.Errorf("%w: %s", agentdomain.ErrProxyNotReady, lastErr)
 	}
 	return m.runtime.ShowStats(ctx)
 }
@@ -213,7 +213,7 @@ func (m *ManagedProxyRuntime) ShowConfig(ctx context.Context) (string, error) {
 		if strings.TrimSpace(prepareErr) == "" {
 			prepareErr = "proxy stack is still preparing"
 		}
-		return "", fmt.Errorf("%w: %s", application.ErrProxyNotReady, prepareErr)
+		return "", fmt.Errorf("%w: %s", agentdomain.ErrProxyNotReady, prepareErr)
 	}
 	return m.dataplane.ShowRawConfig(ctx)
 }
@@ -416,7 +416,7 @@ func (m *ManagedProxyRuntime) reconcileLocked(ctx context.Context, snapshot *grp
 			}
 			server := backendServer{
 				Name:      serviceServerName(service, slot),
-				Address:   application.ManagedContainerName(service.GetServiceKey(), slot),
+				Address:   agentdomain.ManagedContainerName(service.GetServiceKey(), slot),
 				Port:      int(service.GetContainerPort()),
 				Check:     "enabled",
 				Resolvers: managedProxyResolversName,
@@ -1092,6 +1092,6 @@ func lastIPv4(network *net.IPNet) net.IP {
 	return out
 }
 
-var _ application.ProxyRuntime = (*ManagedProxyRuntime)(nil)
+var _ agentdomain.ProxyRuntime = (*ManagedProxyRuntime)(nil)
 var _ managedProxyRuntimeAPI = (*HAProxyRuntimeClient)(nil)
 var _ managedProxyDataPlaneAPI = (*DataPlaneAPIClient)(nil)

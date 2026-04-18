@@ -1,7 +1,7 @@
 package application
 
 import (
-	agentapp "edge-pilot/internal/agent/application"
+	agentregistry "edge-pilot/internal/agent/application/registry"
 	releasedomain "edge-pilot/internal/release/domain"
 	servicecatalogapp "edge-pilot/internal/servicecatalog/application"
 	"edge-pilot/internal/shared/config"
@@ -28,7 +28,7 @@ func TestStartQueuedReleaseInjectsRegistryCredentialIntoDeployTask(t *testing.T)
 	}
 
 	serviceCatalog := servicecatalogapp.NewService(serviceRepo)
-	registry := agentapp.NewRegistryService(config.LoadAgentAuthConfig(), agentRepo)
+	registry := agentregistry.NewRegistryService(config.LoadAgentAuthConfig(), agentRepo)
 	codec := secret.NewCodec(&config.ServiceSecretConfig{
 		MasterKey:  []byte("12345678901234567890123456789012"),
 		KeyVersion: "v1",

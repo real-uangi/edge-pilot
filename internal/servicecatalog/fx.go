@@ -1,7 +1,7 @@
 package servicecatalog
 
 import (
-	agentapp "edge-pilot/internal/agent/application"
+	"edge-pilot/internal/agent/application/registry"
 	agentdomain "edge-pilot/internal/agent/domain"
 	"edge-pilot/internal/servicecatalog/application"
 	"edge-pilot/internal/servicecatalog/domain"
@@ -14,7 +14,7 @@ var ControlPlaneModule = fx.Module(
 	"servicecatalog",
 	fx.Provide(
 		infra.NewRepository,
-		func(registry *agentapp.RegistryService) domain.AgentLookup { return registry },
+		func(reg *registry.RegistryService) domain.AgentLookup { return reg },
 		func(repo domain.Repository) agentdomain.ServiceBindingChecker {
 			return infra.NewAgentServiceBindingChecker(repo)
 		},

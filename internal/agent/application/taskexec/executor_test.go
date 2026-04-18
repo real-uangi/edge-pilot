@@ -1,13 +1,22 @@
-package application
+package taskexec
 
 import (
 	"context"
+	agentdomain "edge-pilot/internal/agent/domain"
 	"edge-pilot/internal/shared/config"
 	"edge-pilot/internal/shared/grpcapi"
 	"errors"
 	"strings"
 	"testing"
 )
+
+type ContainerRuntime = agentdomain.ContainerRuntime
+type ContainerStatus = agentdomain.ContainerStatus
+type ManagedContainer = agentdomain.ManagedContainer
+
+func ManagedContainerName(serviceKey string, slot grpcapi.Slot) string {
+	return agentdomain.ManagedContainerName(serviceKey, slot)
+}
 
 func TestExecuteDeployReusesHealthyManagedContainer(t *testing.T) {
 	docker := &fakeDockerRuntime{

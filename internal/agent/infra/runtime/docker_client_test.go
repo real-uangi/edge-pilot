@@ -1,4 +1,4 @@
-package infra
+package runtime
 
 import (
 	"edge-pilot/internal/shared/config"

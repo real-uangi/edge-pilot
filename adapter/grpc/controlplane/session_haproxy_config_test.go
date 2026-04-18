@@ -2,7 +2,7 @@ package controlplane
 
 import (
 	"context"
-	"edge-pilot/internal/agent/application"
+	"edge-pilot/internal/agent/application/proxyconfig"
 	"edge-pilot/internal/shared/grpcapi"
 	"sync"
 	"testing"
@@ -58,7 +58,7 @@ func TestSessionHubRequestHAProxyConfigTimeout(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected timeout error")
 	}
-	if err != application.ErrHAProxyConfigTimeout {
+	if err != proxyconfig.ErrHAProxyConfigTimeout {
 		t.Fatalf("expected ErrHAProxyConfigTimeout, got %v", err)
 	}
 }

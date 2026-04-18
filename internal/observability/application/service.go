@@ -1,7 +1,6 @@
 package application
 
 import (
-	agentapp "edge-pilot/internal/agent/application"
 	releaseapp "edge-pilot/internal/release/application"
 	servicecatalogapp "edge-pilot/internal/servicecatalog/application"
 	"edge-pilot/internal/shared/dto"
@@ -14,16 +13,20 @@ import (
 	"github.com/google/uuid"
 )
 
+type AgentOverviewReader interface {
+	List() ([]dto.AgentOverview, error)
+}
+
 type Service struct {
 	repo     domain.Repository
-	agents   *agentapp.RegistryService
+	agents   AgentOverviewReader
 	services *servicecatalogapp.Service
 	releases *releaseapp.Service
 }
 
 func NewService(
 	repo domain.Repository,
-	agents *agentapp.RegistryService,
+	agents AgentOverviewReader,
 	services *servicecatalogapp.Service,
 	releases *releaseapp.Service,
 ) *Service {

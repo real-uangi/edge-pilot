@@ -2,7 +2,7 @@ package controlplane
 
 import (
 	"context"
-	edgeagent "edge-pilot/internal/agent/application"
+	agentregistry "edge-pilot/internal/agent/application/registry"
 	"edge-pilot/internal/shared/config"
 	"edge-pilot/internal/shared/grpcapi"
 	"io"
@@ -21,7 +21,7 @@ func TestConnectRejectsInvalidToken(t *testing.T) {
 		t.Fatalf("GenerateToken() error = %v", err)
 	}
 	enabled := true
-	registry := edgeagent.NewRegistryService(auth, &fakeAgentRepo{
+	registry := agentregistry.NewRegistryService(auth, &fakeAgentRepo{
 		nodes: map[string]*model.AgentNode{
 			"11111111-1111-1111-1111-111111111111": {
 				ID:        "11111111-1111-1111-1111-111111111111",

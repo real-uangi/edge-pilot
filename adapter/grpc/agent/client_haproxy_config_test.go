@@ -2,7 +2,7 @@ package agent
 
 import (
 	"context"
-	agentapp "edge-pilot/internal/agent/application"
+	agentdomain "edge-pilot/internal/agent/domain"
 	"edge-pilot/internal/shared/config"
 	"edge-pilot/internal/shared/grpcapi"
 	"testing"
@@ -39,7 +39,7 @@ func TestHandleHAProxyConfigRequestSuccess(t *testing.T) {
 func TestHandleHAProxyConfigRequestError(t *testing.T) {
 	client := &Client{
 		cfg:   &config.AgentRuntimeConfig{AgentID: "agent-a"},
-		proxy: &fakeProxyRuntimeForConfig{err: agentapp.ErrProxyNotReady},
+		proxy: &fakeProxyRuntimeForConfig{err: agentdomain.ErrProxyNotReady},
 	}
 	outbound := make(chan *grpcapi.AgentMessage, 1)
 

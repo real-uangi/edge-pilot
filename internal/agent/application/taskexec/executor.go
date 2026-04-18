@@ -1,7 +1,8 @@
-package application
+package taskexec
 
 import (
 	"context"
+	agentdomain "edge-pilot/internal/agent/domain"
 	"edge-pilot/internal/shared/config"
 	"edge-pilot/internal/shared/grpcapi"
 	"edge-pilot/internal/shared/model"
@@ -23,49 +24,6 @@ const (
 	stepContainerWaiting  = "container_reused_waiting"
 )
 
-type DockerRuntime interface {
-	DeployContainer(context.Context, *grpcapi.TaskCommand) (*ContainerRuntime, error)
-	InspectContainer(context.Context, string) (*ContainerStatus, error)
-	FindContainerByName(context.Context, string) (*ManagedContainer, error)
-	ResolveListenAddress(context.Context, string, int) (string, error)
-	ReadContainerLogs(context.Context, string, int, int) (string, error)
-	RemoveContainer(context.Context, string) error
-	ListManagedContainers(context.Context, string, string) ([]*ManagedContainer, error)
-}
-
-type ProxyRuntime interface {
-	EnsureReady(context.Context) error
-	ApplySnapshot(context.Context, *grpcapi.ProxyConfigSnapshot) error
-	SetServerAddress(context.Context, string, string, string, int) error
-	EnableServer(context.Context, string, string) error
-	DisableServer(context.Context, string, string) error
-	ShowStats(context.Context) ([]*grpcapi.BackendStatPoint, error)
-	ShowConfig(context.Context) (string, error)
-}
-
-type ContainerRuntime struct {
-	ContainerID   string
-	ListenAddress string
-}
-
-type ContainerStatus struct {
-	State   string
-	Health  string
-	Running bool
-}
-
-func (s *ContainerStatus) Terminal() bool {
-	if s == nil {
-		return false
-	}
-	switch strings.ToLower(strings.TrimSpace(s.State)) {
-	case "exited", "dead", "removing":
-		return true
-	default:
-		return false
-	}
-}
-
 type TaskFailureDiagnostic struct {
 	ContainerID      string
 	DockerHealth     string
@@ -80,12 +38,10 @@ type StartupManagedContainerScanStats struct {
 	Failed    int
 }
 
-var ErrProxyNotReady = errors.New("proxy stack not ready")
-
 type Executor struct {
 	cfg       *config.AgentRuntimeConfig
-	docker    DockerRuntime
-	proxy     ProxyRuntime
+	docker    agentdomain.DockerRuntime
+	proxy     agentdomain.ProxyRuntime
 	httpProbe func(string, string, map[string]string, int, int) error
 	logger    *log.StdLogger
 }
@@ -104,7 +60,7 @@ func (e *TaskExecutionError) Unwrap() error {
 	return e.Err
 }
 
-func NewExecutor(cfg *config.AgentRuntimeConfig, docker DockerRuntime, proxy ProxyRuntime) *Executor {
+func NewExecutor(cfg *config.AgentRuntimeConfig, docker agentdomain.DockerRuntime, proxy agentdomain.ProxyRuntime) *Executor {
 	return &Executor{
 		cfg:       cfg,
 		docker:    docker,
@@ -211,7 +167,7 @@ func (e *Executor) executeTrafficSwitch(ctx context.Context, task *grpcapi.TaskC
 	if err := e.proxy.EnsureReady(ctx); err != nil {
 		return &TaskExecutionError{Step: "proxy_stack_not_ready", Err: err}
 	}
-	if err := e.proxy.SetServerAddress(ctx, task.GetBackendName(), task.GetServerName(), ManagedContainerName(task.GetServiceKey(), task.GetTargetSlot()), int(task.GetContainerPort())); err != nil {
+	if err := e.proxy.SetServerAddress(ctx, task.GetBackendName(), task.GetServerName(), agentdomain.ManagedContainerName(task.GetServiceKey(), task.GetTargetSlot()), int(task.GetContainerPort())); err != nil {
 		return err
 	}
 	if err := e.proxy.EnableServer(ctx, task.GetBackendName(), task.GetServerName()); err != nil {
@@ -253,8 +209,8 @@ const (
 	deployDecisionWaitExisting
 )
 
-func (e *Executor) ensureDeployContainer(ctx context.Context, task *grpcapi.TaskCommand) (*ContainerRuntime, deployDecision, error) {
-	name := ManagedContainerName(task.GetServiceKey(), task.GetTargetSlot())
+func (e *Executor) ensureDeployContainer(ctx context.Context, task *grpcapi.TaskCommand) (*agentdomain.ContainerRuntime, deployDecision, error) {
+	name := agentdomain.ManagedContainerName(task.GetServiceKey(), task.GetTargetSlot())
 	existing, err := e.docker.FindContainerByName(ctx, name)
 	if err != nil {
 		return nil, deployDecisionStartNew, err
@@ -284,7 +240,7 @@ func (e *Executor) ensureDeployContainer(ctx context.Context, task *grpcapi.Task
 	if err != nil {
 		listenAddress = ""
 	}
-	runtime := &ContainerRuntime{
+	runtime := &agentdomain.ContainerRuntime{
 		ContainerID:   existing.ContainerID,
 		ListenAddress: listenAddress,
 	}
@@ -304,7 +260,7 @@ func (e *Executor) ensureDeployContainer(ctx context.Context, task *grpcapi.Task
 	return nil, deployDecisionStartNew, nil
 }
 
-func (e *Executor) waitForHealth(ctx context.Context, task *grpcapi.TaskCommand, runtime *ContainerRuntime, report func(*grpcapi.TaskUpdate) error) error {
+func (e *Executor) waitForHealth(ctx context.Context, task *grpcapi.TaskCommand, runtime *agentdomain.ContainerRuntime, report func(*grpcapi.TaskUpdate) error) error {
 	deadline := time.Now().Add(time.Duration(task.GetHttpTimeoutSecond()) * time.Second)
 	probeInterval := time.Duration(defaultProbeInterval(task.GetHttpProbeIntervalSecond())) * time.Second
 	successThreshold := int(defaultSuccessThreshold(task.GetHttpSuccessThreshold()))
@@ -392,7 +348,7 @@ func (e *Executor) waitForHealth(ctx context.Context, task *grpcapi.TaskCommand,
 	}
 }
 
-func (e *Executor) verifyHealth(ctx context.Context, task *grpcapi.TaskCommand, status *ContainerStatus, listenAddress string) error {
+func (e *Executor) verifyHealth(ctx context.Context, task *grpcapi.TaskCommand, status *agentdomain.ContainerStatus, listenAddress string) error {
 	if task.GetDockerHealthCheck() && status != nil {
 		health := strings.TrimSpace(status.Health)
 		if health != "" && !strings.EqualFold(health, "healthy") {
@@ -414,7 +370,7 @@ func (e *Executor) verifyHealth(ctx context.Context, task *grpcapi.TaskCommand, 
 	return nil
 }
 
-func (e *Executor) wrapTaskFailure(ctx context.Context, runtime *ContainerRuntime, err error) error {
+func (e *Executor) wrapTaskFailure(ctx context.Context, runtime *agentdomain.ContainerRuntime, err error) error {
 	execErr, ok := err.(*TaskExecutionError)
 	if ok {
 		if execErr.Diagnostic != nil || strings.TrimSpace(runtimeID(runtime)) == "" {
@@ -436,7 +392,7 @@ func (e *Executor) wrapTaskFailure(ctx context.Context, runtime *ContainerRuntim
 	}
 }
 
-func (e *Executor) collectFailureDiagnostic(ctx context.Context, runtime *ContainerRuntime) (*TaskFailureDiagnostic, error) {
+func (e *Executor) collectFailureDiagnostic(ctx context.Context, runtime *agentdomain.ContainerRuntime) (*TaskFailureDiagnostic, error) {
 	containerID := runtimeID(runtime)
 	if containerID == "" {
 		return nil, nil
@@ -470,8 +426,8 @@ func (e *Executor) cleanupManagedContainers(ctx context.Context, task *grpcapi.T
 		return 0, nil
 	}
 	preserve := map[string]struct{}{
-		ManagedContainerName(task.GetServiceKey(), task.GetTargetSlot()):      {},
-		ManagedContainerName(task.GetServiceKey(), task.GetCurrentLiveSlot()): {},
+		agentdomain.ManagedContainerName(task.GetServiceKey(), task.GetTargetSlot()):      {},
+		agentdomain.ManagedContainerName(task.GetServiceKey(), task.GetCurrentLiveSlot()): {},
 	}
 	removed := 0
 	var errs []error
@@ -551,7 +507,7 @@ func defaultString(value string, fallback string) string {
 	return value
 }
 
-func shouldRemoveOnStartupScan(item *ManagedContainer) bool {
+func shouldRemoveOnStartupScan(item *agentdomain.ManagedContainer) bool {
 	if item == nil {
 		return false
 	}
@@ -570,7 +526,7 @@ func isTerminalContainerState(state string) bool {
 	}
 }
 
-func managedContainerLabelsValid(item *ManagedContainer) bool {
+func managedContainerLabelsValid(item *agentdomain.ManagedContainer) bool {
 	if item == nil {
 		return false
 	}
@@ -665,7 +621,7 @@ func probeHTTP(listenAddress string, path string, headers map[string]string, exp
 	return nil
 }
 
-func summarizeContainerStatus(status *ContainerStatus) string {
+func summarizeContainerStatus(status *agentdomain.ContainerStatus) string {
 	if status == nil {
 		return ""
 	}
@@ -704,7 +660,7 @@ func minDuration(left time.Duration, right time.Duration) time.Duration {
 	return right
 }
 
-func runtimeID(runtime *ContainerRuntime) string {
+func runtimeID(runtime *agentdomain.ContainerRuntime) string {
 	if runtime == nil {
 		return ""
 	}

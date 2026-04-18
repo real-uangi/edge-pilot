@@ -1,4 +1,4 @@
-package application
+package proxyconfig
 
 import (
 	"context"
@@ -15,12 +15,16 @@ type HAProxyConfigRequester interface {
 	RequestHAProxyConfig(ctx context.Context, agentID string) (string, error)
 }
 
+type AgentOnlineChecker interface {
+	IsOnline(agentID string) (bool, error)
+}
+
 type HAProxyConfigService struct {
-	agents    *RegistryService
+	agents    AgentOnlineChecker
 	requester HAProxyConfigRequester
 }
 
-func NewHAProxyConfigService(agents *RegistryService, requester HAProxyConfigRequester) *HAProxyConfigService {
+func NewHAProxyConfigService(agents AgentOnlineChecker, requester HAProxyConfigRequester) *HAProxyConfigService {
 	return &HAProxyConfigService{
 		agents:    agents,
 		requester: requester,

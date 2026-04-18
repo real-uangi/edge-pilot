@@ -3,7 +3,8 @@ package routes
 import (
 	adaptermiddleware "edge-pilot/adapter/http/middleware"
 	adminauthapp "edge-pilot/internal/adminauth/application"
-	agentapp "edge-pilot/internal/agent/application"
+	"edge-pilot/internal/agent/application/proxyconfig"
+	"edge-pilot/internal/agent/application/registry"
 	"edge-pilot/internal/shared/config"
 	"edge-pilot/internal/shared/dto"
 	"net/http"
@@ -28,7 +29,7 @@ type agentHAProxyConfigActions interface {
 	GetHAProxyConfig(string) (*dto.AgentHAProxyConfigOutput, error)
 }
 
-func SetAdminAgentRoutes(engine *gin.Engine, agents *agentapp.RegistryService, haproxyConfigs *agentapp.HAProxyConfigService, auth *adminauthapp.Service, cfg *config.AdminAuthConfig) {
+func SetAdminAgentRoutes(engine *gin.Engine, agents *registry.RegistryService, haproxyConfigs *proxyconfig.HAProxyConfigService, auth *adminauthapp.Service, cfg *config.AdminAuthConfig) {
 	admin := engine.Group("/api/admin")
 	admin.Use(adaptermiddleware.RequireAdminSession(auth, cfg))
 	registerAdminAgentRoutes(admin, agents, haproxyConfigs)

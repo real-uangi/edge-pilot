@@ -1,7 +1,6 @@
 package application
 
 import (
-	"edge-pilot/internal/agent/application"
 	releasedomain "edge-pilot/internal/release/domain"
 	servicecatalogapp "edge-pilot/internal/servicecatalog/application"
 	servicecatalogdomain "edge-pilot/internal/servicecatalog/domain"
@@ -19,11 +18,15 @@ import (
 	commondb "github.com/real-uangi/allingo/common/db"
 )
 
+type AgentOnlineChecker interface {
+	IsOnline(agentID string) (bool, error)
+}
+
 type Service struct {
 	repo          releasedomain.Repository
 	dispatcher    releasedomain.TaskDispatcher
 	services      *servicecatalogapp.Service
-	agentRegistry *application.RegistryService
+	agentRegistry AgentOnlineChecker
 	proxyConfigs  servicecatalogdomain.ProxyConfigPublisher
 	registryAuth  releasedomain.RegistryCredentialResolver
 	codec         *secret.Codec
@@ -40,7 +43,7 @@ func NewService(
 	repo releasedomain.Repository,
 	dispatcher releasedomain.TaskDispatcher,
 	services *servicecatalogapp.Service,
-	agentRegistry *application.RegistryService,
+	agentRegistry AgentOnlineChecker,
 ) *Service {
 	return NewServiceWithRegistryCredentialsAndCodec(repo, dispatcher, services, agentRegistry, nil, nil, nil)
 }
@@ -49,7 +52,7 @@ func NewServiceWithRegistryCredentials(
 	repo releasedomain.Repository,
 	dispatcher releasedomain.TaskDispatcher,
 	services *servicecatalogapp.Service,
-	agentRegistry *application.RegistryService,
+	agentRegistry AgentOnlineChecker,
 	registryAuth releasedomain.RegistryCredentialResolver,
 ) *Service {
 	return NewServiceWithRegistryCredentialsAndCodec(repo, dispatcher, services, agentRegistry, nil, registryAuth, nil)
@@ -59,7 +62,7 @@ func NewServiceWithRegistryCredentialsAndCodec(
 	repo releasedomain.Repository,
 	dispatcher releasedomain.TaskDispatcher,
 	services *servicecatalogapp.Service,
-	agentRegistry *application.RegistryService,
+	agentRegistry AgentOnlineChecker,
 	proxyConfigs servicecatalogdomain.ProxyConfigPublisher,
 	registryAuth releasedomain.RegistryCredentialResolver,
 	codec *secret.Codec,

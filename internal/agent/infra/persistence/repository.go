@@ -1,4 +1,4 @@
-package infra
+package persistence
 
 import (
 	"edge-pilot/internal/agent/domain"

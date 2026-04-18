@@ -2,7 +2,7 @@ package schedule
 
 import (
 	"context"
-	agentapp "edge-pilot/internal/agent/application"
+	"edge-pilot/internal/agent/application/registry"
 	releaseapp "edge-pilot/internal/release/application"
 	"time"
 
@@ -16,12 +16,12 @@ const (
 )
 
 type RecoveryScheduler struct {
-	agents   *agentapp.RegistryService
+	agents   *registry.RegistryService
 	releases *releaseapp.Service
 	logger   *log.StdLogger
 }
 
-func NewRecoveryScheduler(agents *agentapp.RegistryService, releases *releaseapp.Service) *RecoveryScheduler {
+func NewRecoveryScheduler(agents *registry.RegistryService, releases *releaseapp.Service) *RecoveryScheduler {
 	return &RecoveryScheduler{
 		agents:   agents,
 		releases: releases,

@@ -1,9 +1,9 @@
-package infra
+package runtime
 
 import (
 	"bytes"
 	"context"
-	"edge-pilot/internal/agent/application"
+	agentdomain "edge-pilot/internal/agent/domain"
 	"edge-pilot/internal/shared/config"
 	"edge-pilot/internal/shared/grpcapi"
 	"encoding/base64"
@@ -41,7 +41,7 @@ func NewRawDockerClient(cfg *config.AgentRuntimeConfig) (*DockerClient, error) {
 	}, nil
 }
 
-func NewDockerClient(cfg *config.AgentRuntimeConfig) (application.DockerRuntime, error) {
+func NewDockerClient(cfg *config.AgentRuntimeConfig) (agentdomain.DockerRuntime, error) {
 	return NewRawDockerClient(cfg)
 }
 
@@ -61,7 +61,7 @@ func (c *DockerClient) Ping(ctx context.Context) error {
 	return nil
 }
 
-func (c *DockerClient) DeployContainer(ctx context.Context, task *grpcapi.TaskCommand) (*application.ContainerRuntime, error) {
+func (c *DockerClient) DeployContainer(ctx context.Context, task *grpcapi.TaskCommand) (*agentdomain.ContainerRuntime, error) {
 	imageRef := task.GetImageRepo() + ":" + task.GetImageTag()
 	if err := c.ensureImage(ctx, imageRef, task); err != nil {
 		return nil, err
@@ -71,7 +71,7 @@ func (c *DockerClient) DeployContainer(ctx context.Context, task *grpcapi.TaskCo
 	if err != nil {
 		return nil, err
 	}
-	name := application.ManagedContainerName(task.GetServiceKey(), task.GetTargetSlot())
+	name := agentdomain.ManagedContainerName(task.GetServiceKey(), task.GetTargetSlot())
 	c.logger.Infof(
 		"creating managed workload container: name=%s image=%s restartPolicy=%s maxRetries=%d",
 		name,
@@ -112,7 +112,7 @@ func (c *DockerClient) DeployContainer(ctx context.Context, task *grpcapi.TaskCo
 	if err != nil {
 		return nil, err
 	}
-	return &application.ContainerRuntime{
+	return &agentdomain.ContainerRuntime{
 		ContainerID:   createResp.ID,
 		ListenAddress: listenAddress,
 	}, nil
@@ -125,12 +125,12 @@ func buildWorkloadCreateRequest(cfg *config.AgentRuntimeConfig, imageRef string,
 		Cmd:        task.GetCommand(),
 		Entrypoint: task.GetEntrypoint(),
 		Labels: map[string]string{
-			application.ManagedLabelKey:        application.ManagedLabelValue,
-			application.ManagedLabelAgentID:    task.GetAgentId(),
-			application.ManagedLabelServiceID:  task.GetServiceId(),
-			application.ManagedLabelServiceKey: task.GetServiceKey(),
-			application.ManagedLabelSlot:       application.ManagedSlotValue(task.GetTargetSlot()),
-			application.ManagedLabelReleaseID:  task.GetReleaseId(),
+			agentdomain.ManagedLabelKey:        agentdomain.ManagedLabelValue,
+			agentdomain.ManagedLabelAgentID:    task.GetAgentId(),
+			agentdomain.ManagedLabelServiceID:  task.GetServiceId(),
+			agentdomain.ManagedLabelServiceKey: task.GetServiceKey(),
+			agentdomain.ManagedLabelSlot:       agentdomain.ManagedSlotValue(task.GetTargetSlot()),
+			agentdomain.ManagedLabelReleaseID:  task.GetReleaseId(),
 		},
 		ExposedPorts: exposedPorts(task),
 		HostConfig: dockerHostConfig{
@@ -271,7 +271,7 @@ func consumeDockerPullStream(r io.Reader) error {
 	}
 }
 
-func (c *DockerClient) InspectContainer(ctx context.Context, containerID string) (*application.ContainerStatus, error) {
+func (c *DockerClient) InspectContainer(ctx context.Context, containerID string) (*agentdomain.ContainerStatus, error) {
 	req, err := c.endpoint.newRequest(ctx, http.MethodGet, "/containers/"+containerID+"/json", nil)
 	if err != nil {
 		return nil, err
@@ -288,7 +288,7 @@ func (c *DockerClient) InspectContainer(ctx context.Context, containerID string)
 	if err := json.NewDecoder(resp.Body).Decode(&inspectResp); err != nil {
 		return nil, err
 	}
-	status := &application.ContainerStatus{
+	status := &agentdomain.ContainerStatus{
 		State:   inspectResp.State.Status,
 		Running: inspectResp.State.Running,
 	}
@@ -323,7 +323,7 @@ func (c *DockerClient) ReadContainerLogs(ctx context.Context, containerID string
 	return strings.TrimSpace(decoded), nil
 }
 
-func (c *DockerClient) FindContainerByName(ctx context.Context, name string) (*application.ManagedContainer, error) {
+func (c *DockerClient) FindContainerByName(ctx context.Context, name string) (*agentdomain.ManagedContainer, error) {
 	req, err := c.endpoint.newRequest(ctx, http.MethodGet, "/containers/"+url.PathEscape(name)+"/json", nil)
 	if err != nil {
 		return nil, err
@@ -389,7 +389,7 @@ func (c *DockerClient) RemoveContainer(ctx context.Context, containerID string) 
 	return nil
 }
 
-func (c *DockerClient) ListManagedContainers(ctx context.Context, agentID string, serviceKey string) ([]*application.ManagedContainer, error) {
+func (c *DockerClient) ListManagedContainers(ctx context.Context, agentID string, serviceKey string) ([]*agentdomain.ManagedContainer, error) {
 	req, err := c.endpoint.newRequest(ctx, http.MethodGet, "/containers/json?all=1", nil)
 	if err != nil {
 		return nil, err
@@ -406,16 +406,16 @@ func (c *DockerClient) ListManagedContainers(ctx context.Context, agentID string
 	if err := json.NewDecoder(resp.Body).Decode(&items); err != nil {
 		return nil, err
 	}
-	out := make([]*application.ManagedContainer, 0, len(items))
+	out := make([]*agentdomain.ManagedContainer, 0, len(items))
 	expectedServiceKey := strings.TrimSpace(serviceKey)
 	for _, item := range items {
-		if item.Labels[application.ManagedLabelKey] != application.ManagedLabelValue {
+		if item.Labels[agentdomain.ManagedLabelKey] != agentdomain.ManagedLabelValue {
 			continue
 		}
-		if item.Labels[application.ManagedLabelAgentID] != agentID {
+		if item.Labels[agentdomain.ManagedLabelAgentID] != agentID {
 			continue
 		}
-		if expectedServiceKey != "" && item.Labels[application.ManagedLabelServiceKey] != expectedServiceKey {
+		if expectedServiceKey != "" && item.Labels[agentdomain.ManagedLabelServiceKey] != expectedServiceKey {
 			continue
 		}
 		out = append(out, summaryToManagedContainer(item))
@@ -533,40 +533,40 @@ func portKey(port int) string {
 	return strconv.Itoa(port) + "/tcp"
 }
 
-func toManagedContainer(resp *dockerInspectResponse) *application.ManagedContainer {
+func toManagedContainer(resp *dockerInspectResponse) *agentdomain.ManagedContainer {
 	labels := resp.Config.Labels
-	return &application.ManagedContainer{
-		ContainerRuntime: application.ContainerRuntime{
+	return &agentdomain.ManagedContainer{
+		ContainerRuntime: agentdomain.ContainerRuntime{
 			ContainerID:   resp.ID,
 			ListenAddress: "",
 		},
 		Name:       strings.TrimPrefix(resp.Name, "/"),
-		Managed:    labels[application.ManagedLabelKey] == application.ManagedLabelValue,
-		AgentID:    labels[application.ManagedLabelAgentID],
-		ServiceID:  labels[application.ManagedLabelServiceID],
-		ServiceKey: labels[application.ManagedLabelServiceKey],
-		ReleaseID:  labels[application.ManagedLabelReleaseID],
-		Slot:       parseSlot(labels[application.ManagedLabelSlot]),
+		Managed:    labels[agentdomain.ManagedLabelKey] == agentdomain.ManagedLabelValue,
+		AgentID:    labels[agentdomain.ManagedLabelAgentID],
+		ServiceID:  labels[agentdomain.ManagedLabelServiceID],
+		ServiceKey: labels[agentdomain.ManagedLabelServiceKey],
+		ReleaseID:  labels[agentdomain.ManagedLabelReleaseID],
+		Slot:       parseSlot(labels[agentdomain.ManagedLabelSlot]),
 		State:      resp.State.Status,
 	}
 }
 
-func summaryToManagedContainer(item dockerContainerSummary) *application.ManagedContainer {
+func summaryToManagedContainer(item dockerContainerSummary) *agentdomain.ManagedContainer {
 	name := ""
 	if len(item.Names) > 0 {
 		name = strings.TrimPrefix(item.Names[0], "/")
 	}
-	return &application.ManagedContainer{
-		ContainerRuntime: application.ContainerRuntime{
+	return &agentdomain.ManagedContainer{
+		ContainerRuntime: agentdomain.ContainerRuntime{
 			ContainerID: item.ID,
 		},
 		Name:       name,
-		Managed:    item.Labels[application.ManagedLabelKey] == application.ManagedLabelValue,
-		AgentID:    item.Labels[application.ManagedLabelAgentID],
-		ServiceID:  item.Labels[application.ManagedLabelServiceID],
-		ServiceKey: item.Labels[application.ManagedLabelServiceKey],
-		ReleaseID:  item.Labels[application.ManagedLabelReleaseID],
-		Slot:       parseSlot(item.Labels[application.ManagedLabelSlot]),
+		Managed:    item.Labels[agentdomain.ManagedLabelKey] == agentdomain.ManagedLabelValue,
+		AgentID:    item.Labels[agentdomain.ManagedLabelAgentID],
+		ServiceID:  item.Labels[agentdomain.ManagedLabelServiceID],
+		ServiceKey: item.Labels[agentdomain.ManagedLabelServiceKey],
+		ReleaseID:  item.Labels[agentdomain.ManagedLabelReleaseID],
+		Slot:       parseSlot(item.Labels[agentdomain.ManagedLabelSlot]),
 		State:      item.State,
 	}
 }

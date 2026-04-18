@@ -2,7 +2,8 @@ package agent
 
 import (
 	"context"
-	agentapp "edge-pilot/internal/agent/application"
+	"edge-pilot/internal/agent/application/taskexec"
+	agentdomain "edge-pilot/internal/agent/domain"
 	"edge-pilot/internal/shared/config"
 	"edge-pilot/internal/shared/grpcapi"
 	"errors"
@@ -17,13 +18,13 @@ import (
 
 type Client struct {
 	cfg      *config.AgentRuntimeConfig
-	executor *agentapp.Executor
-	proxy    agentapp.ProxyRuntime
-	state    *agentapp.RuntimeState
+	executor *taskexec.Executor
+	proxy    agentdomain.ProxyRuntime
+	state    *taskexec.RuntimeState
 	logger   *log.StdLogger
 }
 
-func NewClient(cfg *config.AgentRuntimeConfig, executor *agentapp.Executor, proxy agentapp.ProxyRuntime, state *agentapp.RuntimeState) *Client {
+func NewClient(cfg *config.AgentRuntimeConfig, executor *taskexec.Executor, proxy agentdomain.ProxyRuntime, state *taskexec.RuntimeState) *Client {
 	return &Client{
 		cfg:      cfg,
 		executor: executor,
@@ -130,7 +131,7 @@ func (c *Client) connectOnce(ctx context.Context) error {
 			case <-statsTicker.C:
 				stats, err := c.executor.CollectStats(ctx)
 				if err != nil {
-					if errors.Is(err, agentapp.ErrProxyNotReady) {
+					if errors.Is(err, agentdomain.ErrProxyNotReady) {
 						continue
 					}
 					c.logger.Errorf(err, "failed to collect stats: agentId=%s", c.cfg.AgentID)
@@ -200,8 +201,8 @@ func (c *Client) handleTask(ctx context.Context, task *grpcapi.TaskCommand, outb
 	if err != nil {
 		c.logger.Errorf(err, "task execution failed: agentId=%s taskId=%s type=%s", c.cfg.AgentID, task.GetTaskId(), task.GetType().String())
 		step := "execution_failed"
-		var diagnostic *agentapp.TaskFailureDiagnostic
-		if execErr, ok := err.(*agentapp.TaskExecutionError); ok && execErr.Step != "" {
+		var diagnostic *taskexec.TaskFailureDiagnostic
+		if execErr, ok := err.(*taskexec.TaskExecutionError); ok && execErr.Step != "" {
 			step = execErr.Step
 			diagnostic = execErr.Diagnostic
 		}

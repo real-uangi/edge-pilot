@@ -1,4 +1,4 @@
-package application
+package registry
 
 import (
 	"edge-pilot/internal/shared/config"

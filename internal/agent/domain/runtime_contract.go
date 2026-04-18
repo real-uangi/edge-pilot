@@ -1,0 +1,53 @@
+package domain
+
+import (
+	"context"
+	"edge-pilot/internal/shared/grpcapi"
+	"errors"
+	"strings"
+)
+
+var ErrProxyNotReady = errors.New("proxy stack not ready")
+
+type DockerRuntime interface {
+	DeployContainer(context.Context, *grpcapi.TaskCommand) (*ContainerRuntime, error)
+	InspectContainer(context.Context, string) (*ContainerStatus, error)
+	FindContainerByName(context.Context, string) (*ManagedContainer, error)
+	ResolveListenAddress(context.Context, string, int) (string, error)
+	ReadContainerLogs(context.Context, string, int, int) (string, error)
+	RemoveContainer(context.Context, string) error
+	ListManagedContainers(context.Context, string, string) ([]*ManagedContainer, error)
+}
+
+type ProxyRuntime interface {
+	EnsureReady(context.Context) error
+	ApplySnapshot(context.Context, *grpcapi.ProxyConfigSnapshot) error
+	SetServerAddress(context.Context, string, string, string, int) error
+	EnableServer(context.Context, string, string) error
+	DisableServer(context.Context, string, string) error
+	ShowStats(context.Context) ([]*grpcapi.BackendStatPoint, error)
+	ShowConfig(context.Context) (string, error)
+}
+
+type ContainerRuntime struct {
+	ContainerID   string
+	ListenAddress string
+}
+
+type ContainerStatus struct {
+	State   string
+	Health  string
+	Running bool
+}
+
+func (s *ContainerStatus) Terminal() bool {
+	if s == nil {
+		return false
+	}
+	switch strings.ToLower(strings.TrimSpace(s.State)) {
+	case "exited", "dead", "removing":
+		return true
+	default:
+		return false
+	}
+}

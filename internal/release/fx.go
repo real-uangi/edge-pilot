@@ -1,6 +1,7 @@
 package release
 
 import (
+	"edge-pilot/internal/agent/application/registry"
 	"edge-pilot/internal/release/application"
 	"edge-pilot/internal/release/infra"
 
@@ -11,6 +12,7 @@ var ControlPlaneModule = fx.Module(
 	"release",
 	fx.Provide(
 		infra.NewRepository,
+		func(reg *registry.RegistryService) application.AgentOnlineChecker { return reg },
 		application.NewServiceWithRegistryCredentialsAndCodec,
 	),
 )

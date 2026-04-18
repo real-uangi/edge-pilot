@@ -1,6 +1,7 @@
 package observability
 
 import (
+	"edge-pilot/internal/agent/application/registry"
 	"edge-pilot/internal/observability/application"
 	"edge-pilot/internal/observability/infra"
 
@@ -11,6 +12,7 @@ var ControlPlaneModule = fx.Module(
 	"observability",
 	fx.Provide(
 		infra.NewRepository,
+		func(reg *registry.RegistryService) application.AgentOverviewReader { return reg },
 		application.NewService,
 	),
 )

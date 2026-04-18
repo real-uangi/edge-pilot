@@ -2,9 +2,12 @@ package agent
 
 import (
 	"context"
-	"edge-pilot/internal/agent/application"
+	"edge-pilot/internal/agent/application/proxyconfig"
+	"edge-pilot/internal/agent/application/registry"
+	"edge-pilot/internal/agent/application/taskexec"
 	agentdomain "edge-pilot/internal/agent/domain"
-	"edge-pilot/internal/agent/infra"
+	"edge-pilot/internal/agent/infra/persistence"
+	"edge-pilot/internal/agent/infra/runtime"
 	"edge-pilot/internal/shared/config"
 
 	"github.com/real-uangi/allingo/common/log"
@@ -19,11 +22,11 @@ type registryServiceDeps struct {
 	Bindings agentdomain.ServiceBindingChecker `optional:"true"`
 }
 
-func provideRegistryService(deps registryServiceDeps) *application.RegistryService {
-	return application.NewRegistryServiceWithBindingChecker(deps.Auth, deps.Repo, deps.Bindings)
+func provideRegistryService(deps registryServiceDeps) *registry.RegistryService {
+	return registry.NewRegistryServiceWithBindingChecker(deps.Auth, deps.Repo, deps.Bindings)
 }
 
-func startManagedContainerStartupReconcile(lc fx.Lifecycle, cfg *config.AgentRuntimeConfig, executor *application.Executor) {
+func startManagedContainerStartupReconcile(lc fx.Lifecycle, cfg *config.AgentRuntimeConfig, executor *taskexec.Executor) {
 	logger := log.NewStdLogger("agent.executor")
 	lc.Append(fx.Hook{
 		OnStart: func(startCtx context.Context) error {
@@ -40,9 +43,9 @@ var ControlPlaneModule = fx.Module(
 	"agent-control-plane",
 	fx.Provide(
 		config.LoadAgentAuthConfig,
-		infra.NewRepository,
+		persistence.NewRepository,
 		provideRegistryService,
-		application.NewHAProxyConfigService,
+		proxyconfig.NewHAProxyConfigService,
 	),
 )
 
@@ -50,15 +53,15 @@ var RuntimeModule = fx.Module(
 	"agent-runtime",
 	fx.Provide(
 		config.LoadAgentRuntimeConfig,
-		infra.NewRawDockerClient,
-		func(client *infra.DockerClient) application.DockerRuntime { return client },
-		infra.NewManagedProxyRuntime,
-		func(runtime *infra.ManagedProxyRuntime) application.ProxyRuntime { return runtime },
-		application.NewExecutor,
-		application.NewRuntimeState,
+		runtime.NewRawDockerClient,
+		func(client *runtime.DockerClient) agentdomain.DockerRuntime { return client },
+		runtime.NewManagedProxyRuntime,
+		func(runtime *runtime.ManagedProxyRuntime) agentdomain.ProxyRuntime { return runtime },
+		taskexec.NewExecutor,
+		taskexec.NewRuntimeState,
 	),
 	fx.Invoke(
-		infra.StartManagedProxyRuntime,
+		runtime.StartManagedProxyRuntime,
 		startManagedContainerStartupReconcile,
 	),
 )
