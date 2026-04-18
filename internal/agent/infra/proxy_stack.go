@@ -693,8 +693,7 @@ func (m *ManagedProxyRuntime) frontendSection(snapshot *grpcapi.ProxyConfigSnaps
 			Action:   "add-header",
 			Header:   "Set-Cookie",
 			Format:   servicecatalogapp.BuildStickyCookie(cookieName, liveReleaseID, service.GetRoutePathPrefix()),
-			Cond:     "if",
-			CondTest: responseCondTest,
+			CondTest: prefixedCondTest(responseCondTest),
 			Index:    responseBase,
 		})
 		responseRules = append(responseRules, httpAfterResponseRule{
@@ -702,8 +701,7 @@ func (m *ManagedProxyRuntime) frontendSection(snapshot *grpcapi.ProxyConfigSnaps
 			Action:   "set-header",
 			Header:   servicecatalogapp.CurrentReleaseIDHeaderName,
 			Format:   liveReleaseID,
-			Cond:     "if",
-			CondTest: responseCondTest,
+			CondTest: prefixedCondTest(responseCondTest),
 			Index:    responseBase + 1,
 		})
 		responseRules = append(responseRules, httpAfterResponseRule{
@@ -711,8 +709,7 @@ func (m *ManagedProxyRuntime) frontendSection(snapshot *grpcapi.ProxyConfigSnaps
 			Action:   "set-header",
 			Header:   servicecatalogapp.LiveReleaseIDHeaderName,
 			Format:   liveReleaseID,
-			Cond:     "if",
-			CondTest: responseCondTest,
+			CondTest: prefixedCondTest(responseCondTest),
 			Index:    responseBase + 2,
 		})
 	}
@@ -1038,6 +1035,17 @@ func aclName(serviceID string, suffix string) string {
 		base = "service"
 	}
 	return base + "_" + suffix
+}
+
+func prefixedCondTest(expr string) string {
+	expr = strings.TrimSpace(expr)
+	if expr == "" {
+		return "if"
+	}
+	if strings.HasPrefix(expr, "if ") || strings.HasPrefix(expr, "unless ") {
+		return expr
+	}
+	return "if " + expr
 }
 
 func retry(ctx context.Context, attempts int, delay time.Duration, fn func() error) error {
