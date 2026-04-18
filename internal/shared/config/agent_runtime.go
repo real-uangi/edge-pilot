@@ -37,7 +37,7 @@ type AgentRuntimeConfig struct {
 
 func LoadAgentRuntimeConfig() (*AgentRuntimeConfig, error) {
 	hostname, _ := os.Hostname()
-	haproxyImage := defaultString(os.Getenv("HAPROXY_IMAGE"), "haproxytech/haproxy-debian:s6-3.4")
+	haproxyImage := defaultString(os.Getenv("HAPROXY_IMAGE"), "haproxytech/haproxy-debian:s6-3.3")
 	dockerHost, dockerSocketPath := ResolveDockerEndpointConfig(
 		os.Getenv("DOCKER_HOST"),
 		os.Getenv("DOCKER_SOCKET_PATH"),

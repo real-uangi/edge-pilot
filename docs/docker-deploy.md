@@ -115,7 +115,7 @@ docker run -d \
 - `HTTP_PROBE_TIMEOUT_SECONDS`：默认 `5`
 - `PROXY_NETWORK_NAME`：默认 `epNet`
 - `PROXY_NETWORK_SUBNET`：默认 `172.29.0.0/24`
-- `HAPROXY_IMAGE`：默认 `haproxytech/haproxy-debian:s6-3.4`
+- `HAPROXY_IMAGE`：默认 `haproxytech/haproxy-debian:s6-3.3`
 - `PROXY_HELPER_IMAGE`：默认跟 `HAPROXY_IMAGE` 一致
 - `HAPROXY_CONTAINER_NAME`：默认 `edge-pilot-haproxy`
 - `HAPROXY_IP`：默认 `172.29.0.233`

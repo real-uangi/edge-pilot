@@ -62,7 +62,7 @@ Edge Pilot 是一个面向单机 Docker 多服务场景的控制面，用来解�
 - 每个 agent 维护一套共享代理栈：
   - `edge-pilot-haproxy`
   - Docker 网络 `epNet`
-- `haproxytech/haproxy-debian:s6-3.4` 单容器同时承载 HAProxy 和 Data Plane API
+- `haproxytech/haproxy-debian:s6-3.3` 单容器同时承载 HAProxy 和 Data Plane API
 - 共享 frontend 固定监听 HTTP `:80`
 - Runtime API 只负责运行态切流、摘挂 server 和 stats
 - Data Plane API 负责 frontend、route、backend、blue/green server 结构同步
@@ -171,7 +171,7 @@ Edge Pilot 是一个面向单机 Docker 多服务场景的控制面，用来解�
 - `HTTP_PROBE_TIMEOUT_SECONDS`：默认 `5`
 - `PROXY_NETWORK_NAME`：默认 `epNet`
 - `PROXY_NETWORK_SUBNET`：默认 `172.29.0.0/24`
-- `HAPROXY_IMAGE`：默认 `haproxytech/haproxy-debian:s6-3.4`
+- `HAPROXY_IMAGE`：默认 `haproxytech/haproxy-debian:s6-3.3`
 - `HAPROXY_IP`：默认 `172.29.0.233`
 - `HAPROXY_RUNTIME_PORT`：默认 `19999`
 - `DATAPLANEAPI_PORT`：默认 `5555`

@@ -11,7 +11,7 @@ func TestProxySpecUsesLimitedRestartPolicy(t *testing.T) {
 	runtime := &ManagedProxyRuntime{
 		cfg: &config.AgentRuntimeConfig{
 			AgentID:            "81ad661e-cf19-4bab-afa4-9d00826774c2",
-			HAProxyImage:       "haproxytech/haproxy-debian:s6-3.4",
+			HAProxyImage:       "haproxytech/haproxy-debian:s6-3.3",
 			ProxyContainerName: "edge-pilot-haproxy",
 			ProxyNetworkName:   "epNet",
 			ProxyIPAddress:     "172.29.0.233",
@@ -35,7 +35,7 @@ func TestProxySpecUsesLimitedRestartPolicy(t *testing.T) {
 func TestSpecHashIncludesRestartPolicy(t *testing.T) {
 	base := managedContainerSpec{
 		Name:      "edge-pilot-haproxy",
-		Image:     "haproxytech/haproxy-debian:s6-3.4",
+		Image:     "haproxytech/haproxy-debian:s6-3.3",
 		Network:   "epNet",
 		IPAddress: "172.29.0.233",
 		Labels: map[string]string{
@@ -95,7 +95,7 @@ func TestProxySpecIncludesBootstrapHashLabel(t *testing.T) {
 	runtime := &ManagedProxyRuntime{
 		cfg: &config.AgentRuntimeConfig{
 			AgentID:              "81ad661e-cf19-4bab-afa4-9d00826774c2",
-			HAProxyImage:         "haproxytech/haproxy-debian:s6-3.4",
+			HAProxyImage:         "haproxytech/haproxy-debian:s6-3.3",
 			ProxyContainerName:   "edge-pilot-haproxy",
 			ProxyNetworkName:     "epNet",
 			ProxyIPAddress:       "172.29.0.233",

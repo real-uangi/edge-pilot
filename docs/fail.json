@@ -1,6 +1,6 @@
 {
   "agentId": "0d73611a-7d49-4e9c-8b46-92d2d195553c",
-  "transactionId": "23d00155-0292-40df-9a22-bcd1848f5d9f",
+  "transactionId": "438c6335-4fb4-42c3-9cef-3e7ff6265a17",
   "version": "31",
   "frontend": {
     "name": "ep_http",
@@ -178,4 +178,3 @@
     "febae531-b091-43a7-9fff-2c4080eade2f"
   ]
 }
-{"code": 0, "message": "regression check: use add-header + %[str(...)] for Set-Cookie; should not hit 'expects exactly 2 arguments' parser error"}
