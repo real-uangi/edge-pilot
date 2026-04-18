@@ -121,29 +121,16 @@ func (c *DataPlaneAPIClient) ShowRawConfig(ctx context.Context) (string, error) 
 	if err != nil {
 		return "", err
 	}
-	rawText := string(respBody)
-	trimmed := strings.TrimSpace(rawText)
-	if trimmed == "" {
-		return "", nil
+	return decodeRawConfigResponse(respBody)
+}
+
+func (c *DataPlaneAPIClient) ShowRawConfigInTransaction(ctx context.Context, transactionID string) (string, error) {
+	path := c.configurationPath("/v3/services/haproxy/configuration/raw", "", transactionID, false)
+	respBody, err := c.do(ctx, http.MethodGet, path, nil)
+	if err != nil {
+		return "", err
 	}
-	if strings.HasPrefix(trimmed, "{") {
-		var payload map[string]any
-		if err := json.Unmarshal(respBody, &payload); err != nil {
-			return "", err
-		}
-		switch value := payload["data"].(type) {
-		case string:
-			return value, nil
-		}
-		switch value := payload["_data"].(type) {
-		case string:
-			return value, nil
-		}
-	}
-	if strings.HasPrefix(trimmed, `"`) && strings.HasSuffix(trimmed, `"`) {
-		return strings.Trim(trimmed, `"`), nil
-	}
-	return rawText, nil
+	return decodeRawConfigResponse(respBody)
 }
 
 func (c *DataPlaneAPIClient) ReplaceFrontend(ctx context.Context, section frontendSection) error {
@@ -225,6 +212,32 @@ func isQuotedHAProxyString(value string) bool {
 
 func isHAProxyFmtExpression(value string) bool {
 	return len(value) >= 4 && strings.HasPrefix(value, "%[") && strings.HasSuffix(value, "]")
+}
+
+func decodeRawConfigResponse(respBody []byte) (string, error) {
+	rawText := string(respBody)
+	trimmed := strings.TrimSpace(rawText)
+	if trimmed == "" {
+		return "", nil
+	}
+	if strings.HasPrefix(trimmed, "{") {
+		var payload map[string]any
+		if err := json.Unmarshal(respBody, &payload); err != nil {
+			return "", err
+		}
+		switch value := payload["data"].(type) {
+		case string:
+			return value, nil
+		}
+		switch value := payload["_data"].(type) {
+		case string:
+			return value, nil
+		}
+	}
+	if strings.HasPrefix(trimmed, `"`) && strings.HasSuffix(trimmed, `"`) {
+		return strings.Trim(trimmed, `"`), nil
+	}
+	return rawText, nil
 }
 
 func (c *DataPlaneAPIClient) EnsureBackend(ctx context.Context, section backendSection) error {

@@ -42,6 +42,7 @@ type managedProxyRuntimeAPI interface {
 type managedProxyDataPlaneAPI interface {
 	ConfigurationVersion(context.Context) (string, error)
 	ShowRawConfig(context.Context) (string, error)
+	ShowRawConfigInTransaction(context.Context, string) (string, error)
 	StartTransaction(context.Context, string) (string, error)
 	CommitTransaction(context.Context, string) error
 	AbortTransaction(context.Context, string) error
@@ -395,7 +396,7 @@ func (m *ManagedProxyRuntime) reconcileLocked(ctx context.Context, snapshot *grp
 		TransactionID:          transactionID,
 		Version:                version,
 		Frontend:               frontend,
-		ExpectedFrontendConfig: renderExpectedFrontendConfig(frontend),
+		IntendedFrontendConfig: renderIntendedFrontendConfig(frontend),
 		DefaultBackend:         snapshot.GetDefaultBackend(),
 		ServiceCount:           len(snapshot.GetServices()),
 	}
@@ -467,17 +468,19 @@ func (m *ManagedProxyRuntime) reconcileLocked(ctx context.Context, snapshot *grp
 }
 
 type dataplaneFailureContext struct {
-	AgentID                string                   `json:"agentId"`
-	TransactionID          string                   `json:"transactionId"`
-	Version                string                   `json:"version"`
-	Frontend               frontendSection          `json:"frontend"`
-	ExpectedFrontendConfig string                   `json:"expectedFrontendConfig,omitempty"`
-	DefaultBackend         string                   `json:"defaultBackend"`
-	ServiceCount           int                      `json:"serviceCount"`
-	Backends               []backendSection         `json:"backends,omitempty"`
-	Servers                []dataplaneBackendServer `json:"servers,omitempty"`
-	DesiredBackends        []string                 `json:"desiredBackends,omitempty"`
-	StaleBackends          []string                 `json:"staleBackends,omitempty"`
+	AgentID                   string                   `json:"agentId"`
+	TransactionID             string                   `json:"transactionId"`
+	Version                   string                   `json:"version"`
+	Frontend                  frontendSection          `json:"frontend"`
+	IntendedFrontendConfig    string                   `json:"intendedFrontendConfig,omitempty"`
+	TransactionRawConfig      string                   `json:"transactionRawConfig,omitempty"`
+	TransactionRawConfigError string                   `json:"transactionRawConfigError,omitempty"`
+	DefaultBackend            string                   `json:"defaultBackend"`
+	ServiceCount              int                      `json:"serviceCount"`
+	Backends                  []backendSection         `json:"backends,omitempty"`
+	Servers                   []dataplaneBackendServer `json:"servers,omitempty"`
+	DesiredBackends           []string                 `json:"desiredBackends,omitempty"`
+	StaleBackends             []string                 `json:"staleBackends,omitempty"`
 }
 
 type dataplaneBackendServer struct {
@@ -486,6 +489,7 @@ type dataplaneBackendServer struct {
 }
 
 func (m *ManagedProxyRuntime) logDataplaneFailure(err error, message string, failureContext dataplaneFailureContext) {
+	m.attachTransactionRawConfig(&failureContext)
 	m.logger.Errorf(
 		err,
 		"%s: agentId=%s transactionId=%s version=%s frontend=%s defaultBackend=%s services=%d details=%s",
@@ -500,6 +504,20 @@ func (m *ManagedProxyRuntime) logDataplaneFailure(err error, message string, fai
 	)
 }
 
+func (m *ManagedProxyRuntime) attachTransactionRawConfig(failureContext *dataplaneFailureContext) {
+	if failureContext == nil || strings.TrimSpace(failureContext.TransactionID) == "" {
+		return
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	rawConfig, err := m.dataplane.ShowRawConfigInTransaction(ctx, failureContext.TransactionID)
+	if err != nil {
+		failureContext.TransactionRawConfigError = err.Error()
+		return
+	}
+	failureContext.TransactionRawConfig = rawConfig
+}
+
 func formatDataplaneFailureContext(failureContext dataplaneFailureContext) string {
 	encoded, err := json.Marshal(failureContext)
 	if err != nil {
@@ -508,7 +526,7 @@ func formatDataplaneFailureContext(failureContext dataplaneFailureContext) strin
 	return string(encoded)
 }
 
-func renderExpectedFrontendConfig(frontend frontendSection) string {
+func renderIntendedFrontendConfig(frontend frontendSection) string {
 	lines := make([]string, 0, len(frontend.ACLList)+len(frontend.BackendSwitchingRuleList)+len(frontend.HTTPAfterResponseRules)+8)
 	lines = append(lines, "frontend "+strings.TrimSpace(frontend.Name))
 	if strings.TrimSpace(frontend.Mode) != "" {

@@ -302,12 +302,12 @@ func TestFormatDataplaneFailureContextIncludesRenderedFrontendConfig(t *testing.
 		TransactionID:          "tx-render",
 		Version:                "12",
 		Frontend:               frontend,
-		ExpectedFrontendConfig: renderExpectedFrontendConfig(frontend),
+		IntendedFrontendConfig: renderIntendedFrontendConfig(frontend),
 		DefaultBackend:         "ep_default",
 		ServiceCount:           1,
 	})
 
-	if !strings.Contains(contextText, "\"expectedFrontendConfig\":\"frontend ep_http") {
+	if !strings.Contains(contextText, "\"intendedFrontendConfig\":\"frontend ep_http") {
 		t.Fatalf("expected rendered frontend config in context, got %s", contextText)
 	}
 	if !strings.Contains(contextText, "http-after-response add-header Set-Cookie %[str(") {
@@ -557,6 +557,10 @@ func (f *fakeManagedProxyDataplane) ConfigurationVersion(context.Context) (strin
 func (f *fakeManagedProxyDataplane) ShowRawConfig(context.Context) (string, error) {
 	*f.callLog = append(*f.callLog, "show-raw-config")
 	return "global\n  daemon\n", nil
+}
+
+func (f *fakeManagedProxyDataplane) ShowRawConfigInTransaction(_ context.Context, transactionID string) (string, error) {
+	return "frontend ep_http\n  bind *:80\n", nil
 }
 
 func (f *fakeManagedProxyDataplane) StartTransaction(_ context.Context, version string) (string, error) {

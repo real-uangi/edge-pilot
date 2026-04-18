@@ -160,6 +160,31 @@ func TestDataPlaneClientShowRawConfig(t *testing.T) {
 	}
 }
 
+func TestDataPlaneClientShowRawConfigInTransaction(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			t.Fatalf("expected GET, got %s", r.Method)
+		}
+		if r.URL.Path != "/v3/services/haproxy/configuration/raw" {
+			t.Fatalf("unexpected path: %s", r.URL.Path)
+		}
+		if got := r.URL.Query().Get("transaction_id"); got != "tx-11" {
+			t.Fatalf("expected transaction_id query tx-11, got %q", got)
+		}
+		_, _ = w.Write([]byte("frontend ep_http\n  bind *:80\n"))
+	}))
+	defer server.Close()
+
+	client := newDataPlaneAPIClient(func() string { return server.URL }, func() string { return "admin" }, func() string { return "secret" })
+	configText, err := client.ShowRawConfigInTransaction(context.Background(), "tx-11")
+	if err != nil {
+		t.Fatalf("ShowRawConfigInTransaction() error = %v", err)
+	}
+	if configText != "frontend ep_http\n  bind *:80\n" {
+		t.Fatalf("unexpected transaction config: %q", configText)
+	}
+}
+
 func TestDataPlaneClientReplaceFrontendInTransactionFiltersInvalidResponseRules(t *testing.T) {
 	var requests []recordedRequest
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
