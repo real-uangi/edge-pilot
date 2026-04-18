@@ -55,7 +55,7 @@ type frontendSwitchRule struct {
 }
 
 type httpAfterResponseRule struct {
-	Type     string `json:"type"`
+	Type     string `json:"type,omitempty"`
 	Action   string `json:"action"`
 	Header   string `json:"hdr_name,omitempty"`
 	Format   string `json:"hdr_fmt,omitempty"`
@@ -181,7 +181,7 @@ func (c *DataPlaneAPIClient) ReplaceFrontendInTransaction(ctx context.Context, t
 func filterHTTPAfterResponseRules(rules []httpAfterResponseRule) []httpAfterResponseRule {
 	out := make([]httpAfterResponseRule, 0, len(rules))
 	for _, rule := range rules {
-		if strings.TrimSpace(rule.Type) == "" || strings.TrimSpace(rule.Action) == "" {
+		if strings.TrimSpace(rule.Action) == "" {
 			continue
 		}
 		if strings.TrimSpace(rule.Header) == "" {

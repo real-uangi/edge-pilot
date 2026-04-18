@@ -532,8 +532,12 @@ func renderExpectedFrontendConfig(frontend frontendSection) string {
 	}
 	for _, rule := range frontend.HTTPAfterResponseRules {
 		actionLine := fmt.Sprintf("  http-after-response %s %s %s", strings.TrimSpace(rule.Action), strings.TrimSpace(rule.Header), strings.TrimSpace(rule.Format))
+		cond := strings.TrimSpace(rule.Cond)
 		condTest := strings.TrimSpace(rule.CondTest)
 		if condTest != "" {
+			if cond != "" {
+				actionLine += " " + cond
+			}
 			actionLine += " " + condTest
 		}
 		lines = append(lines, strings.TrimSpace(strings.ReplaceAll(strings.ReplaceAll(actionLine, "  ", " "), "  ", " ")))
@@ -601,7 +605,7 @@ func (m *ManagedProxyRuntime) frontendSection(snapshot *grpcapi.ProxyConfigSnaps
 	})
 	acls := make([]frontendACL, 0, len(services)*6)
 	rules := make([]frontendSwitchRule, 0, len(services)*5)
-	responseRules := make([]httpAfterResponseRule, 0, len(services)*7)
+	responseRules := make([]httpAfterResponseRule, 0, len(services)*3)
 	for idx, service := range services {
 		hostACL := aclName(service.GetServiceId(), "host")
 		pathACL := aclName(service.GetServiceId(), "path")
@@ -682,62 +686,31 @@ func (m *ManagedProxyRuntime) frontendSection(snapshot *grpcapi.ProxyConfigSnaps
 			CondTest: hostACL + " " + pathACL + " !" + queryBlueACL + " !" + queryGreenACL + " !" + cookieBlueACL + " !" + cookieGreenACL,
 			Index:    ruleBase + 4,
 		})
-		responseBase := idx * 7
+		responseBase := idx * 3
+		responseCondTest := hostACL + " " + pathACL
 		responseRules = append(responseRules, httpAfterResponseRule{
-			Type:     "add-header",
-			Action:   "add-header",
-			Header:   "Set-Cookie",
-			Format:   servicecatalogapp.BuildStickyCookie(cookieName, blueReleaseID, service.GetRoutePathPrefix()),
-			CondTest: prefixedCondTest(hostACL + " " + pathACL + " " + queryBlueACL),
-			Index:    responseBase,
-		})
-		responseRules = append(responseRules, httpAfterResponseRule{
-			Type:     "add-header",
-			Action:   "add-header",
-			Header:   "Set-Cookie",
-			Format:   servicecatalogapp.BuildStickyCookie(cookieName, greenReleaseID, service.GetRoutePathPrefix()),
-			CondTest: prefixedCondTest(hostACL + " " + pathACL + " " + queryGreenACL),
-			Index:    responseBase + 1,
-		})
-		responseRules = append(responseRules, httpAfterResponseRule{
-			Type:     "add-header",
 			Action:   "add-header",
 			Header:   "Set-Cookie",
 			Format:   servicecatalogapp.BuildStickyCookie(cookieName, liveReleaseID, service.GetRoutePathPrefix()),
-			CondTest: prefixedCondTest(hostACL + " " + pathACL + " !" + queryBlueACL + " !" + queryGreenACL + " !" + cookieBlueACL + " !" + cookieGreenACL),
-			Index:    responseBase + 2,
+			Cond:     "if",
+			CondTest: responseCondTest,
+			Index:    responseBase,
 		})
 		responseRules = append(responseRules, httpAfterResponseRule{
-			Type:     "set-header",
-			Action:   "set-header",
-			Header:   servicecatalogapp.CurrentReleaseIDHeaderName,
-			Format:   blueReleaseID,
-			CondTest: prefixedCondTest(hostACL + " " + pathACL + " (" + queryBlueACL + " || (!" + queryGreenACL + " " + cookieBlueACL + "))"),
-			Index:    responseBase + 3,
-		})
-		responseRules = append(responseRules, httpAfterResponseRule{
-			Type:     "set-header",
-			Action:   "set-header",
-			Header:   servicecatalogapp.CurrentReleaseIDHeaderName,
-			Format:   greenReleaseID,
-			CondTest: prefixedCondTest(hostACL + " " + pathACL + " (" + queryGreenACL + " || (!" + queryBlueACL + " " + cookieGreenACL + "))"),
-			Index:    responseBase + 4,
-		})
-		responseRules = append(responseRules, httpAfterResponseRule{
-			Type:     "set-header",
 			Action:   "set-header",
 			Header:   servicecatalogapp.CurrentReleaseIDHeaderName,
 			Format:   liveReleaseID,
-			CondTest: prefixedCondTest(hostACL + " " + pathACL + " !" + queryBlueACL + " !" + queryGreenACL + " !" + cookieBlueACL + " !" + cookieGreenACL),
-			Index:    responseBase + 5,
+			Cond:     "if",
+			CondTest: responseCondTest,
+			Index:    responseBase + 1,
 		})
 		responseRules = append(responseRules, httpAfterResponseRule{
-			Type:     "set-header",
 			Action:   "set-header",
 			Header:   servicecatalogapp.LiveReleaseIDHeaderName,
 			Format:   liveReleaseID,
-			CondTest: prefixedCondTest(hostACL + " " + pathACL),
-			Index:    responseBase + 6,
+			Cond:     "if",
+			CondTest: responseCondTest,
+			Index:    responseBase + 2,
 		})
 	}
 	return frontendSection{
@@ -1062,17 +1035,6 @@ func aclName(serviceID string, suffix string) string {
 		base = "service"
 	}
 	return base + "_" + suffix
-}
-
-func prefixedCondTest(expr string) string {
-	expr = strings.TrimSpace(expr)
-	if expr == "" {
-		return "if"
-	}
-	if strings.HasPrefix(expr, "if ") || strings.HasPrefix(expr, "unless ") {
-		return expr
-	}
-	return "if " + expr
 }
 
 func retry(ctx context.Context, attempts int, delay time.Duration, fn func() error) error {
