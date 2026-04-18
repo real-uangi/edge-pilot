@@ -1,0 +1,181 @@
+{
+  "agentId": "0d73611a-7d49-4e9c-8b46-92d2d195553c",
+  "transactionId": "23d00155-0292-40df-9a22-bcd1848f5d9f",
+  "version": "31",
+  "frontend": {
+    "name": "ep_http",
+    "mode": "http",
+    "default_backend": "ep_default",
+    "binds": {
+      "public": {
+        "name": "public",
+        "address": "0.0.0.0",
+        "port": 80
+      }
+    },
+    "acl_list": [
+      {
+        "acl_name": "febae531_b091_43a7_9fff_2c4080eade2f_host",
+        "criterion": "hdr(host)",
+        "value": "-i snapshot.ratgg.com",
+        "index": 0
+      },
+      {
+        "acl_name": "febae531_b091_43a7_9fff_2c4080eade2f_path",
+        "criterion": "path_beg",
+        "value": "/",
+        "index": 1
+      },
+      {
+        "acl_name": "febae531_b091_43a7_9fff_2c4080eade2f_query_blue",
+        "criterion": "url_param(__ep_release_id)",
+        "value": "-i 045f88b1-ff1a-457e-86bd-f9ee668c3859",
+        "index": 2
+      },
+      {
+        "acl_name": "febae531_b091_43a7_9fff_2c4080eade2f_query_green",
+        "criterion": "url_param(__ep_release_id)",
+        "value": "-i __edge_pilot_invalid__",
+        "index": 3
+      },
+      {
+        "acl_name": "febae531_b091_43a7_9fff_2c4080eade2f_cookie_blue",
+        "criterion": "cook(ep_release_id_ghcr_io_real_uangi_icebreaker)",
+        "value": "-i 045f88b1-ff1a-457e-86bd-f9ee668c3859",
+        "index": 4
+      },
+      {
+        "acl_name": "febae531_b091_43a7_9fff_2c4080eade2f_cookie_green",
+        "criterion": "cook(ep_release_id_ghcr_io_real_uangi_icebreaker)",
+        "value": "-i __edge_pilot_invalid__",
+        "index": 5
+      }
+    ],
+    "backend_switching_rule_list": [
+      {
+        "name": "febae531-b091-43a7-9fff-2c4080eade2f_blue",
+        "cond": "if",
+        "cond_test": "febae531_b091_43a7_9fff_2c4080eade2f_host febae531_b091_43a7_9fff_2c4080eade2f_path febae531_b091_43a7_9fff_2c4080eade2f_query_blue",
+        "index": 0
+      },
+      {
+        "name": "febae531-b091-43a7-9fff-2c4080eade2f_green",
+        "cond": "if",
+        "cond_test": "febae531_b091_43a7_9fff_2c4080eade2f_host febae531_b091_43a7_9fff_2c4080eade2f_path febae531_b091_43a7_9fff_2c4080eade2f_query_green",
+        "index": 1
+      },
+      {
+        "name": "febae531-b091-43a7-9fff-2c4080eade2f_blue",
+        "cond": "if",
+        "cond_test": "febae531_b091_43a7_9fff_2c4080eade2f_host febae531_b091_43a7_9fff_2c4080eade2f_path !febae531_b091_43a7_9fff_2c4080eade2f_query_blue !febae531_b091_43a7_9fff_2c4080eade2f_query_green febae531_b091_43a7_9fff_2c4080eade2f_cookie_blue",
+        "index": 2
+      },
+      {
+        "name": "febae531-b091-43a7-9fff-2c4080eade2f_green",
+        "cond": "if",
+        "cond_test": "febae531_b091_43a7_9fff_2c4080eade2f_host febae531_b091_43a7_9fff_2c4080eade2f_path !febae531_b091_43a7_9fff_2c4080eade2f_query_blue !febae531_b091_43a7_9fff_2c4080eade2f_query_green febae531_b091_43a7_9fff_2c4080eade2f_cookie_green",
+        "index": 3
+      },
+      {
+        "name": "febae531-b091-43a7-9fff-2c4080eade2f_blue",
+        "cond": "if",
+        "cond_test": "febae531_b091_43a7_9fff_2c4080eade2f_host febae531_b091_43a7_9fff_2c4080eade2f_path !febae531_b091_43a7_9fff_2c4080eade2f_query_blue !febae531_b091_43a7_9fff_2c4080eade2f_query_green !febae531_b091_43a7_9fff_2c4080eade2f_cookie_blue !febae531_b091_43a7_9fff_2c4080eade2f_cookie_green",
+        "index": 4
+      }
+    ],
+    "http_after_response_rule_list": [
+      {
+        "type": "add-header",
+        "action": "add-header",
+        "hdr_name": "Set-Cookie",
+        "hdr_fmt": "%[str(ep_release_id_ghcr_io_real_uangi_icebreaker=045f88b1-ff1a-457e-86bd-f9ee668c3859;Max-Age=600;Path=/;HttpOnly;SameSite=Lax)]",
+        "cond_test": "if febae531_b091_43a7_9fff_2c4080eade2f_host febae531_b091_43a7_9fff_2c4080eade2f_path febae531_b091_43a7_9fff_2c4080eade2f_query_blue",
+        "index": 0
+      },
+      {
+        "type": "add-header",
+        "action": "add-header",
+        "hdr_name": "Set-Cookie",
+        "hdr_fmt": "%[str(ep_release_id_ghcr_io_real_uangi_icebreaker=045f88b1-ff1a-457e-86bd-f9ee668c3859;Max-Age=600;Path=/;HttpOnly;SameSite=Lax)]",
+        "cond_test": "if febae531_b091_43a7_9fff_2c4080eade2f_host febae531_b091_43a7_9fff_2c4080eade2f_path !febae531_b091_43a7_9fff_2c4080eade2f_query_blue !febae531_b091_43a7_9fff_2c4080eade2f_query_green !febae531_b091_43a7_9fff_2c4080eade2f_cookie_blue !febae531_b091_43a7_9fff_2c4080eade2f_cookie_green",
+        "index": 1
+      },
+      {
+        "type": "set-header",
+        "action": "set-header",
+        "hdr_name": "X-Edge-Pilot-Current-Release-Id",
+        "hdr_fmt": "045f88b1-ff1a-457e-86bd-f9ee668c3859",
+        "cond_test": "if febae531_b091_43a7_9fff_2c4080eade2f_host febae531_b091_43a7_9fff_2c4080eade2f_path (febae531_b091_43a7_9fff_2c4080eade2f_query_blue || (!febae531_b091_43a7_9fff_2c4080eade2f_query_green febae531_b091_43a7_9fff_2c4080eade2f_cookie_blue))",
+        "index": 2
+      },
+      {
+        "type": "set-header",
+        "action": "set-header",
+        "hdr_name": "X-Edge-Pilot-Current-Release-Id",
+        "hdr_fmt": "045f88b1-ff1a-457e-86bd-f9ee668c3859",
+        "cond_test": "if febae531_b091_43a7_9fff_2c4080eade2f_host febae531_b091_43a7_9fff_2c4080eade2f_path !febae531_b091_43a7_9fff_2c4080eade2f_query_blue !febae531_b091_43a7_9fff_2c4080eade2f_query_green !febae531_b091_43a7_9fff_2c4080eade2f_cookie_blue !febae531_b091_43a7_9fff_2c4080eade2f_cookie_green",
+        "index": 3
+      },
+      {
+        "type": "set-header",
+        "action": "set-header",
+        "hdr_name": "X-Edge-Pilot-Live-Release-Id",
+        "hdr_fmt": "045f88b1-ff1a-457e-86bd-f9ee668c3859",
+        "cond_test": "if febae531_b091_43a7_9fff_2c4080eade2f_host febae531_b091_43a7_9fff_2c4080eade2f_path",
+        "index": 4
+      }
+    ]
+  },
+  "expectedFrontendConfig": "frontend ep_http\n  mode http\n  bind 0.0.0.0:80\n  acl febae531_b091_43a7_9fff_2c4080eade2f_host hdr(host) -i snapshot.ratgg.com\n  acl febae531_b091_43a7_9fff_2c4080eade2f_path path_beg /\n  acl febae531_b091_43a7_9fff_2c4080eade2f_query_blue url_param(__ep_release_id) -i 045f88b1-ff1a-457e-86bd-f9ee668c3859\n  acl febae531_b091_43a7_9fff_2c4080eade2f_query_green url_param(__ep_release_id) -i __edge_pilot_invalid__\n  acl febae531_b091_43a7_9fff_2c4080eade2f_cookie_blue cook(ep_release_id_ghcr_io_real_uangi_icebreaker) -i 045f88b1-ff1a-457e-86bd-f9ee668c3859\n  acl febae531_b091_43a7_9fff_2c4080eade2f_cookie_green cook(ep_release_id_ghcr_io_real_uangi_icebreaker) -i __edge_pilot_invalid__\nuse_backend febae531-b091-43a7-9fff-2c4080eade2f_blue if febae531_b091_43a7_9fff_2c4080eade2f_host febae531_b091_43a7_9fff_2c4080eade2f_path febae531_b091_43a7_9fff_2c4080eade2f_query_blue\nuse_backend febae531-b091-43a7-9fff-2c4080eade2f_green if febae531_b091_43a7_9fff_2c4080eade2f_host febae531_b091_43a7_9fff_2c4080eade2f_path febae531_b091_43a7_9fff_2c4080eade2f_query_green\nuse_backend febae531-b091-43a7-9fff-2c4080eade2f_blue if febae531_b091_43a7_9fff_2c4080eade2f_host febae531_b091_43a7_9fff_2c4080eade2f_path !febae531_b091_43a7_9fff_2c4080eade2f_query_blue !febae531_b091_43a7_9fff_2c4080eade2f_query_green febae531_b091_43a7_9fff_2c4080eade2f_cookie_blue\nuse_backend febae531-b091-43a7-9fff-2c4080eade2f_green if febae531_b091_43a7_9fff_2c4080eade2f_host febae531_b091_43a7_9fff_2c4080eade2f_path !febae531_b091_43a7_9fff_2c4080eade2f_query_blue !febae531_b091_43a7_9fff_2c4080eade2f_query_green febae531_b091_43a7_9fff_2c4080eade2f_cookie_green\nuse_backend febae531-b091-43a7-9fff-2c4080eade2f_blue if febae531_b091_43a7_9fff_2c4080eade2f_host febae531_b091_43a7_9fff_2c4080eade2f_path !febae531_b091_43a7_9fff_2c4080eade2f_query_blue !febae531_b091_43a7_9fff_2c4080eade2f_query_green !febae531_b091_43a7_9fff_2c4080eade2f_cookie_blue !febae531_b091_43a7_9fff_2c4080eade2f_cookie_green\nhttp-after-response add-header Set-Cookie %[str(ep_release_id_ghcr_io_real_uangi_icebreaker=045f88b1-ff1a-457e-86bd-f9ee668c3859;Max-Age=600;Path=/;HttpOnly;SameSite=Lax)] if febae531_b091_43a7_9fff_2c4080eade2f_host febae531_b091_43a7_9fff_2c4080eade2f_path febae531_b091_43a7_9fff_2c4080eade2f_query_blue\nhttp-after-response add-header Set-Cookie %[str(ep_release_id_ghcr_io_real_uangi_icebreaker=045f88b1-ff1a-457e-86bd-f9ee668c3859;Max-Age=600;Path=/;HttpOnly;SameSite=Lax)] if febae531_b091_43a7_9fff_2c4080eade2f_host febae531_b091_43a7_9fff_2c4080eade2f_path !febae531_b091_43a7_9fff_2c4080eade2f_query_blue !febae531_b091_43a7_9fff_2c4080eade2f_query_green !febae531_b091_43a7_9fff_2c4080eade2f_cookie_blue !febae531_b091_43a7_9fff_2c4080eade2f_cookie_green\nhttp-after-response set-header X-Edge-Pilot-Current-Release-Id 045f88b1-ff1a-457e-86bd-f9ee668c3859 if febae531_b091_43a7_9fff_2c4080eade2f_host febae531_b091_43a7_9fff_2c4080eade2f_path (febae531_b091_43a7_9fff_2c4080eade2f_query_blue || (!febae531_b091_43a7_9fff_2c4080eade2f_query_green febae531_b091_43a7_9fff_2c4080eade2f_cookie_blue))\nhttp-after-response set-header X-Edge-Pilot-Current-Release-Id 045f88b1-ff1a-457e-86bd-f9ee668c3859 if febae531_b091_43a7_9fff_2c4080eade2f_host febae531_b091_43a7_9fff_2c4080eade2f_path !febae531_b091_43a7_9fff_2c4080eade2f_query_blue !febae531_b091_43a7_9fff_2c4080eade2f_query_green !febae531_b091_43a7_9fff_2c4080eade2f_cookie_blue !febae531_b091_43a7_9fff_2c4080eade2f_cookie_green\nhttp-after-response set-header X-Edge-Pilot-Live-Release-Id 045f88b1-ff1a-457e-86bd-f9ee668c3859 if febae531_b091_43a7_9fff_2c4080eade2f_host febae531_b091_43a7_9fff_2c4080eade2f_path",
+  "defaultBackend": "ep_default",
+  "serviceCount": 1,
+  "backends": [
+    {
+      "name": "febae531-b091-43a7-9fff-2c4080eade2f_blue",
+      "mode": "http",
+      "balance": {
+        "algorithm": "roundrobin"
+      }
+    },
+    {
+      "name": "febae531-b091-43a7-9fff-2c4080eade2f_green",
+      "mode": "http",
+      "balance": {
+        "algorithm": "roundrobin"
+      }
+    }
+  ],
+  "servers": [
+    {
+      "backend": "febae531-b091-43a7-9fff-2c4080eade2f_blue",
+      "server": {
+        "name": "blue",
+        "address": "ep-ghcr.io-real-uangi-icebreaker-blue",
+        "port": 7777,
+        "check": "enabled",
+        "resolvers": "ep_dns",
+        "init_addr": "last,libc,none"
+      }
+    },
+    {
+      "backend": "febae531-b091-43a7-9fff-2c4080eade2f_green",
+      "server": {
+        "name": "green",
+        "address": "ep-ghcr.io-real-uangi-icebreaker-green",
+        "port": 7777,
+        "check": "enabled",
+        "resolvers": "ep_dns",
+        "init_addr": "last,libc,none"
+      }
+    }
+  ],
+  "desiredBackends": [
+    "ep_default",
+    "febae531-b091-43a7-9fff-2c4080eade2f_blue",
+    "febae531-b091-43a7-9fff-2c4080eade2f_green"
+  ],
+  "staleBackends": [
+    "febae531-b091-43a7-9fff-2c4080eade2f"
+  ]
+}
+{"code": 0, "message": "regression check: use add-header + %[str(...)] for Set-Cookie; should not hit 'expects exactly 2 arguments' parser error"}

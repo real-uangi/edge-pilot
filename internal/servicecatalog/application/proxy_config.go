@@ -154,5 +154,5 @@ func BuildStickyCookie(cookieName string, releaseID string, routePathPrefix stri
 		"HttpOnly",
 		"SameSite=Lax",
 	}
-	return strings.Join(parts, ";")
+	return "%[str(" + strings.Join(parts, ";") + ")]"
 }

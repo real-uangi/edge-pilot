@@ -210,6 +210,9 @@ func normalizeHAProxyFmt(value string) string {
 	if isQuotedHAProxyString(value) {
 		return value
 	}
+	if isHAProxyFmtExpression(value) {
+		return value
+	}
 	if strings.ContainsAny(value, " \t;") {
 		return strconv.Quote(value)
 	}
@@ -218,6 +221,10 @@ func normalizeHAProxyFmt(value string) string {
 
 func isQuotedHAProxyString(value string) bool {
 	return len(value) >= 2 && value[0] == '"' && value[len(value)-1] == '"'
+}
+
+func isHAProxyFmtExpression(value string) bool {
+	return len(value) >= 4 && strings.HasPrefix(value, "%[") && strings.HasSuffix(value, "]")
 }
 
 func (c *DataPlaneAPIClient) EnsureBackend(ctx context.Context, section backendSection) error {

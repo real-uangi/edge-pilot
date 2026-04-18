@@ -184,16 +184,16 @@ func TestDataPlaneClientReplaceFrontendInTransactionFiltersInvalidResponseRules(
 		Mode: "http",
 		HTTPAfterResponseRules: []httpAfterResponseRule{
 			{
-				Type:     "set-header",
-				Action:   "set-header",
+				Type:     "add-header",
+				Action:   "add-header",
 				Header:   "Set-Cookie",
 				Cond:     "if",
 				CondTest: "green_acl",
 				Index:    0,
 			},
 			{
-				Type:     "set-header",
-				Action:   "set-header",
+				Type:     "add-header",
+				Action:   "add-header",
 				Header:   "Set-Cookie",
 				Format:   "release-1;Max-Age=600;Path=/;HttpOnly;SameSite=Lax",
 				Cond:     "if",
@@ -228,6 +228,77 @@ func TestDataPlaneClientReplaceFrontendInTransactionFiltersInvalidResponseRules(
 	}
 	if got := firstRule["index"]; got != float64(0) {
 		t.Fatalf("expected filtered rule reindexed to 0, got %#v", got)
+	}
+}
+
+func TestDataPlaneClientReplaceFrontendInTransactionKeepsHAProxyFmtExpression(t *testing.T) {
+	var requests []recordedRequest
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, err := io.ReadAll(r.Body)
+		if err != nil {
+			t.Fatalf("ReadAll() error = %v", err)
+		}
+		requests = append(requests, recordedRequest{
+			method: r.Method,
+			path:   r.URL.Path,
+			query:  r.URL.Query(),
+			body:   string(body),
+		})
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer server.Close()
+
+	client := newDataPlaneAPIClient(func() string { return server.URL }, func() string { return "admin" }, func() string { return "secret" })
+	ctx := context.Background()
+	const stickyExpr = `%[str(ep_release_id_service=release-1;Max-Age=600;Path=/;HttpOnly;SameSite=Lax)]`
+	if err := client.ReplaceFrontendInTransaction(ctx, "tx-1", frontendSection{
+		Name: "ep_http",
+		Mode: "http",
+		HTTPAfterResponseRules: []httpAfterResponseRule{
+			{
+				Type:     "add-header",
+				Action:   "add-header",
+				Header:   "Set-Cookie",
+				Format:   stickyExpr,
+				Cond:     "if",
+				CondTest: "blue_acl",
+				Index:    0,
+			},
+		},
+	}); err != nil {
+		t.Fatalf("ReplaceFrontendInTransaction() error = %v", err)
+	}
+
+	if len(requests) != 1 {
+		t.Fatalf("expected 1 request, got %d", len(requests))
+	}
+	var payload map[string]any
+	if err := json.Unmarshal([]byte(requests[0].body), &payload); err != nil {
+		t.Fatalf("Unmarshal() error = %v", err)
+	}
+	rawRules, ok := payload["http_after_response_rule_list"].([]any)
+	if !ok || len(rawRules) != 1 {
+		t.Fatalf("expected 1 response rule, got %#v", payload["http_after_response_rule_list"])
+	}
+	firstRule, ok := rawRules[0].(map[string]any)
+	if !ok {
+		t.Fatalf("expected first rule object, got %#v", rawRules[0])
+	}
+	if got := firstRule["type"]; got != "add-header" {
+		t.Fatalf("expected response rule type add-header, got %#v", got)
+	}
+	if got := firstRule["action"]; got != "add-header" {
+		t.Fatalf("expected response rule action add-header, got %#v", got)
+	}
+	if got := firstRule["hdr_fmt"]; got != stickyExpr {
+		t.Fatalf("expected hdr_fmt expression to be preserved, got %#v", got)
+	}
+}
+
+func TestNormalizeHAProxyFmtKeepsExpression(t *testing.T) {
+	const input = "  %[str(test=value;Max-Age=600;Path=/)]  "
+	if got := normalizeHAProxyFmt(input); got != `%[str(test=value;Max-Age=600;Path=/)]` {
+		t.Fatalf("expected expression fmt to be preserved after trim, got %q", got)
 	}
 }
 

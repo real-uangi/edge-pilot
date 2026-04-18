@@ -310,7 +310,7 @@ func TestFormatDataplaneFailureContextIncludesRenderedFrontendConfig(t *testing.
 	if !strings.Contains(contextText, "\"expectedFrontendConfig\":\"frontend ep_http") {
 		t.Fatalf("expected rendered frontend config in context, got %s", contextText)
 	}
-	if !strings.Contains(contextText, "http-after-response set-header Set-Cookie \\\"") {
+	if !strings.Contains(contextText, "http-after-response add-header Set-Cookie %[str(") {
 		t.Fatalf("expected response rule line in rendered config, got %s", contextText)
 	}
 }
@@ -379,8 +379,11 @@ func TestFrontendSectionAddsStickyPreviewAndDiagnosticRules(t *testing.T) {
 	if section.HTTPAfterResponseRules[0].Header != "Set-Cookie" {
 		t.Fatalf("expected preview response to set cookie, got %#v", section.HTTPAfterResponseRules[0])
 	}
-	if section.HTTPAfterResponseRules[0].Type != "set-header" {
-		t.Fatalf("expected response rule type set-header, got %#v", section.HTTPAfterResponseRules[0])
+	if section.HTTPAfterResponseRules[0].Type != "add-header" {
+		t.Fatalf("expected sticky cookie response rule type add-header, got %#v", section.HTTPAfterResponseRules[0])
+	}
+	if section.HTTPAfterResponseRules[0].Action != "add-header" {
+		t.Fatalf("expected sticky cookie response rule action add-header, got %#v", section.HTTPAfterResponseRules[0])
 	}
 	if strings.TrimSpace(section.HTTPAfterResponseRules[0].Cond) != "" {
 		t.Fatalf("expected response rule cond to be omitted, got %#v", section.HTTPAfterResponseRules[0])
@@ -388,8 +391,8 @@ func TestFrontendSectionAddsStickyPreviewAndDiagnosticRules(t *testing.T) {
 	if strings.Contains(section.HTTPAfterResponseRules[0].Format, "; ") {
 		t.Fatalf("expected response rule hdr_fmt to avoid spaces after ';', got %#v", section.HTTPAfterResponseRules[0])
 	}
-	if !strings.HasPrefix(section.HTTPAfterResponseRules[0].Format, `"`) || !strings.HasSuffix(section.HTTPAfterResponseRules[0].Format, `"`) {
-		t.Fatalf("expected sticky cookie hdr_fmt to be quoted for haproxy parsing, got %#v", section.HTTPAfterResponseRules[0])
+	if !strings.HasPrefix(section.HTTPAfterResponseRules[0].Format, `%[str(`) || !strings.HasSuffix(section.HTTPAfterResponseRules[0].Format, `)]`) {
+		t.Fatalf("expected sticky cookie hdr_fmt to use haproxy str() expression, got %#v", section.HTTPAfterResponseRules[0])
 	}
 	if section.HTTPAfterResponseRules[3].Header != servicecatalogapp.CurrentReleaseIDHeaderName {
 		t.Fatalf("expected current release header, got %#v", section.HTTPAfterResponseRules[3])
