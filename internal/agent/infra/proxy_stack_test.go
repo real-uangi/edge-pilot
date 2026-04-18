@@ -386,11 +386,11 @@ func TestFrontendSectionAddsStickyPreviewAndDiagnosticRules(t *testing.T) {
 	if section.HTTPAfterResponseRules[0].Type != "add-header" {
 		t.Fatalf("expected sticky cookie response rule type add-header, got %#v", section.HTTPAfterResponseRules[0])
 	}
-	if strings.TrimSpace(section.HTTPAfterResponseRules[0].Cond) != "" {
-		t.Fatalf("expected response rule cond to be omitted, got %#v", section.HTTPAfterResponseRules[0])
+	if strings.TrimSpace(section.HTTPAfterResponseRules[0].Cond) != "if" {
+		t.Fatalf("expected response rule cond to be if, got %#v", section.HTTPAfterResponseRules[0])
 	}
-	if strings.TrimSpace(section.HTTPAfterResponseRules[0].CondTest) != "if "+hostAndPathCond {
-		t.Fatalf("expected response rule cond_test to include if prefix, got %#v", section.HTTPAfterResponseRules[0])
+	if strings.TrimSpace(section.HTTPAfterResponseRules[0].CondTest) != hostAndPathCond {
+		t.Fatalf("expected response rule cond_test to keep pure acl expression, got %#v", section.HTTPAfterResponseRules[0])
 	}
 	if strings.Contains(section.HTTPAfterResponseRules[0].Format, "; ") {
 		t.Fatalf("expected response rule hdr_fmt to avoid spaces after ';', got %#v", section.HTTPAfterResponseRules[0])
@@ -407,11 +407,11 @@ func TestFrontendSectionAddsStickyPreviewAndDiagnosticRules(t *testing.T) {
 	if section.HTTPAfterResponseRules[1].Type != "set-header" {
 		t.Fatalf("expected response rule type set-header, got %#v", section.HTTPAfterResponseRules[1])
 	}
-	if strings.TrimSpace(section.HTTPAfterResponseRules[1].Cond) != "" {
-		t.Fatalf("expected response rule cond to be omitted, got %#v", section.HTTPAfterResponseRules[1])
+	if strings.TrimSpace(section.HTTPAfterResponseRules[1].Cond) != "if" {
+		t.Fatalf("expected response rule cond to be if, got %#v", section.HTTPAfterResponseRules[1])
 	}
-	if strings.TrimSpace(section.HTTPAfterResponseRules[1].CondTest) != "if "+hostAndPathCond {
-		t.Fatalf("expected response rule cond_test to include if prefix, got %#v", section.HTTPAfterResponseRules[1])
+	if strings.TrimSpace(section.HTTPAfterResponseRules[1].CondTest) != hostAndPathCond {
+		t.Fatalf("expected response rule cond_test to keep pure acl expression, got %#v", section.HTTPAfterResponseRules[1])
 	}
 	if section.HTTPAfterResponseRules[1].Format != "release-green" {
 		t.Fatalf("expected current release hdr to use live release id, got %#v", section.HTTPAfterResponseRules[1])
@@ -429,14 +429,14 @@ func TestFrontendSectionAddsStickyPreviewAndDiagnosticRules(t *testing.T) {
 		if strings.TrimSpace(rule.Type) != strings.TrimSpace(rule.Action) {
 			t.Fatalf("response rule[%d] type should equal action, got %#v", i, rule)
 		}
-		if strings.TrimSpace(rule.Cond) != "" {
-			t.Fatalf("response rule[%d] cond should be omitted, got %#v", i, rule)
+		if strings.TrimSpace(rule.Cond) != "if" {
+			t.Fatalf("response rule[%d] cond should be if, got %#v", i, rule)
 		}
 		if strings.TrimSpace(rule.CondTest) == "" {
 			t.Fatalf("response rule[%d] cond_test should not be empty, got %#v", i, rule)
 		}
-		if !strings.HasPrefix(rule.CondTest, "if ") && !strings.HasPrefix(rule.CondTest, "unless ") {
-			t.Fatalf("response rule[%d] cond_test should include if/unless prefix, got %#v", i, rule)
+		if strings.HasPrefix(rule.CondTest, "if ") || strings.HasPrefix(rule.CondTest, "unless ") {
+			t.Fatalf("response rule[%d] cond_test should not include if/unless prefix, got %#v", i, rule)
 		}
 	}
 }
@@ -463,11 +463,11 @@ func TestFrontendSectionSkipsInvalidResponseHeaderRules(t *testing.T) {
 		if strings.TrimSpace(rule.Type) != strings.TrimSpace(rule.Action) {
 			t.Fatalf("response rule[%d] type should equal action, got %#v", i, rule)
 		}
-		if strings.TrimSpace(rule.Cond) != "" {
-			t.Fatalf("response rule[%d] should keep cond omitted, got %#v", i, rule)
+		if strings.TrimSpace(rule.Cond) != "if" {
+			t.Fatalf("response rule[%d] should keep cond as if, got %#v", i, rule)
 		}
-		if strings.TrimSpace(rule.CondTest) != "if "+hostAndPathCond {
-			t.Fatalf("response rule[%d] should keep host/path cond_test with if prefix, got %#v", i, rule)
+		if strings.TrimSpace(rule.CondTest) != hostAndPathCond {
+			t.Fatalf("response rule[%d] should keep host/path cond_test as pure acl expression, got %#v", i, rule)
 		}
 	}
 }

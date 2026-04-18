@@ -76,7 +76,8 @@ func TestDataPlaneClientTransactionWritesIncludeTransactionID(t *testing.T) {
 				Action:   "set-header",
 				Header:   "X-Test",
 				Format:   "release-1",
-				CondTest: "if test_acl_expr",
+				Cond:     "if",
+				CondTest: "test_acl_expr",
 				Index:    0,
 			},
 		},
@@ -100,7 +101,7 @@ func TestDataPlaneClientTransactionWritesIncludeTransactionID(t *testing.T) {
 	assertTransactionRequest(t, requests[1], http.MethodPut, "/v3/services/haproxy/configuration/backends/be-api/servers/blue", "tx-1", false)
 	assertServerPayload(t, requests[1], managedProxyResolversName, managedProxyInitAddrFallback)
 	assertTransactionRequest(t, requests[2], http.MethodPut, "/v3/services/haproxy/configuration/frontends/ep_http", "tx-1", true)
-	assertFrontendResponseRulePayload(t, requests[2], "set-header", "if test_acl_expr")
+	assertFrontendResponseRulePayload(t, requests[2], "set-header", "if", "test_acl_expr")
 	assertTransactionRequest(t, requests[3], http.MethodDelete, "/v3/services/haproxy/configuration/backends/stale-api", "tx-1", false)
 	assertTransactionLifecycleRequest(t, requests[4], http.MethodPut, "/v3/services/haproxy/transactions/tx-1")
 	assertTransactionLifecycleRequest(t, requests[5], http.MethodDelete, "/v3/services/haproxy/transactions/tx-1")
@@ -220,7 +221,8 @@ func TestDataPlaneClientReplaceFrontendInTransactionFiltersInvalidResponseRules(
 				Action:   "add-header",
 				Header:   "Set-Cookie",
 				Format:   "release-1;Max-Age=600;Path=/;HttpOnly;SameSite=Lax",
-				CondTest: "if blue_acl",
+				Cond:     "if",
+				CondTest: "blue_acl",
 				Index:    1,
 			},
 		},
@@ -246,8 +248,14 @@ func TestDataPlaneClientReplaceFrontendInTransactionFiltersInvalidResponseRules(
 	if !ok {
 		t.Fatalf("expected first rule object, got %#v", rawRules[0])
 	}
-	if got := firstRule["hdr_fmt"]; got != `"release-1;Max-Age=600;Path=/;HttpOnly;SameSite=Lax"` {
-		t.Fatalf("expected quoted hdr_fmt for Set-Cookie, got %#v", got)
+	if got := firstRule["hdr_format"]; got != `"release-1;Max-Age=600;Path=/;HttpOnly;SameSite=Lax"` {
+		t.Fatalf("expected quoted hdr_format for Set-Cookie, got %#v", got)
+	}
+	if got := firstRule["cond"]; got != "if" {
+		t.Fatalf("expected rule cond to be if, got %#v", got)
+	}
+	if got := firstRule["cond_test"]; got != "blue_acl" {
+		t.Fatalf("expected rule cond_test to be acl expression without prefix, got %#v", got)
 	}
 	if got := firstRule["index"]; got != float64(0) {
 		t.Fatalf("expected filtered rule reindexed to 0, got %#v", got)
@@ -283,7 +291,8 @@ func TestDataPlaneClientReplaceFrontendInTransactionKeepsHAProxyFmtExpression(t 
 				Action:   "add-header",
 				Header:   "Set-Cookie",
 				Format:   stickyExpr,
-				CondTest: "if blue_acl",
+				Cond:     "if",
+				CondTest: "blue_acl",
 				Index:    0,
 			},
 		},
@@ -309,11 +318,17 @@ func TestDataPlaneClientReplaceFrontendInTransactionKeepsHAProxyFmtExpression(t 
 	if got := firstRule["type"]; got != "add-header" {
 		t.Fatalf("expected response rule type add-header, got %#v", got)
 	}
-	if got := firstRule["action"]; got != "add-header" {
-		t.Fatalf("expected response rule action add-header, got %#v", got)
+	if got := firstRule["action"]; got != nil {
+		t.Fatalf("expected response rule action omitted in payload, got %#v", got)
 	}
-	if got := firstRule["hdr_fmt"]; got != stickyExpr {
-		t.Fatalf("expected hdr_fmt expression to be preserved, got %#v", got)
+	if got := firstRule["hdr_format"]; got != stickyExpr {
+		t.Fatalf("expected hdr_format expression to be preserved, got %#v", got)
+	}
+	if got := firstRule["cond"]; got != "if" {
+		t.Fatalf("expected response rule cond if, got %#v", got)
+	}
+	if got := firstRule["cond_test"]; got != "blue_acl" {
+		t.Fatalf("expected response rule cond_test without if/unless prefix, got %#v", got)
 	}
 }
 
@@ -338,7 +353,7 @@ func assertServerPayload(t *testing.T, request recordedRequest, resolvers string
 	}
 }
 
-func assertFrontendResponseRulePayload(t *testing.T, request recordedRequest, action string, condTest string) {
+func assertFrontendResponseRulePayload(t *testing.T, request recordedRequest, action string, cond string, condTest string) {
 	t.Helper()
 	var payload map[string]any
 	if err := json.Unmarshal([]byte(request.body), &payload); err != nil {
@@ -355,11 +370,11 @@ func assertFrontendResponseRulePayload(t *testing.T, request recordedRequest, ac
 	if got := firstRule["type"]; got != action {
 		t.Fatalf("expected first response rule type %q, got %#v", action, got)
 	}
-	if got := firstRule["action"]; got != action {
-		t.Fatalf("expected first response rule action %q, got %#v", action, got)
+	if got := firstRule["action"]; got != nil {
+		t.Fatalf("expected first response rule action omitted in payload, got %#v", got)
 	}
-	if got := firstRule["cond"]; got != nil {
-		t.Fatalf("expected first response rule cond to be omitted when cond_test is prefixed, got %#v", got)
+	if got := firstRule["cond"]; got != cond {
+		t.Fatalf("expected first response rule cond %q, got %#v", cond, got)
 	}
 	if got := firstRule["cond_test"]; got != condTest {
 		t.Fatalf("expected first response rule cond_test %q, got %#v", condTest, got)

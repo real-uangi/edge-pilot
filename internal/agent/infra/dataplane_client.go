@@ -56,9 +56,9 @@ type frontendSwitchRule struct {
 
 type httpAfterResponseRule struct {
 	Type     string `json:"type"`
-	Action   string `json:"action"`
+	Action   string `json:"-"`
 	Header   string `json:"hdr_name,omitempty"`
-	Format   string `json:"hdr_fmt,omitempty"`
+	Format   string `json:"hdr_format,omitempty"`
 	Cond     string `json:"cond,omitempty"`
 	CondTest string `json:"cond_test,omitempty"`
 	Index    int    `json:"index"`
@@ -168,16 +168,32 @@ func (c *DataPlaneAPIClient) ReplaceFrontendInTransaction(ctx context.Context, t
 func filterHTTPAfterResponseRules(rules []httpAfterResponseRule) []httpAfterResponseRule {
 	out := make([]httpAfterResponseRule, 0, len(rules))
 	for _, rule := range rules {
-		if strings.TrimSpace(rule.Type) == "" || strings.TrimSpace(rule.Action) == "" {
+		rule.Type = strings.TrimSpace(rule.Type)
+		if rule.Type == "" {
 			continue
 		}
 		if strings.TrimSpace(rule.Header) == "" {
 			continue
 		}
-		if strings.TrimSpace(rule.CondTest) == "" {
+		rule.Cond = strings.TrimSpace(rule.Cond)
+		rule.CondTest = strings.TrimSpace(rule.CondTest)
+		if rule.CondTest == "" {
 			continue
 		}
 		if strings.TrimSpace(rule.Format) == "" {
+			continue
+		}
+		if strings.HasPrefix(rule.CondTest, "if ") {
+			rule.Cond = "if"
+			rule.CondTest = strings.TrimSpace(strings.TrimPrefix(rule.CondTest, "if "))
+		} else if strings.HasPrefix(rule.CondTest, "unless ") {
+			rule.Cond = "unless"
+			rule.CondTest = strings.TrimSpace(strings.TrimPrefix(rule.CondTest, "unless "))
+		}
+		if rule.Cond != "if" && rule.Cond != "unless" {
+			rule.Cond = "if"
+		}
+		if rule.CondTest == "" {
 			continue
 		}
 		rule.Format = normalizeHAProxyFmt(rule.Format)
