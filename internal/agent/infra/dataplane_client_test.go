@@ -72,6 +72,7 @@ func TestDataPlaneClientTransactionWritesIncludeTransactionID(t *testing.T) {
 		Mode: "http",
 		HTTPAfterResponseRules: []httpAfterResponseRule{
 			{
+				Type:     "set-header",
 				Action:   "set-header",
 				Header:   "X-Test",
 				Format:   "release-1",
@@ -184,6 +185,7 @@ func TestDataPlaneClientReplaceFrontendInTransactionFiltersInvalidResponseRules(
 		Mode: "http",
 		HTTPAfterResponseRules: []httpAfterResponseRule{
 			{
+				Type:     "add-header",
 				Action:   "add-header",
 				Header:   "Set-Cookie",
 				Cond:     "if",
@@ -191,6 +193,7 @@ func TestDataPlaneClientReplaceFrontendInTransactionFiltersInvalidResponseRules(
 				Index:    0,
 			},
 			{
+				Type:     "add-header",
 				Action:   "add-header",
 				Header:   "Set-Cookie",
 				Format:   "release-1;Max-Age=600;Path=/;HttpOnly;SameSite=Lax",
@@ -254,6 +257,7 @@ func TestDataPlaneClientReplaceFrontendInTransactionKeepsHAProxyFmtExpression(t 
 		Mode: "http",
 		HTTPAfterResponseRules: []httpAfterResponseRule{
 			{
+				Type:     "add-header",
 				Action:   "add-header",
 				Header:   "Set-Cookie",
 				Format:   stickyExpr,
@@ -281,8 +285,8 @@ func TestDataPlaneClientReplaceFrontendInTransactionKeepsHAProxyFmtExpression(t 
 	if !ok {
 		t.Fatalf("expected first rule object, got %#v", rawRules[0])
 	}
-	if got := firstRule["type"]; got != nil {
-		t.Fatalf("expected response rule type to be omitted, got %#v", got)
+	if got := firstRule["type"]; got != "add-header" {
+		t.Fatalf("expected response rule type add-header, got %#v", got)
 	}
 	if got := firstRule["action"]; got != "add-header" {
 		t.Fatalf("expected response rule action add-header, got %#v", got)
@@ -327,8 +331,8 @@ func assertFrontendResponseRulePayload(t *testing.T, request recordedRequest, ac
 	if !ok {
 		t.Fatalf("expected first rule object, got %#v", rawRules[0])
 	}
-	if got := firstRule["type"]; got != nil {
-		t.Fatalf("expected first response rule type to be omitted, got %#v", got)
+	if got := firstRule["type"]; got != action {
+		t.Fatalf("expected first response rule type %q, got %#v", action, got)
 	}
 	if got := firstRule["action"]; got != action {
 		t.Fatalf("expected first response rule action %q, got %#v", action, got)

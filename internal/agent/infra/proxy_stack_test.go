@@ -383,6 +383,9 @@ func TestFrontendSectionAddsStickyPreviewAndDiagnosticRules(t *testing.T) {
 	if section.HTTPAfterResponseRules[0].Action != "add-header" {
 		t.Fatalf("expected sticky cookie response rule action add-header, got %#v", section.HTTPAfterResponseRules[0])
 	}
+	if section.HTTPAfterResponseRules[0].Type != "add-header" {
+		t.Fatalf("expected sticky cookie response rule type add-header, got %#v", section.HTTPAfterResponseRules[0])
+	}
 	if strings.TrimSpace(section.HTTPAfterResponseRules[0].Cond) != "if" {
 		t.Fatalf("expected response rule cond=if, got %#v", section.HTTPAfterResponseRules[0])
 	}
@@ -401,6 +404,9 @@ func TestFrontendSectionAddsStickyPreviewAndDiagnosticRules(t *testing.T) {
 	if section.HTTPAfterResponseRules[1].Action != "set-header" {
 		t.Fatalf("expected response rule action set-header, got %#v", section.HTTPAfterResponseRules[1])
 	}
+	if section.HTTPAfterResponseRules[1].Type != "set-header" {
+		t.Fatalf("expected response rule type set-header, got %#v", section.HTTPAfterResponseRules[1])
+	}
 	if strings.TrimSpace(section.HTTPAfterResponseRules[1].Cond) != "if" {
 		t.Fatalf("expected response rule cond=if, got %#v", section.HTTPAfterResponseRules[1])
 	}
@@ -416,7 +422,13 @@ func TestFrontendSectionAddsStickyPreviewAndDiagnosticRules(t *testing.T) {
 	if section.HTTPAfterResponseRules[2].Action != "set-header" {
 		t.Fatalf("expected response rule action set-header, got %#v", section.HTTPAfterResponseRules[2])
 	}
+	if section.HTTPAfterResponseRules[2].Type != "set-header" {
+		t.Fatalf("expected response rule type set-header, got %#v", section.HTTPAfterResponseRules[2])
+	}
 	for i, rule := range section.HTTPAfterResponseRules {
+		if strings.TrimSpace(rule.Type) != strings.TrimSpace(rule.Action) {
+			t.Fatalf("response rule[%d] type should equal action, got %#v", i, rule)
+		}
 		if strings.TrimSpace(rule.Cond) != "if" {
 			t.Fatalf("response rule[%d] cond should be if, got %#v", i, rule)
 		}
@@ -447,6 +459,9 @@ func TestFrontendSectionSkipsInvalidResponseHeaderRules(t *testing.T) {
 		}
 		if rule.Index != i {
 			t.Fatalf("response rule[%d] should be reindexed to %d, got %d", i, i, rule.Index)
+		}
+		if strings.TrimSpace(rule.Type) != strings.TrimSpace(rule.Action) {
+			t.Fatalf("response rule[%d] type should equal action, got %#v", i, rule)
 		}
 		if strings.TrimSpace(rule.Cond) != "if" {
 			t.Fatalf("response rule[%d] should keep cond=if, got %#v", i, rule)
