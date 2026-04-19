@@ -54,7 +54,21 @@ func TestDataPlaneClientTransactionWritesIncludeTransactionID(t *testing.T) {
 
 	client := newDataPlaneAPIClient(func() string { return server.URL }, func() string { return "admin" }, func() string { return "secret" })
 	ctx := context.Background()
-	if err := client.EnsureBackendInTransaction(ctx, "tx-1", backendSection{Name: "be-api", Mode: "http"}); err != nil {
+	if err := client.EnsureBackendInTransaction(ctx, "tx-1", backendSection{
+		Name: "be-api",
+		Mode: "http",
+		From: " unnamed_defaults_1 ",
+		HTTPResponseRules: []httpResponseRule{
+			{
+				Type:     "set-header",
+				Action:   "set-header",
+				Header:   "X-Test",
+				Format:   "release-1",
+				CondTest: "if backend_acl_expr",
+				Index:    0,
+			},
+		},
+	}); err != nil {
 		t.Fatalf("EnsureBackendInTransaction() error = %v", err)
 	}
 	if err := client.EnsureServerInTransaction(ctx, "be-api", "tx-1", backendServer{
@@ -98,6 +112,8 @@ func TestDataPlaneClientTransactionWritesIncludeTransactionID(t *testing.T) {
 		t.Fatalf("expected 6 requests, got %d", len(requests))
 	}
 	assertTransactionRequest(t, requests[0], http.MethodPut, "/v3/services/haproxy/configuration/backends/be-api", "tx-1", false)
+	assertBackendPayload(t, requests[0], "unnamed_defaults_1")
+	assertBackendResponseRulePayload(t, requests[0], "set-header", "if", "backend_acl_expr")
 	assertTransactionRequest(t, requests[1], http.MethodPut, "/v3/services/haproxy/configuration/backends/be-api/servers/blue", "tx-1", false)
 	assertServerPayload(t, requests[1], managedProxyResolversName, managedProxyInitAddrFallback)
 	assertTransactionRequest(t, requests[2], http.MethodPut, "/v3/services/haproxy/configuration/frontends/ep_http", "tx-1", true)
@@ -137,6 +153,98 @@ func TestDataPlaneClientEnsureBackendInTransactionCreatesWhenMissing(t *testing.
 	}
 	assertTransactionRequest(t, requests[0], http.MethodPut, "/v3/services/haproxy/configuration/backends/be-new", "tx-9", false)
 	assertTransactionRequest(t, requests[1], http.MethodPost, "/v3/services/haproxy/configuration/backends", "tx-9", false)
+}
+
+func TestDataPlaneClientEnsureBackendInTransactionFiltersResponseRules(t *testing.T) {
+	var requests []recordedRequest
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, err := io.ReadAll(r.Body)
+		if err != nil {
+			t.Fatalf("ReadAll() error = %v", err)
+		}
+		requests = append(requests, recordedRequest{
+			method: r.Method,
+			path:   r.URL.Path,
+			query:  r.URL.Query(),
+			body:   string(body),
+		})
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer server.Close()
+
+	client := newDataPlaneAPIClient(func() string { return server.URL }, func() string { return "admin" }, func() string { return "secret" })
+	err := client.EnsureBackendInTransaction(context.Background(), "tx-10", backendSection{
+		Name: "be-test",
+		Mode: "http",
+		From: " unnamed_defaults_1 ",
+		HTTPResponseRules: []httpResponseRule{
+			{
+				Type:   "add-header",
+				Action: "add-header",
+				Header: "Set-Cookie",
+				Format: "release-1;Max-Age=600;Path=/;HttpOnly;SameSite=Lax",
+				Index:  0,
+			},
+			{
+				Type:     "set-header",
+				Action:   "set-header",
+				Header:   "X-Current",
+				Format:   "release-1",
+				CondTest: "if backend_acl",
+				Index:    1,
+			},
+			{
+				Type:   "set-header",
+				Action: "set-header",
+				Header: "",
+				Format: "invalid",
+				Index:  2,
+			},
+		},
+	})
+	if err != nil {
+		t.Fatalf("EnsureBackendInTransaction() error = %v", err)
+	}
+	if len(requests) != 1 {
+		t.Fatalf("expected 1 request, got %d", len(requests))
+	}
+	assertTransactionRequest(t, requests[0], http.MethodPut, "/v3/services/haproxy/configuration/backends/be-test", "tx-10", false)
+	assertBackendPayload(t, requests[0], "unnamed_defaults_1")
+
+	var payload map[string]any
+	if err := json.Unmarshal([]byte(requests[0].body), &payload); err != nil {
+		t.Fatalf("Unmarshal() error = %v", err)
+	}
+	rawRules, ok := payload["http_response_rule_list"].([]any)
+	if !ok {
+		t.Fatalf("expected http_response_rule_list array, got %#v", payload["http_response_rule_list"])
+	}
+	if len(rawRules) != 2 {
+		t.Fatalf("expected filtered backend response rules size 2, got %d", len(rawRules))
+	}
+	firstRule := rawRules[0].(map[string]any)
+	if got := firstRule["hdr_format"]; got != `"release-1;Max-Age=600;Path=/;HttpOnly;SameSite=Lax"` {
+		t.Fatalf("expected quoted hdr_format for backend Set-Cookie, got %#v", got)
+	}
+	if got := firstRule["cond"]; got != nil {
+		t.Fatalf("expected unconditional backend rule cond omitted, got %#v", got)
+	}
+	if got := firstRule["cond_test"]; got != nil {
+		t.Fatalf("expected unconditional backend rule cond_test omitted, got %#v", got)
+	}
+	if got := firstRule["index"]; got != float64(0) {
+		t.Fatalf("expected first backend response rule index 0, got %#v", got)
+	}
+	secondRule := rawRules[1].(map[string]any)
+	if got := secondRule["cond"]; got != "if" {
+		t.Fatalf("expected conditional backend rule cond if, got %#v", got)
+	}
+	if got := secondRule["cond_test"]; got != "backend_acl" {
+		t.Fatalf("expected conditional backend rule cond_test trimmed, got %#v", got)
+	}
+	if got := secondRule["index"]; got != float64(1) {
+		t.Fatalf("expected second backend response rule index 1, got %#v", got)
+	}
 }
 
 func TestDataPlaneClientShowRawConfig(t *testing.T) {
@@ -350,6 +458,45 @@ func assertServerPayload(t *testing.T, request recordedRequest, resolvers string
 	}
 	if got := payload["init_addr"]; got != initAddr {
 		t.Fatalf("expected init_addr %q, got %#v", initAddr, got)
+	}
+}
+
+func assertBackendPayload(t *testing.T, request recordedRequest, from string) {
+	t.Helper()
+	var payload map[string]any
+	if err := json.Unmarshal([]byte(request.body), &payload); err != nil {
+		t.Fatalf("Unmarshal() error = %v", err)
+	}
+	if got := payload["from"]; got != from {
+		t.Fatalf("expected backend from %q, got %#v", from, got)
+	}
+}
+
+func assertBackendResponseRulePayload(t *testing.T, request recordedRequest, action string, cond string, condTest string) {
+	t.Helper()
+	var payload map[string]any
+	if err := json.Unmarshal([]byte(request.body), &payload); err != nil {
+		t.Fatalf("Unmarshal() error = %v", err)
+	}
+	rawRules, ok := payload["http_response_rule_list"].([]any)
+	if !ok || len(rawRules) == 0 {
+		t.Fatalf("expected non-empty http_response_rule_list, got %#v", payload["http_response_rule_list"])
+	}
+	firstRule, ok := rawRules[0].(map[string]any)
+	if !ok {
+		t.Fatalf("expected first rule object, got %#v", rawRules[0])
+	}
+	if got := firstRule["type"]; got != action {
+		t.Fatalf("expected first backend response rule type %q, got %#v", action, got)
+	}
+	if got := firstRule["action"]; got != nil {
+		t.Fatalf("expected first backend response rule action omitted in payload, got %#v", got)
+	}
+	if got := firstRule["cond"]; got != cond {
+		t.Fatalf("expected first backend response rule cond %q, got %#v", cond, got)
+	}
+	if got := firstRule["cond_test"]; got != condTest {
+		t.Fatalf("expected first backend response rule cond_test %q, got %#v", condTest, got)
 	}
 }
 

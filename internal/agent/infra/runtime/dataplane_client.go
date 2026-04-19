@@ -65,13 +65,25 @@ type httpAfterResponseRule struct {
 }
 
 type backendSection struct {
-	Name    string         `json:"name"`
-	Mode    string         `json:"mode"`
-	Balance backendBalance `json:"balance,omitempty"`
+	Name              string             `json:"name"`
+	Mode              string             `json:"mode"`
+	From              string             `json:"from,omitempty"`
+	Balance           backendBalance     `json:"balance,omitempty"`
+	HTTPResponseRules []httpResponseRule `json:"http_response_rule_list,omitempty"`
 }
 
 type backendBalance struct {
 	Algorithm string `json:"algorithm"`
+}
+
+type httpResponseRule struct {
+	Type     string `json:"type"`
+	Action   string `json:"-"`
+	Header   string `json:"hdr_name,omitempty"`
+	Format   string `json:"hdr_format,omitempty"`
+	Cond     string `json:"cond,omitempty"`
+	CondTest string `json:"cond_test,omitempty"`
+	Index    int    `json:"index"`
 }
 
 type backendServer struct {
@@ -205,6 +217,42 @@ func filterHTTPAfterResponseRules(rules []httpAfterResponseRule) []httpAfterResp
 	return out
 }
 
+func filterHTTPResponseRules(rules []httpResponseRule) []httpResponseRule {
+	out := make([]httpResponseRule, 0, len(rules))
+	for _, rule := range rules {
+		rule.Type = strings.TrimSpace(rule.Type)
+		if rule.Type == "" {
+			continue
+		}
+		if strings.TrimSpace(rule.Header) == "" {
+			continue
+		}
+		if strings.TrimSpace(rule.Format) == "" {
+			continue
+		}
+		rule.Cond = strings.TrimSpace(rule.Cond)
+		rule.CondTest = strings.TrimSpace(rule.CondTest)
+		if strings.HasPrefix(rule.CondTest, "if ") {
+			rule.Cond = "if"
+			rule.CondTest = strings.TrimSpace(strings.TrimPrefix(rule.CondTest, "if "))
+		} else if strings.HasPrefix(rule.CondTest, "unless ") {
+			rule.Cond = "unless"
+			rule.CondTest = strings.TrimSpace(strings.TrimPrefix(rule.CondTest, "unless "))
+		}
+		if rule.CondTest == "" {
+			rule.Cond = ""
+		} else if rule.Cond != "if" && rule.Cond != "unless" {
+			rule.Cond = "if"
+		}
+		rule.Format = normalizeHAProxyFmt(rule.Format)
+		out = append(out, rule)
+	}
+	for i := range out {
+		out[i].Index = i
+	}
+	return out
+}
+
 func normalizeHAProxyFmt(value string) string {
 	value = strings.TrimSpace(value)
 	if value == "" {
@@ -257,6 +305,8 @@ func decodeRawConfigResponse(respBody []byte) (string, error) {
 }
 
 func (c *DataPlaneAPIClient) EnsureBackend(ctx context.Context, section backendSection) error {
+	section.From = strings.TrimSpace(section.From)
+	section.HTTPResponseRules = filterHTTPResponseRules(section.HTTPResponseRules)
 	version, err := c.ConfigurationVersion(ctx)
 	if err != nil {
 		return err
@@ -274,6 +324,8 @@ func (c *DataPlaneAPIClient) EnsureBackend(ctx context.Context, section backendS
 }
 
 func (c *DataPlaneAPIClient) EnsureBackendInTransaction(ctx context.Context, transactionID string, section backendSection) error {
+	section.From = strings.TrimSpace(section.From)
+	section.HTTPResponseRules = filterHTTPResponseRules(section.HTTPResponseRules)
 	path := c.configurationPath("/v3/services/haproxy/configuration/backends/"+url.PathEscape(section.Name), "", transactionID, false)
 	if _, err := c.do(ctx, http.MethodPut, path, section); err != nil {
 		if !isHTTPStatus(err, http.StatusNotFound) {

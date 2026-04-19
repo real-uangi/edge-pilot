@@ -30,6 +30,7 @@ var containerIDPattern = regexp.MustCompile(`[0-9a-f]{12,64}`)
 
 const managedProxyResolversName = "ep_dns"
 const managedProxyInitAddrFallback = "last,libc,none"
+const managedProxyDefaultsName = "unnamed_defaults_1"
 
 type managedProxyRuntimeAPI interface {
 	SetServerAddress(context.Context, string, string, string, int) error
@@ -405,9 +406,11 @@ func (m *ManagedProxyRuntime) reconcileLocked(ctx context.Context, snapshot *grp
 			backend := backendSection{
 				Name: serviceBackendName(service, slot),
 				Mode: "http",
+				From: managedProxyDefaultsName,
 				Balance: backendBalance{
 					Algorithm: "roundrobin",
 				},
+				HTTPResponseRules: serviceBackendResponseRules(service, slot),
 			}
 			failureContext.Backends = append(failureContext.Backends, backend)
 			if err := m.dataplane.EnsureBackendInTransaction(ctx, transactionID, backend); err != nil {
@@ -627,7 +630,6 @@ func (m *ManagedProxyRuntime) frontendSection(snapshot *grpcapi.ProxyConfigSnaps
 	})
 	acls := make([]frontendACL, 0, len(services)*6)
 	rules := make([]frontendSwitchRule, 0, len(services)*5)
-	responseRules := make([]httpAfterResponseRule, 0, len(services)*6)
 	for idx, service := range services {
 		hostACL := aclName(service.GetServiceId(), "host")
 		pathACL := aclName(service.GetServiceId(), "path")
@@ -638,7 +640,6 @@ func (m *ManagedProxyRuntime) frontendSection(snapshot *grpcapi.ProxyConfigSnaps
 		cookieName := servicecatalogapp.StickyCookieName(service.GetServiceKey())
 		blueReleaseID := blueReleaseID(service)
 		greenReleaseID := greenReleaseID(service)
-		liveReleaseID := liveReleaseID(service)
 		acls = append(acls, frontendACL{
 			Name:      hostACL,
 			Criterion: "hdr(host)",
@@ -708,65 +709,6 @@ func (m *ManagedProxyRuntime) frontendSection(snapshot *grpcapi.ProxyConfigSnaps
 			CondTest: hostACL + " " + pathACL + " !" + queryBlueACL + " !" + queryGreenACL + " !" + cookieBlueACL + " !" + cookieGreenACL,
 			Index:    ruleBase + 4,
 		})
-		blueBackend := serviceBackendName(service, grpcapi.Slot_SLOT_BLUE)
-		greenBackend := serviceBackendName(service, grpcapi.Slot_SLOT_GREEN)
-		responseBase := idx * 6
-		responseCondBlue := hostACL + " " + pathACL + " { be_name -i " + blueBackend + " }"
-		responseCondGreen := hostACL + " " + pathACL + " { be_name -i " + greenBackend + " }"
-		responseRules = append(responseRules, httpAfterResponseRule{
-			Type:     "add-header",
-			Action:   "add-header",
-			Header:   "Set-Cookie",
-			Format:   servicecatalogapp.BuildStickyCookie(cookieName, blueReleaseID, service.GetRoutePathPrefix()),
-			Cond:     "if",
-			CondTest: responseCondBlue,
-			Index:    responseBase,
-		})
-		responseRules = append(responseRules, httpAfterResponseRule{
-			Type:     "set-header",
-			Action:   "set-header",
-			Header:   servicecatalogapp.CurrentReleaseIDHeaderName,
-			Format:   blueReleaseID,
-			Cond:     "if",
-			CondTest: responseCondBlue,
-			Index:    responseBase + 1,
-		})
-		responseRules = append(responseRules, httpAfterResponseRule{
-			Type:     "set-header",
-			Action:   "set-header",
-			Header:   servicecatalogapp.LiveReleaseIDHeaderName,
-			Format:   liveReleaseID,
-			Cond:     "if",
-			CondTest: responseCondBlue,
-			Index:    responseBase + 2,
-		})
-		responseRules = append(responseRules, httpAfterResponseRule{
-			Type:     "add-header",
-			Action:   "add-header",
-			Header:   "Set-Cookie",
-			Format:   servicecatalogapp.BuildStickyCookie(cookieName, greenReleaseID, service.GetRoutePathPrefix()),
-			Cond:     "if",
-			CondTest: responseCondGreen,
-			Index:    responseBase + 3,
-		})
-		responseRules = append(responseRules, httpAfterResponseRule{
-			Type:     "set-header",
-			Action:   "set-header",
-			Header:   servicecatalogapp.CurrentReleaseIDHeaderName,
-			Format:   greenReleaseID,
-			Cond:     "if",
-			CondTest: responseCondGreen,
-			Index:    responseBase + 4,
-		})
-		responseRules = append(responseRules, httpAfterResponseRule{
-			Type:     "set-header",
-			Action:   "set-header",
-			Header:   servicecatalogapp.LiveReleaseIDHeaderName,
-			Format:   liveReleaseID,
-			Cond:     "if",
-			CondTest: responseCondGreen,
-			Index:    responseBase + 5,
-		})
 	}
 	return frontendSection{
 		Name:           snapshot.GetFrontendName(),
@@ -781,7 +723,6 @@ func (m *ManagedProxyRuntime) frontendSection(snapshot *grpcapi.ProxyConfigSnaps
 		},
 		ACLList:                  acls,
 		BackendSwitchingRuleList: rules,
-		HTTPAfterResponseRules:   filterHTTPAfterResponseRules(responseRules),
 	}
 }
 
@@ -945,7 +886,7 @@ func (m *ManagedProxyRuntime) baseHAProxyConfig() string {
 userlist dataplaneapi
   user %s insecure-password %s
 
-defaults
+defaults %s
   log global
   mode http
   option httplog
@@ -974,7 +915,7 @@ frontend %s
 backend %s
   mode http
   http-request return status 503 content-type text/plain string no-route
-`, m.cfg.HAProxyRuntimePort, m.cfg.DataPlaneAPIUsername, m.cfg.DataPlaneAPIPassword, managedProxyResolversName, servicecatalogapp.SharedFrontendName, servicecatalogapp.SharedFrontendBindPort, servicecatalogapp.SharedDefaultBackend, servicecatalogapp.SharedDefaultBackend)
+`, m.cfg.HAProxyRuntimePort, m.cfg.DataPlaneAPIUsername, m.cfg.DataPlaneAPIPassword, managedProxyDefaultsName, managedProxyResolversName, servicecatalogapp.SharedFrontendName, servicecatalogapp.SharedFrontendBindPort, servicecatalogapp.SharedDefaultBackend, servicecatalogapp.SharedDefaultBackend)
 }
 
 func (m *ManagedProxyRuntime) dataPlaneConfig() string {
@@ -1042,6 +983,43 @@ func serviceServerName(service *grpcapi.ProxyServiceConfig, slot grpcapi.Slot) s
 		return servicecatalogapp.ServerName(model.SlotBlue)
 	case grpcapi.Slot_SLOT_GREEN:
 		return servicecatalogapp.ServerName(model.SlotGreen)
+	default:
+		return ""
+	}
+}
+
+func serviceBackendResponseRules(service *grpcapi.ProxyServiceConfig, slot grpcapi.Slot) []httpResponseRule {
+	currentReleaseID := slotReleaseID(service, slot)
+	cookieName := servicecatalogapp.StickyCookieName(service.GetServiceKey())
+	rules := []httpResponseRule{
+		{
+			Type:   "add-header",
+			Action: "add-header",
+			Header: "Set-Cookie",
+			Format: servicecatalogapp.BuildStickyCookie(cookieName, currentReleaseID, service.GetRoutePathPrefix()),
+		},
+		{
+			Type:   "set-header",
+			Action: "set-header",
+			Header: servicecatalogapp.CurrentReleaseIDHeaderName,
+			Format: currentReleaseID,
+		},
+		{
+			Type:   "set-header",
+			Action: "set-header",
+			Header: servicecatalogapp.LiveReleaseIDHeaderName,
+			Format: liveReleaseID(service),
+		},
+	}
+	return filterHTTPResponseRules(rules)
+}
+
+func slotReleaseID(service *grpcapi.ProxyServiceConfig, slot grpcapi.Slot) string {
+	switch slot {
+	case grpcapi.Slot_SLOT_BLUE:
+		return blueReleaseID(service)
+	case grpcapi.Slot_SLOT_GREEN:
+		return greenReleaseID(service)
 	default:
 		return ""
 	}

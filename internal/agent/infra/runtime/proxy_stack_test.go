@@ -250,10 +250,22 @@ func TestFormatDataplaneFailureContextIncludesFrontendDetails(t *testing.T) {
 		Frontend:       proxy.frontendSection(testProxySnapshotWithService(grpcapi.Slot_SLOT_BLUE)),
 		DefaultBackend: "ep_default",
 		ServiceCount:   1,
+		Backends: []backendSection{
+			{
+				Name:              "be-api_blue",
+				Mode:              "http",
+				From:              managedProxyDefaultsName,
+				Balance:           backendBalance{Algorithm: "roundrobin"},
+				HTTPResponseRules: serviceBackendResponseRules(testProxySnapshotWithService(grpcapi.Slot_SLOT_BLUE).Services[0], grpcapi.Slot_SLOT_BLUE),
+			},
+		},
 	})
 
-	if !strings.Contains(contextText, `"http_after_response_rule_list"`) {
-		t.Fatalf("expected response rules in frontend context, got %s", contextText)
+	if strings.Contains(contextText, `"http_after_response_rule_list"`) {
+		t.Fatalf("expected frontend context without response rules, got %s", contextText)
+	}
+	if !strings.Contains(contextText, `"http_response_rule_list"`) {
+		t.Fatalf("expected backend response rules in context, got %s", contextText)
 	}
 	if !strings.Contains(contextText, servicecatalogapp.CurrentReleaseIDHeaderName) {
 		t.Fatalf("expected current release header in frontend context, got %s", contextText)
@@ -310,8 +322,11 @@ func TestFormatDataplaneFailureContextIncludesRenderedFrontendConfig(t *testing.
 	if !strings.Contains(contextText, "\"intendedFrontendConfig\":\"frontend ep_http") {
 		t.Fatalf("expected rendered frontend config in context, got %s", contextText)
 	}
-	if !strings.Contains(contextText, "http-after-response add-header Set-Cookie %[str(") {
-		t.Fatalf("expected response rule line in rendered config, got %s", contextText)
+	if strings.Contains(contextText, "http-after-response") {
+		t.Fatalf("expected rendered frontend config without response rule lines, got %s", contextText)
+	}
+	if !strings.Contains(contextText, "use_backend be-api_blue") {
+		t.Fatalf("expected backend switching lines in rendered config, got %s", contextText)
 	}
 }
 
@@ -359,13 +374,10 @@ func TestReconcileLockedPrecreatesServersWithResolversForEmptyInstances(t *testi
 	}
 }
 
-func TestFrontendSectionAddsStickyPreviewAndDiagnosticRules(t *testing.T) {
+func TestFrontendSectionAddsStickyPreviewRoutingRules(t *testing.T) {
 	proxy := newTestManagedProxyRuntime(&fakeManagedProxyDataplane{}, &fakeManagedProxyRuntime{})
 
 	section := proxy.frontendSection(testProxySnapshotWithService(grpcapi.Slot_SLOT_GREEN))
-	hostAndPathCond := aclName("svc-1", "host") + " " + aclName("svc-1", "path")
-	blueCond := hostAndPathCond + " { be_name -i be-api_blue }"
-	greenCond := hostAndPathCond + " { be_name -i be-api_green }"
 
 	if len(section.BackendSwitchingRuleList) != 5 {
 		t.Fatalf("expected 5 switching rules, got %d", len(section.BackendSwitchingRuleList))
@@ -376,124 +388,94 @@ func TestFrontendSectionAddsStickyPreviewAndDiagnosticRules(t *testing.T) {
 	if section.BackendSwitchingRuleList[4].Name != "be-api_green" {
 		t.Fatalf("expected live green backend fallback, got %q", section.BackendSwitchingRuleList[4].Name)
 	}
-	if len(section.HTTPAfterResponseRules) != 6 {
-		t.Fatalf("expected 6 response rules, got %d", len(section.HTTPAfterResponseRules))
+	if len(section.HTTPAfterResponseRules) != 0 {
+		t.Fatalf("expected frontend to not define response header rules, got %d", len(section.HTTPAfterResponseRules))
 	}
-	findRule := func(header string, condTest string) *httpAfterResponseRule {
-		for i := range section.HTTPAfterResponseRules {
-			rule := &section.HTTPAfterResponseRules[i]
-			if strings.EqualFold(rule.Header, header) && strings.TrimSpace(rule.CondTest) == condTest {
-				return rule
+}
+
+func TestReconcileLockedBuildsBackendResponseHeaderRules(t *testing.T) {
+	callLog := make([]string, 0, 16)
+	dataplane := &fakeManagedProxyDataplane{
+		version: "8",
+		txID:    "tx-backend-rules",
+		backends: []string{
+			"ep_default",
+		},
+		callLog: &callLog,
+	}
+	runtime := &fakeManagedProxyRuntime{callLog: &callLog}
+	proxy := newTestManagedProxyRuntime(dataplane, runtime)
+
+	if err := proxy.reconcileLocked(context.Background(), testProxySnapshotWithService(grpcapi.Slot_SLOT_GREEN)); err != nil {
+		t.Fatalf("reconcileLocked() error = %v", err)
+	}
+
+	blue := findBackendConfig(dataplane.backendConfigs, "be-api_blue")
+	green := findBackendConfig(dataplane.backendConfigs, "be-api_green")
+	if blue == nil || green == nil {
+		t.Fatalf("expected both blue/green backend configs, got %#v", dataplane.backendConfigs)
+	}
+	if blue.From != managedProxyDefaultsName || green.From != managedProxyDefaultsName {
+		t.Fatalf("expected backend from defaults %q, got blue=%q green=%q", managedProxyDefaultsName, blue.From, green.From)
+	}
+	assertBackendResponseRule(t, blue.HTTPResponseRules, "Set-Cookie", "release-blue")
+	assertBackendResponseRule(t, green.HTTPResponseRules, "Set-Cookie", "release-green")
+	assertBackendResponseRuleExact(t, blue.HTTPResponseRules, servicecatalogapp.CurrentReleaseIDHeaderName, "release-blue")
+	assertBackendResponseRuleExact(t, green.HTTPResponseRules, servicecatalogapp.CurrentReleaseIDHeaderName, "release-green")
+	assertBackendResponseRuleExact(t, blue.HTTPResponseRules, servicecatalogapp.LiveReleaseIDHeaderName, "release-green")
+	assertBackendResponseRuleExact(t, green.HTTPResponseRules, servicecatalogapp.LiveReleaseIDHeaderName, "release-green")
+	for _, backend := range []backendSection{*blue, *green} {
+		for i, rule := range backend.HTTPResponseRules {
+			if rule.Index != i {
+				t.Fatalf("backend %s rule[%d] should be reindexed, got %d", backend.Name, i, rule.Index)
 			}
-		}
-		return nil
-	}
-	if rule := findRule("Set-Cookie", blueCond); rule == nil {
-		t.Fatalf("expected blue sticky cookie response rule")
-	} else if !strings.Contains(rule.Format, "=release-blue;") {
-		t.Fatalf("expected blue sticky cookie to carry blue release id, got %#v", *rule)
-	}
-	if rule := findRule("Set-Cookie", greenCond); rule == nil {
-		t.Fatalf("expected green sticky cookie response rule")
-	} else if !strings.Contains(rule.Format, "=release-green;") {
-		t.Fatalf("expected green sticky cookie to carry green release id, got %#v", *rule)
-	}
-	if rule := findRule(servicecatalogapp.CurrentReleaseIDHeaderName, blueCond); rule == nil {
-		t.Fatalf("expected blue current release header rule")
-	} else if rule.Format != "release-blue" {
-		t.Fatalf("expected blue current release id, got %#v", *rule)
-	}
-	if rule := findRule(servicecatalogapp.CurrentReleaseIDHeaderName, greenCond); rule == nil {
-		t.Fatalf("expected green current release header rule")
-	} else if rule.Format != "release-green" {
-		t.Fatalf("expected green current release id, got %#v", *rule)
-	}
-	if rule := findRule(servicecatalogapp.LiveReleaseIDHeaderName, blueCond); rule == nil {
-		t.Fatalf("expected blue live release header rule")
-	} else if rule.Format != "release-green" {
-		t.Fatalf("expected live release id to remain green, got %#v", *rule)
-	}
-	if rule := findRule(servicecatalogapp.LiveReleaseIDHeaderName, greenCond); rule == nil {
-		t.Fatalf("expected green live release header rule")
-	} else if rule.Format != "release-green" {
-		t.Fatalf("expected live release id to remain green, got %#v", *rule)
-	}
-	for i, rule := range section.HTTPAfterResponseRules {
-		if strings.TrimSpace(rule.Type) != strings.TrimSpace(rule.Action) {
-			t.Fatalf("response rule[%d] type should equal action, got %#v", i, rule)
-		}
-		if strings.TrimSpace(rule.Cond) != "if" {
-			t.Fatalf("response rule[%d] cond should be if, got %#v", i, rule)
-		}
-		if strings.TrimSpace(rule.CondTest) == "" {
-			t.Fatalf("response rule[%d] cond_test should not be empty, got %#v", i, rule)
-		}
-		if strings.HasPrefix(rule.CondTest, "if ") || strings.HasPrefix(rule.CondTest, "unless ") {
-			t.Fatalf("response rule[%d] cond_test should not include if/unless prefix, got %#v", i, rule)
-		}
-		if strings.Contains(rule.Format, "__edge_pilot_invalid__") {
-			t.Fatalf("response rule[%d] should not expose invalid placeholder value, got %#v", i, rule)
+			if strings.TrimSpace(rule.Type) != strings.TrimSpace(rule.Action) {
+				t.Fatalf("backend %s rule[%d] type should equal action, got %#v", backend.Name, i, rule)
+			}
+			if strings.TrimSpace(rule.Cond) != "" || strings.TrimSpace(rule.CondTest) != "" {
+				t.Fatalf("backend %s rule[%d] should be unconditional, got %#v", backend.Name, i, rule)
+			}
 		}
 	}
 }
 
-func TestFrontendSectionSkipsInvalidResponseHeaderRules(t *testing.T) {
-	proxy := newTestManagedProxyRuntime(&fakeManagedProxyDataplane{}, &fakeManagedProxyRuntime{})
-
+func TestReconcileLockedFiltersInvalidBackendResponseHeaderRules(t *testing.T) {
+	callLog := make([]string, 0, 16)
+	dataplane := &fakeManagedProxyDataplane{
+		version: "8",
+		txID:    "tx-filter-backend-rules",
+		backends: []string{
+			"ep_default",
+		},
+		callLog: &callLog,
+	}
+	runtime := &fakeManagedProxyRuntime{callLog: &callLog}
+	proxy := newTestManagedProxyRuntime(dataplane, runtime)
 	snapshot := testProxySnapshotWithService(grpcapi.Slot_SLOT_BLUE)
 	snapshot.Services[0].GreenServerName = ""
 
-	section := proxy.frontendSection(snapshot)
-	hostAndPathCond := aclName("svc-1", "host") + " " + aclName("svc-1", "path")
-	blueCond := hostAndPathCond + " { be_name -i be-api_blue }"
-	greenCond := hostAndPathCond + " { be_name -i be-api_green }"
+	if err := proxy.reconcileLocked(context.Background(), snapshot); err != nil {
+		t.Fatalf("reconcileLocked() error = %v", err)
+	}
 
-	if len(section.HTTPAfterResponseRules) != 4 {
-		t.Fatalf("expected 4 response rules after filtering invalid rules, got %d", len(section.HTTPAfterResponseRules))
+	blue := findBackendConfig(dataplane.backendConfigs, "be-api_blue")
+	green := findBackendConfig(dataplane.backendConfigs, "be-api_green")
+	if blue == nil || green == nil {
+		t.Fatalf("expected both blue/green backend configs, got %#v", dataplane.backendConfigs)
 	}
-	findRule := func(header string, condTest string) *httpAfterResponseRule {
-		for i := range section.HTTPAfterResponseRules {
-			rule := &section.HTTPAfterResponseRules[i]
-			if strings.EqualFold(rule.Header, header) && strings.TrimSpace(rule.CondTest) == condTest {
-				return rule
-			}
-		}
-		return nil
+	if len(blue.HTTPResponseRules) != 3 {
+		t.Fatalf("expected blue backend keep 3 response rules, got %d", len(blue.HTTPResponseRules))
 	}
-	if rule := findRule("Set-Cookie", blueCond); rule == nil {
-		t.Fatalf("expected blue sticky cookie response rule")
+	if len(green.HTTPResponseRules) != 1 {
+		t.Fatalf("expected green backend keep only live release header rule, got %d", len(green.HTTPResponseRules))
 	}
-	if rule := findRule("Set-Cookie", greenCond); rule != nil {
-		t.Fatalf("green sticky cookie response rule should be filtered when green release is empty, got %#v", *rule)
+	if findBackendRule(green.HTTPResponseRules, "Set-Cookie") != nil {
+		t.Fatalf("green backend sticky cookie rule should be filtered when release id is empty, got %#v", green.HTTPResponseRules)
 	}
-	if rule := findRule(servicecatalogapp.CurrentReleaseIDHeaderName, blueCond); rule == nil {
-		t.Fatalf("expected blue current release response rule")
-	} else if rule.Format != "release-blue" {
-		t.Fatalf("expected blue current release id, got %#v", *rule)
+	if findBackendRule(green.HTTPResponseRules, servicecatalogapp.CurrentReleaseIDHeaderName) != nil {
+		t.Fatalf("green backend current release rule should be filtered when release id is empty, got %#v", green.HTTPResponseRules)
 	}
-	if rule := findRule(servicecatalogapp.CurrentReleaseIDHeaderName, greenCond); rule != nil {
-		t.Fatalf("green current release response rule should be filtered when green release is empty, got %#v", *rule)
-	}
-	for i, rule := range section.HTTPAfterResponseRules {
-		if strings.TrimSpace(rule.Format) == "" {
-			t.Fatalf("response rule[%d] should have non-empty hdr_fmt, got %#v", i, rule)
-		}
-		if rule.Index != i {
-			t.Fatalf("response rule[%d] should be reindexed to %d, got %d", i, i, rule.Index)
-		}
-		if strings.TrimSpace(rule.Type) != strings.TrimSpace(rule.Action) {
-			t.Fatalf("response rule[%d] type should equal action, got %#v", i, rule)
-		}
-		if strings.TrimSpace(rule.Cond) != "if" {
-			t.Fatalf("response rule[%d] should keep cond as if, got %#v", i, rule)
-		}
-		if strings.TrimSpace(rule.CondTest) != blueCond && strings.TrimSpace(rule.CondTest) != greenCond {
-			t.Fatalf("response rule[%d] should keep backend-aware cond_test, got %#v", i, rule)
-		}
-		if strings.Contains(rule.Format, "__edge_pilot_invalid__") {
-			t.Fatalf("response rule[%d] should not expose invalid placeholder value, got %#v", i, rule)
-		}
-	}
+	assertBackendResponseRuleExact(t, green.HTTPResponseRules, servicecatalogapp.LiveReleaseIDHeaderName, "release-blue")
 }
 
 func TestProxyInspectNeedsBootstrapRefresh(t *testing.T) {
@@ -515,6 +497,46 @@ func TestProxyInspectNeedsBootstrapRefresh(t *testing.T) {
 	inspect.Config.Labels[proxyStackBootstrapLabelKey] = "outdated"
 	if !proxyInspectNeedsBootstrapRefresh(inspect, expectedHash) {
 		t.Fatal("expected mismatched bootstrap hash to require refresh")
+	}
+}
+
+func findBackendConfig(backends []backendSection, name string) *backendSection {
+	for i := range backends {
+		if backends[i].Name == name {
+			return &backends[i]
+		}
+	}
+	return nil
+}
+
+func findBackendRule(rules []httpResponseRule, header string) *httpResponseRule {
+	for i := range rules {
+		if strings.EqualFold(strings.TrimSpace(rules[i].Header), strings.TrimSpace(header)) {
+			return &rules[i]
+		}
+	}
+	return nil
+}
+
+func assertBackendResponseRule(t *testing.T, rules []httpResponseRule, header string, expectedContains string) {
+	t.Helper()
+	rule := findBackendRule(rules, header)
+	if rule == nil {
+		t.Fatalf("expected response header rule %q, got %#v", header, rules)
+	}
+	if !strings.Contains(rule.Format, expectedContains) {
+		t.Fatalf("expected response header %q format contains %q, got %#v", header, expectedContains, *rule)
+	}
+}
+
+func assertBackendResponseRuleExact(t *testing.T, rules []httpResponseRule, header string, expected string) {
+	t.Helper()
+	rule := findBackendRule(rules, header)
+	if rule == nil {
+		t.Fatalf("expected response header rule %q, got %#v", header, rules)
+	}
+	if strings.TrimSpace(rule.Format) != strings.TrimSpace(expected) {
+		t.Fatalf("expected response header %q format %q, got %#v", header, expected, *rule)
 	}
 }
 
@@ -571,6 +593,7 @@ type fakeManagedProxyDataplane struct {
 	abortErr         error
 	callLog          *[]string
 	serverConfigs    []backendServer
+	backendConfigs   []backendSection
 }
 
 func (f *fakeManagedProxyDataplane) ConfigurationVersion(context.Context) (string, error) {
@@ -609,6 +632,7 @@ func (f *fakeManagedProxyDataplane) ReplaceFrontendInTransaction(_ context.Conte
 
 func (f *fakeManagedProxyDataplane) EnsureBackendInTransaction(_ context.Context, transactionID string, section backendSection) error {
 	*f.callLog = append(*f.callLog, "ensure-backend:"+section.Name+"@"+transactionID)
+	f.backendConfigs = append(f.backendConfigs, section)
 	return f.ensureBackendErr
 }
 
