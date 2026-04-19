@@ -297,6 +297,7 @@ func (c *DockerClient) recreateManagedContainer(ctx context.Context, spec manage
 		Labels:       labels,
 		ExposedPorts: spec.Exposed,
 		HostConfig: dockerHostConfig{
+			NetworkMode:   spec.Network,
 			PortBindings:  spec.PortBinds,
 			Binds:         spec.Binds,
 			Tmpfs:         spec.Tmpfs,
@@ -353,18 +354,29 @@ func (c *DockerClient) ensureManagedContainer(ctx context.Context, spec managedC
 	}
 	if inspect == nil {
 		c.logger.Infof("managed proxy container missing, creating: name=%s", spec.Name)
-		return true, c.recreateManagedContainer(ctx, spec)
+		if err := c.recreateAndValidateManagedContainer(ctx, spec, "container missing"); err != nil {
+			return true, err
+		}
+		return true, nil
 	}
 	if inspect.Config.Labels[proxyStackLabelKey] != "true" || inspect.Config.Labels[proxyStackRoleLabelKey] != spec.Labels[proxyStackRoleLabelKey] {
 		c.logger.Infof("managed proxy container name conflict: name=%s role=%s", spec.Name, spec.Labels[proxyStackRoleLabelKey])
 		return false, fmt.Errorf("proxy stack container name conflict: %s is not managed by edge-pilot", spec.Name)
 	}
 	if !managedContainerMatches(inspect, spec) {
-		c.logger.Infof("managed proxy container drift detected, recreating: name=%s currentImage=%s desiredImage=%s", spec.Name, inspect.Config.Image, spec.Image)
-		if err := c.RemoveContainer(ctx, inspect.ID); err != nil {
-			return false, err
+		reason := fmt.Sprintf("spec drift: currentImage=%s desiredImage=%s", inspect.Config.Image, spec.Image)
+		c.logger.Infof("managed proxy container drift detected: name=%s reason=%s", spec.Name, reason)
+		if err := c.recreateAndValidateManagedContainer(ctx, spec, reason); err != nil {
+			return true, err
 		}
-		return true, c.recreateManagedContainer(ctx, spec)
+		return true, nil
+	}
+	if reason := managedContainerNetworkDriftReason(inspect, spec); reason != "" {
+		c.logger.Infof("managed proxy container network drift detected: name=%s reason=%s", spec.Name, reason)
+		if err := c.recreateAndValidateManagedContainer(ctx, spec, reason); err != nil {
+			return true, err
+		}
+		return true, nil
 	}
 	if inspect.State.Running {
 		return false, nil
@@ -399,9 +411,86 @@ func (c *DockerClient) ensureManagedContainer(ctx context.Context, spec managedC
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode >= 300 {
-		return false, fmt.Errorf("docker start container failed: %s", resp.Status)
+		recreateReason := fmt.Sprintf("failed to start existing container: %s", resp.Status)
+		c.logger.Infof("managed proxy container start failed, recreating: name=%s reason=%s", spec.Name, recreateReason)
+		if err := c.recreateAndValidateManagedContainer(ctx, spec, recreateReason); err != nil {
+			return true, err
+		}
+		return true, nil
+	}
+	if err := c.validateManagedContainer(ctx, spec); err != nil {
+		recreateReason := fmt.Sprintf("post-start validation failed: %s", err.Error())
+		c.logger.Infof("managed proxy container post-start validation failed, recreating: name=%s reason=%s", spec.Name, recreateReason)
+		if recreateErr := c.recreateAndValidateManagedContainer(ctx, spec, recreateReason); recreateErr != nil {
+			return true, recreateErr
+		}
 	}
 	return true, nil
+}
+
+func (c *DockerClient) recreateAndValidateManagedContainer(ctx context.Context, spec managedContainerSpec, reason string) error {
+	c.logger.Infof("recreating managed proxy container: name=%s reason=%s", spec.Name, strings.TrimSpace(reason))
+	inspect, err := c.inspectManagedContainer(ctx, spec.Name)
+	if err != nil {
+		return err
+	}
+	if inspect != nil {
+		if err := c.RemoveContainer(ctx, inspect.ID); err != nil {
+			return err
+		}
+	}
+	if err := c.recreateManagedContainer(ctx, spec); err != nil {
+		return err
+	}
+	if err := c.validateManagedContainer(ctx, spec); err != nil {
+		return fmt.Errorf("managed proxy container recreation succeeded but validation failed: %w", err)
+	}
+	c.logger.Infof("managed proxy container recreated and validated: name=%s reason=%s", spec.Name, strings.TrimSpace(reason))
+	return nil
+}
+
+func (c *DockerClient) validateManagedContainer(ctx context.Context, spec managedContainerSpec) error {
+	inspect, err := c.inspectManagedContainer(ctx, spec.Name)
+	if err != nil {
+		return err
+	}
+	return validateManagedContainerState(inspect, spec)
+}
+
+func validateManagedContainerState(inspect *dockerContainerInspect, spec managedContainerSpec) error {
+	if inspect == nil {
+		return fmt.Errorf("container %s not found", spec.Name)
+	}
+	if !inspect.State.Running {
+		return fmt.Errorf("container %s is not running", spec.Name)
+	}
+	if reason := managedContainerNetworkDriftReason(inspect, spec); reason != "" {
+		return fmt.Errorf("%s", reason)
+	}
+	return nil
+}
+
+func managedContainerNetworkDriftReason(inspect *dockerContainerInspect, spec managedContainerSpec) string {
+	if inspect == nil {
+		return ""
+	}
+	networkName := strings.TrimSpace(spec.Network)
+	if networkName == "" {
+		return ""
+	}
+	endpoint, ok := inspect.NetworkSettings.Networks[networkName]
+	if !ok {
+		return fmt.Sprintf("container is not attached to network %s", networkName)
+	}
+	expectedIP := strings.TrimSpace(spec.IPAddress)
+	if expectedIP == "" {
+		return ""
+	}
+	actualIP := strings.TrimSpace(endpoint.IPAddress)
+	if actualIP != expectedIP {
+		return fmt.Sprintf("network %s ip mismatch: expected %s got %s", networkName, expectedIP, actualIP)
+	}
+	return ""
 }
 
 func (c *DockerClient) ensureContainerConnectedToNetwork(ctx context.Context, containerID string, networkName string) error {

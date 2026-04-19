@@ -134,6 +134,7 @@ func buildWorkloadCreateRequest(cfg *config.AgentRuntimeConfig, imageRef string,
 		},
 		ExposedPorts: exposedPorts(task),
 		HostConfig: dockerHostConfig{
+			NetworkMode:  cfg.ProxyNetworkName,
 			PortBindings: flattenPublishedPorts(task.GetPublishedPorts()),
 			Binds:        flattenVolumes(task.GetVolumes()),
 			RestartPolicy: dockerRestartPolicy{
@@ -435,6 +436,7 @@ type dockerCreateRequest struct {
 }
 
 type dockerHostConfig struct {
+	NetworkMode   string                         `json:"NetworkMode,omitempty"`
 	PortBindings  map[string][]dockerPortBinding `json:"PortBindings,omitempty"`
 	Binds         []string                       `json:"Binds,omitempty"`
 	Tmpfs         map[string]string              `json:"Tmpfs,omitempty"`

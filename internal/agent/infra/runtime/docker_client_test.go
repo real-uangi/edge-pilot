@@ -30,6 +30,9 @@ func TestBuildWorkloadCreateRequestUsesLimitedRestartPolicy(t *testing.T) {
 	if req.HostConfig.RestartPolicy.MaximumRetryCount != 5 {
 		t.Fatalf("expected workload max retries 5, got %d", req.HostConfig.RestartPolicy.MaximumRetryCount)
 	}
+	if req.HostConfig.NetworkMode != "epNet" {
+		t.Fatalf("expected workload network mode epNet, got %q", req.HostConfig.NetworkMode)
+	}
 	if _, ok := req.NetworkingConfig.EndpointsConfig["epNet"]; !ok {
 		t.Fatal("expected workload to attach to proxy network")
 	}
