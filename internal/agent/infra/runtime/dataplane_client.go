@@ -311,12 +311,12 @@ func (c *DataPlaneAPIClient) EnsureBackend(ctx context.Context, section backendS
 	if err != nil {
 		return err
 	}
-	path := c.configurationPath("/v3/services/haproxy/configuration/backends/"+url.PathEscape(section.Name), version, "", false)
+	path := c.configurationPath("/v3/services/haproxy/configuration/backends/"+url.PathEscape(section.Name), version, "", true)
 	if _, err := c.do(ctx, http.MethodPut, path, section); err != nil {
 		if !isHTTPStatus(err, http.StatusNotFound) {
 			return err
 		}
-		createPath := c.configurationPath("/v3/services/haproxy/configuration/backends", version, "", false)
+		createPath := c.configurationPath("/v3/services/haproxy/configuration/backends", version, "", true)
 		_, err = c.do(ctx, http.MethodPost, createPath, section)
 		return err
 	}
@@ -326,12 +326,12 @@ func (c *DataPlaneAPIClient) EnsureBackend(ctx context.Context, section backendS
 func (c *DataPlaneAPIClient) EnsureBackendInTransaction(ctx context.Context, transactionID string, section backendSection) error {
 	section.From = strings.TrimSpace(section.From)
 	section.HTTPResponseRules = filterHTTPResponseRules(section.HTTPResponseRules)
-	path := c.configurationPath("/v3/services/haproxy/configuration/backends/"+url.PathEscape(section.Name), "", transactionID, false)
+	path := c.configurationPath("/v3/services/haproxy/configuration/backends/"+url.PathEscape(section.Name), "", transactionID, true)
 	if _, err := c.do(ctx, http.MethodPut, path, section); err != nil {
 		if !isHTTPStatus(err, http.StatusNotFound) {
 			return err
 		}
-		createPath := c.configurationPath("/v3/services/haproxy/configuration/backends", "", transactionID, false)
+		createPath := c.configurationPath("/v3/services/haproxy/configuration/backends", "", transactionID, true)
 		_, err = c.do(ctx, http.MethodPost, createPath, section)
 		return err
 	}

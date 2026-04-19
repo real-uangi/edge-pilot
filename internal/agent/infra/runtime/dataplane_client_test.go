@@ -111,7 +111,7 @@ func TestDataPlaneClientTransactionWritesIncludeTransactionID(t *testing.T) {
 	if len(requests) != 6 {
 		t.Fatalf("expected 6 requests, got %d", len(requests))
 	}
-	assertTransactionRequest(t, requests[0], http.MethodPut, "/v3/services/haproxy/configuration/backends/be-api", "tx-1", false)
+	assertTransactionRequest(t, requests[0], http.MethodPut, "/v3/services/haproxy/configuration/backends/be-api", "tx-1", true)
 	assertBackendPayload(t, requests[0], "unnamed_defaults_1")
 	assertBackendResponseRulePayload(t, requests[0], "set-header", "if", "backend_acl_expr")
 	assertTransactionRequest(t, requests[1], http.MethodPut, "/v3/services/haproxy/configuration/backends/be-api/servers/blue", "tx-1", false)
@@ -151,8 +151,8 @@ func TestDataPlaneClientEnsureBackendInTransactionCreatesWhenMissing(t *testing.
 	if len(requests) != 2 {
 		t.Fatalf("expected 2 requests, got %d", len(requests))
 	}
-	assertTransactionRequest(t, requests[0], http.MethodPut, "/v3/services/haproxy/configuration/backends/be-new", "tx-9", false)
-	assertTransactionRequest(t, requests[1], http.MethodPost, "/v3/services/haproxy/configuration/backends", "tx-9", false)
+	assertTransactionRequest(t, requests[0], http.MethodPut, "/v3/services/haproxy/configuration/backends/be-new", "tx-9", true)
+	assertTransactionRequest(t, requests[1], http.MethodPost, "/v3/services/haproxy/configuration/backends", "tx-9", true)
 }
 
 func TestDataPlaneClientEnsureBackendInTransactionFiltersResponseRules(t *testing.T) {
@@ -208,7 +208,7 @@ func TestDataPlaneClientEnsureBackendInTransactionFiltersResponseRules(t *testin
 	if len(requests) != 1 {
 		t.Fatalf("expected 1 request, got %d", len(requests))
 	}
-	assertTransactionRequest(t, requests[0], http.MethodPut, "/v3/services/haproxy/configuration/backends/be-test", "tx-10", false)
+	assertTransactionRequest(t, requests[0], http.MethodPut, "/v3/services/haproxy/configuration/backends/be-test", "tx-10", true)
 	assertBackendPayload(t, requests[0], "unnamed_defaults_1")
 
 	var payload map[string]any
