@@ -34,7 +34,7 @@ func TestManagedContainerNetworkDriftReason(t *testing.T) {
 
 func TestEnsureManagedContainerRecreateWhenNetworkDrifts(t *testing.T) {
 	spec := testManagedContainerSpec()
-	initial := buildManagedContainerInspect(spec, "proxy-old", true, "bridge", "172.17.0.2")
+	initial := buildManagedContainerInspect(spec, "proxy-old", true, spec.Network, "172.29.0.250")
 	daemon := newFakeManagedContainerDaemon(t, spec, initial, false)
 	client := daemon.newClient()
 
@@ -44,6 +44,9 @@ func TestEnsureManagedContainerRecreateWhenNetworkDrifts(t *testing.T) {
 	}
 	if !changed {
 		t.Fatal("expected ensureManagedContainer report changed=true")
+	}
+	if daemon.connectCount != 0 {
+		t.Fatalf("expected no network connect call for ip mismatch drift, got %d", daemon.connectCount)
 	}
 	if daemon.createCount != 1 {
 		t.Fatalf("expected one recreate call, got %d", daemon.createCount)
@@ -56,6 +59,33 @@ func TestEnsureManagedContainerRecreateWhenNetworkDrifts(t *testing.T) {
 	}
 	if daemon.createRequests[0].HostConfig.NetworkMode != spec.Network {
 		t.Fatalf("expected recreate request network mode %s, got %q", spec.Network, daemon.createRequests[0].HostConfig.NetworkMode)
+	}
+}
+
+func TestEnsureManagedContainerRepairsMissingNetworkInPlace(t *testing.T) {
+	spec := testManagedContainerSpec()
+	initial := buildManagedContainerInspect(spec, "proxy-old", true, "bridge", "172.17.0.2")
+	daemon := newFakeManagedContainerDaemon(t, spec, initial, false)
+	client := daemon.newClient()
+
+	changed, err := client.ensureManagedContainer(context.Background(), spec)
+	if err != nil {
+		t.Fatalf("expected ensureManagedContainer success, got %v", err)
+	}
+	if !changed {
+		t.Fatal("expected ensureManagedContainer report changed=true")
+	}
+	if daemon.connectCount != 1 {
+		t.Fatalf("expected one network connect call, got %d", daemon.connectCount)
+	}
+	if daemon.connectIPs[0] != spec.IPAddress {
+		t.Fatalf("expected network connect use ip %s, got %q", spec.IPAddress, daemon.connectIPs[0])
+	}
+	if daemon.createCount != 0 {
+		t.Fatalf("expected no recreate call, got %d", daemon.createCount)
+	}
+	if daemon.removeCount != 0 {
+		t.Fatalf("expected no remove call, got %d", daemon.removeCount)
 	}
 }
 
@@ -82,7 +112,7 @@ func TestEnsureManagedContainerKeepsHealthyContainer(t *testing.T) {
 
 func TestEnsureManagedContainerReturnsErrorWhenRecreatedContainerStillInvalid(t *testing.T) {
 	spec := testManagedContainerSpec()
-	initial := buildManagedContainerInspect(spec, "proxy-old", true, "bridge", "172.17.0.2")
+	initial := buildManagedContainerInspect(spec, "proxy-old", true, spec.Network, "172.29.0.250")
 	daemon := newFakeManagedContainerDaemon(t, spec, initial, true)
 	client := daemon.newClient()
 
@@ -106,6 +136,8 @@ type fakeManagedContainerDaemon struct {
 	recreateInvalid bool
 	createCount     int
 	removeCount     int
+	connectCount    int
+	connectIPs      []string
 	createRequests  []dockerCreateContainerRequest
 	server          *httptest.Server
 }
@@ -173,6 +205,29 @@ func (d *fakeManagedContainerDaemon) handle(w http.ResponseWriter, r *http.Reque
 			return
 		}
 		http.NotFound(w, r)
+		return
+
+	case r.Method == http.MethodPost && strings.HasPrefix(r.URL.Path, "/networks/") && strings.HasSuffix(r.URL.Path, "/connect"):
+		var req dockerNetworkConnectRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			d.t.Fatalf("decode connect request failed: %v", err)
+		}
+		if d.current == nil || req.Container != d.current.ID {
+			http.NotFound(w, r)
+			return
+		}
+		networkName := strings.TrimSuffix(strings.TrimPrefix(r.URL.Path, "/networks/"), "/connect")
+		networkName = strings.TrimSpace(networkName)
+		ip := ""
+		if req.EndpointConfig != nil && req.EndpointConfig.IPAMConfig != nil {
+			ip = strings.TrimSpace(req.EndpointConfig.IPAMConfig.IPv4Address)
+		}
+		d.current.NetworkSettings.Networks[networkName] = struct {
+			IPAddress string `json:"IPAddress"`
+		}{IPAddress: ip}
+		d.connectCount++
+		d.connectIPs = append(d.connectIPs, ip)
+		w.WriteHeader(http.StatusOK)
 		return
 
 	case r.Method == http.MethodPost && r.URL.Path == "/containers/create":

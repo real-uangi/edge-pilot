@@ -124,7 +124,8 @@ type dockerVolumeCreateRequest struct {
 }
 
 type dockerNetworkConnectRequest struct {
-	Container string `json:"Container"`
+	Container      string                  `json:"Container"`
+	EndpointConfig *dockerEndpointSettings `json:"EndpointConfig,omitempty"`
 }
 
 func (c *DockerClient) inspectManagedContainer(ctx context.Context, name string) (*dockerContainerInspect, error) {
@@ -342,7 +343,8 @@ func (c *DockerClient) recreateManagedContainer(ctx context.Context, spec manage
 	}
 	defer startResp.Body.Close()
 	if startResp.StatusCode >= 300 {
-		return fmt.Errorf("docker start container failed: %s", startResp.Status)
+		respBody, _ := io.ReadAll(startResp.Body)
+		return fmt.Errorf("docker start container failed: %s %s", startResp.Status, strings.TrimSpace(string(respBody)))
 	}
 	return nil
 }
@@ -373,6 +375,17 @@ func (c *DockerClient) ensureManagedContainer(ctx context.Context, spec managedC
 	}
 	if reason := managedContainerNetworkDriftReason(inspect, spec); reason != "" {
 		c.logger.Infof("managed proxy container network drift detected: name=%s reason=%s", spec.Name, reason)
+		if managedContainerMissingNetwork(inspect, spec) && inspect.State.Running {
+			c.logger.Infof("attempting in-place network attach before recreate: name=%s network=%s ip=%s", spec.Name, spec.Network, spec.IPAddress)
+			if err := c.ensureContainerConnectedToNetworkWithIP(ctx, inspect.ID, spec.Network, spec.IPAddress); err != nil {
+				c.logger.Infof("in-place network attach failed, falling back to recreate: name=%s err=%v", spec.Name, err)
+			} else if err := c.validateManagedContainer(ctx, spec); err != nil {
+				c.logger.Infof("post-attach validation failed, falling back to recreate: name=%s err=%v", spec.Name, err)
+			} else {
+				c.logger.Infof("managed proxy container network repaired in-place: name=%s network=%s ip=%s", spec.Name, spec.Network, spec.IPAddress)
+				return true, nil
+			}
+		}
 		if err := c.recreateAndValidateManagedContainer(ctx, spec, reason); err != nil {
 			return true, err
 		}
@@ -411,7 +424,8 @@ func (c *DockerClient) ensureManagedContainer(ctx context.Context, spec managedC
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode >= 300 {
-		recreateReason := fmt.Sprintf("failed to start existing container: %s", resp.Status)
+		respBody, _ := io.ReadAll(resp.Body)
+		recreateReason := fmt.Sprintf("failed to start existing container: %s %s", resp.Status, strings.TrimSpace(string(respBody)))
 		c.logger.Infof("managed proxy container start failed, recreating: name=%s reason=%s", spec.Name, recreateReason)
 		if err := c.recreateAndValidateManagedContainer(ctx, spec, recreateReason); err != nil {
 			return true, err
@@ -494,6 +508,10 @@ func managedContainerNetworkDriftReason(inspect *dockerContainerInspect, spec ma
 }
 
 func (c *DockerClient) ensureContainerConnectedToNetwork(ctx context.Context, containerID string, networkName string) error {
+	return c.ensureContainerConnectedToNetworkWithIP(ctx, containerID, networkName, "")
+}
+
+func (c *DockerClient) ensureContainerConnectedToNetworkWithIP(ctx context.Context, containerID string, networkName string, ip string) error {
 	inspect, err := c.inspectManagedContainer(ctx, containerID)
 	if err != nil {
 		return err
@@ -505,7 +523,13 @@ func (c *DockerClient) ensureContainerConnectedToNetwork(ctx context.Context, co
 		return nil
 	}
 	c.logger.Infof("connecting container to proxy network: containerId=%s network=%s", containerID, networkName)
-	body, err := json.Marshal(dockerNetworkConnectRequest{Container: containerID})
+	connectReq := dockerNetworkConnectRequest{Container: containerID}
+	if strings.TrimSpace(ip) != "" {
+		connectReq.EndpointConfig = &dockerEndpointSettings{
+			IPAMConfig: &dockerEndpointIPAMConfig{IPv4Address: strings.TrimSpace(ip)},
+		}
+	}
+	body, err := json.Marshal(connectReq)
 	if err != nil {
 		return err
 	}
@@ -523,6 +547,18 @@ func (c *DockerClient) ensureContainerConnectedToNetwork(ctx context.Context, co
 		return fmt.Errorf("docker connect network failed: %s", resp.Status)
 	}
 	return nil
+}
+
+func managedContainerMissingNetwork(inspect *dockerContainerInspect, spec managedContainerSpec) bool {
+	if inspect == nil {
+		return false
+	}
+	networkName := strings.TrimSpace(spec.Network)
+	if networkName == "" {
+		return false
+	}
+	_, ok := inspect.NetworkSettings.Networks[networkName]
+	return !ok
 }
 
 func (c *DockerClient) writeVolumeFiles(ctx context.Context, helperImage string, volumeName string, files map[string]string) error {
