@@ -88,6 +88,7 @@ export interface ReleaseRecord {
   triggeredBy: string;
   traceId: string;
   status: number;
+  trafficPercent: number;
   targetSlot: number;
   previousLiveSlot: number;
   currentTaskId: string | null;
@@ -360,6 +361,12 @@ export const api = {
     return request<ReleaseRecord>(`/api/admin/releases/${id}/confirm-switch`, {
       method: "POST",
       body: "{}",
+    });
+  },
+  setReleaseTraffic(id: string, percent: number) {
+    return request<ReleaseRecord>(`/api/admin/releases/${id}/traffic`, {
+      method: "POST",
+      body: JSON.stringify({ percent }),
     });
   },
   rollbackRelease(id: string) {

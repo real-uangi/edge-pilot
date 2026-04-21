@@ -26,6 +26,7 @@ type ReleaseOutput struct {
 	TriggeredBy              string              `json:"triggeredBy"`
 	TraceID                  string              `json:"traceId"`
 	Status                   model.ReleaseStatus `json:"status"`
+	TrafficPercent           int                 `json:"trafficPercent"`
 	TargetSlot               model.Slot          `json:"targetSlot"`
 	PreviousLiveSlot         model.Slot          `json:"previousLiveSlot"`
 	CurrentTaskID            *uuid.UUID          `json:"currentTaskId"`
@@ -60,6 +61,10 @@ type ConfirmSwitchRequest struct {
 
 type RollbackRequest struct {
 	Operator string `json:"operator"`
+}
+
+type AdjustTrafficRequest struct {
+	Percent int `json:"percent" binding:"required,min=0,max=100"`
 }
 
 type TaskSnapshot struct {

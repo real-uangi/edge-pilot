@@ -165,6 +165,7 @@ type Release struct {
 	TriggeredBy      string        `json:"triggeredBy" gorm:"size:255"`
 	TraceID          string        `json:"traceId" gorm:"size:255;index"`
 	Status           ReleaseStatus `json:"status" gorm:"index;not null"`
+	TrafficPercent   int           `json:"trafficPercent"`
 	TargetSlot       Slot          `json:"targetSlot"`
 	PreviousLiveSlot Slot          `json:"previousLiveSlot"`
 	CurrentTaskID    *uuid.UUID    `json:"currentTaskId" gorm:"type:uuid"`

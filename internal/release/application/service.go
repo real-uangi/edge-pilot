@@ -119,6 +119,7 @@ func (s *Service) CreateFromCI(req dto.CreateReleaseFromCIRequest) (*dto.Release
 		TriggeredBy:      req.TriggeredBy,
 		TraceID:          req.TraceID,
 		Status:           model.ReleaseStatusQueued,
+		TrafficPercent:   0,
 		TargetSlot:       nextSlot(spec.CurrentLiveSlot),
 		PreviousLiveSlot: spec.CurrentLiveSlot,
 		SwitchConfirmed:  boolPointer(false),
@@ -153,7 +154,7 @@ func (s *Service) Start(id uuid.UUID, operator string) (*dto.ReleaseOutput, erro
 		return nil, err
 	}
 	if active {
-		return nil, business.NewErrorWithCode("service has active release", 409)
+		return nil, business.NewErrorWithCode("service has in-progress traffic split (1-99%), finish at 0% or 100% before starting a new release", 409)
 	}
 	spec, err := s.services.GetSpecByID(release.ServiceID)
 	if err != nil {
@@ -175,6 +176,13 @@ func (s *Service) Start(id uuid.UUID, operator string) (*dto.ReleaseOutput, erro
 	release.AgentID = spec.AgentID
 	release.PreviousLiveSlot = spec.CurrentLiveSlot
 	release.TargetSlot = nextSlot(spec.CurrentLiveSlot)
+	release.TrafficPercent = 0
+	if err := s.completeSupersededRelease(release, operator); err != nil {
+		return nil, err
+	}
+	if err := s.autoSkipQueuedBeforeStart(release, operator); err != nil {
+		return nil, err
+	}
 	registryAuth, err := s.registryAuth.ResolveForImageRepo(release.ImageRepo)
 	if err != nil {
 		return nil, err
@@ -247,7 +255,11 @@ func (s *Service) Retry(id uuid.UUID, operator string) (*dto.ReleaseOutput, erro
 	release.AgentID = spec.AgentID
 	release.PreviousLiveSlot = spec.CurrentLiveSlot
 	release.TargetSlot = nextSlot(spec.CurrentLiveSlot)
+	release.TrafficPercent = 0
 	release.SwitchConfirmed = boolPointer(false)
+	if err := s.completeSupersededRelease(release, operator); err != nil {
+		return nil, err
+	}
 	release.CompletedAt = nil
 	registryAuth, err := s.registryAuth.ResolveForImageRepo(release.ImageRepo)
 	if err != nil {
@@ -311,43 +323,17 @@ func (s *Service) Skip(id uuid.UUID, operator string) (*dto.ReleaseOutput, error
 }
 
 func (s *Service) ConfirmSwitch(id uuid.UUID, operator string) (*dto.ReleaseOutput, error) {
-	release, err := s.repo.GetRelease(id)
-	if err != nil {
-		return nil, err
-	}
-	if release == nil {
-		return nil, business.ErrNotFound
-	}
-	if release.Status != model.ReleaseStatusReadyToSwitch {
-		return nil, business.NewErrorWithCode("release is not ready to switch", 409)
-	}
-	spec, err := s.services.GetSpecByID(release.ServiceID)
-	if err != nil {
-		return nil, err
-	}
-	task, err := s.newSwitchTask(release, spec, model.TaskTypeSwitchTraffic)
-	if err != nil {
-		return nil, err
-	}
-	if err := s.repo.CreateTask(task); err != nil {
-		return nil, err
-	}
-	release.CurrentTaskID = &task.ID
-	release.SwitchConfirmed = boolPointer(true)
-	if err := s.repo.UpdateRelease(release); err != nil {
-		return nil, err
-	}
-	if err := s.repo.CreateAudit(newAudit("release", release.ID.String(), "switch_confirmed", release.TraceID, operator)); err != nil {
-		return nil, err
-	}
-	if err := s.dispatch(task); err != nil {
-		return nil, err
-	}
-	output := toReleaseOutput(release)
-	return &output, nil
+	return s.SetTrafficPercent(id, 100, operator)
 }
 
 func (s *Service) Rollback(id uuid.UUID, operator string) (*dto.ReleaseOutput, error) {
+	return s.SetTrafficPercent(id, 0, operator)
+}
+
+func (s *Service) SetTrafficPercent(id uuid.UUID, percent int, operator string) (*dto.ReleaseOutput, error) {
+	if percent < 0 || percent > 100 {
+		return nil, business.NewBadRequest("traffic percent must be within 0..100")
+	}
 	release, err := s.repo.GetRelease(id)
 	if err != nil {
 		return nil, err
@@ -355,31 +341,51 @@ func (s *Service) Rollback(id uuid.UUID, operator string) (*dto.ReleaseOutput, e
 	if release == nil {
 		return nil, business.ErrNotFound
 	}
-	if release.Status == model.ReleaseStatusQueued || release.Status == model.ReleaseStatusSkipped {
-		return nil, business.NewErrorWithCode("release has not started", 409)
+	if release.Status == model.ReleaseStatusQueued || release.Status == model.ReleaseStatusSkipped || release.Status == model.ReleaseStatusDispatching || release.Status == model.ReleaseStatusDeploying {
+		return nil, business.NewErrorWithCode("release is not ready for traffic adjustment", 409)
+	}
+	if release.Status.IsTerminal() {
+		return nil, business.NewErrorWithCode("release already finished", 409)
 	}
 	if release.PreviousLiveSlot == 0 {
 		return nil, business.NewErrorWithCode("release has no rollback target", 409)
 	}
-	spec, err := s.services.GetSpecByID(release.ServiceID)
-	if err != nil {
-		return nil, err
+	release.TrafficPercent = percent
+	release.SwitchConfirmed = boolPointer(percent == 100)
+	release.CompletedAt = nil
+	if percent == 100 {
+		release.Status = model.ReleaseStatusSwitched
+		if err := s.services.UpdateLiveSlot(release.ServiceID, release.TargetSlot); err != nil {
+			return nil, err
+		}
+		if err := s.updateTrafficFlags(release.ServiceID, release.TargetSlot, release.PreviousLiveSlot); err != nil {
+			return nil, err
+		}
+	} else {
+		release.Status = model.ReleaseStatusReadyToSwitch
+		if err := s.services.UpdateLiveSlot(release.ServiceID, release.PreviousLiveSlot); err != nil {
+			return nil, err
+		}
+		if err := s.updateTrafficFlags(release.ServiceID, release.PreviousLiveSlot, release.TargetSlot); err != nil {
+			return nil, err
+		}
 	}
-	task, err := s.newRollbackTask(release, spec)
-	if err != nil {
-		return nil, err
-	}
-	if err := s.repo.CreateTask(task); err != nil {
-		return nil, err
-	}
-	release.CurrentTaskID = &task.ID
 	if err := s.repo.UpdateRelease(release); err != nil {
 		return nil, err
 	}
-	if err := s.repo.CreateAudit(newAudit("release", release.ID.String(), "rollback_requested", release.TraceID, operator)); err != nil {
+	if err := s.publishAgent(release.AgentID); err != nil {
 		return nil, err
 	}
-	if err := s.dispatch(task); err != nil {
+	event := "traffic_percent_updated"
+	message := fmt.Sprintf("percent=%d operator=%s", percent, strings.TrimSpace(operator))
+	if percent == 100 {
+		event = "switch_confirmed"
+		message = operator
+	} else if percent == 0 {
+		event = "rollback_requested"
+		message = operator
+	}
+	if err := s.repo.CreateAudit(newAudit("release", release.ID.String(), event, release.TraceID, message)); err != nil {
 		return nil, err
 	}
 	output, err := s.enrichReleaseOutput(release)
@@ -766,6 +772,7 @@ func (s *Service) recordRunningAudit(release *model.Release, task *model.Task, u
 }
 
 func (s *Service) applyTaskSuccess(release *model.Release, task *model.Task, update *grpcapi.TaskUpdate, now time.Time) error {
+	_ = now
 	payload := getJSON(task.Payload)
 	switch task.Type {
 	case model.TaskTypeDeployGreen:
@@ -790,6 +797,8 @@ func (s *Service) applyTaskSuccess(release *model.Release, task *model.Task, upd
 			return err
 		}
 		release.Status = model.ReleaseStatusReadyToSwitch
+		release.TrafficPercent = 0
+		release.SwitchConfirmed = boolPointer(false)
 		if err := s.repo.UpdateRelease(release); err != nil {
 			return err
 		}
@@ -798,8 +807,10 @@ func (s *Service) applyTaskSuccess(release *model.Release, task *model.Task, upd
 		}
 		return s.repo.CreateAudit(newAudit("release", release.ID.String(), "ready_to_switch", release.TraceID, update.GetListenAddress()))
 	case model.TaskTypeSwitchTraffic:
-		release.Status = model.ReleaseStatusCompleted
-		release.CompletedAt = &now
+		release.Status = model.ReleaseStatusSwitched
+		release.TrafficPercent = 100
+		release.SwitchConfirmed = boolPointer(true)
+		release.CompletedAt = nil
 		if err := s.services.UpdateLiveSlot(task.ServiceID, payload.TargetSlot); err != nil {
 			return err
 		}
@@ -814,8 +825,10 @@ func (s *Service) applyTaskSuccess(release *model.Release, task *model.Task, upd
 		}
 		return s.repo.CreateAudit(newAudit("release", release.ID.String(), "traffic_switched", release.TraceID, update.GetServerName()))
 	case model.TaskTypeRollback:
-		release.Status = model.ReleaseStatusRolledBack
-		release.CompletedAt = &now
+		release.Status = model.ReleaseStatusReadyToSwitch
+		release.TrafficPercent = 0
+		release.SwitchConfirmed = boolPointer(false)
+		release.CompletedAt = nil
 		if err := s.services.UpdateLiveSlot(task.ServiceID, payload.TargetSlot); err != nil {
 			return err
 		}
@@ -884,7 +897,7 @@ func (s *Service) newDeployTask(release *model.Release, spec *dto.ServiceDeploym
 		HTTPProbeTimeoutSecond:  defaultInt(spec.HTTPProbeTimeoutSecond, model.DefaultHTTPProbeTimeoutSecond),
 		HTTPProbeIntervalSecond: defaultInt(spec.HTTPProbeIntervalSecond, model.DefaultHTTPProbeIntervalSecond),
 		HTTPSuccessThreshold:    defaultInt(spec.HTTPSuccessThreshold, model.DefaultHTTPSuccessThreshold),
-		BackendName:             servicecatalogapp.BackendName(spec.ID),
+		BackendName:             servicecatalogapp.BackendNameForRelease(spec.ID, release.ID.String()),
 		ServerName:              servicecatalogapp.ServerName(release.TargetSlot),
 		PreviousServer:          servicecatalogapp.ServerName(spec.CurrentLiveSlot),
 		Command:                 spec.Command,
@@ -949,7 +962,7 @@ func (s *Service) newSwitchTask(release *model.Release, spec *dto.ServiceDeploym
 		HTTPProbeTimeoutSecond:  defaultInt(spec.HTTPProbeTimeoutSecond, model.DefaultHTTPProbeTimeoutSecond),
 		HTTPProbeIntervalSecond: defaultInt(spec.HTTPProbeIntervalSecond, model.DefaultHTTPProbeIntervalSecond),
 		HTTPSuccessThreshold:    defaultInt(spec.HTTPSuccessThreshold, model.DefaultHTTPSuccessThreshold),
-		BackendName:             servicecatalogapp.BackendName(spec.ID),
+		BackendName:             servicecatalogapp.BackendNameForRelease(spec.ID, release.ID.String()),
 		ServerName:              servicecatalogapp.ServerName(release.TargetSlot),
 		PreviousServer:          servicecatalogapp.ServerName(release.PreviousLiveSlot),
 		Command:                 spec.Command,
@@ -995,7 +1008,7 @@ func (s *Service) newRollbackTask(release *model.Release, spec *dto.ServiceDeplo
 		HTTPProbeTimeoutSecond:  defaultInt(spec.HTTPProbeTimeoutSecond, model.DefaultHTTPProbeTimeoutSecond),
 		HTTPProbeIntervalSecond: defaultInt(spec.HTTPProbeIntervalSecond, model.DefaultHTTPProbeIntervalSecond),
 		HTTPSuccessThreshold:    defaultInt(spec.HTTPSuccessThreshold, model.DefaultHTTPSuccessThreshold),
-		BackendName:             servicecatalogapp.BackendName(spec.ID),
+		BackendName:             servicecatalogapp.BackendNameForRelease(spec.ID, release.ID.String()),
 		ServerName:              servicecatalogapp.ServerName(release.PreviousLiveSlot),
 		PreviousServer:          servicecatalogapp.ServerName(spec.CurrentLiveSlot),
 		Command:                 spec.Command,
@@ -1049,6 +1062,7 @@ func toReleaseOutput(release *model.Release) dto.ReleaseOutput {
 		TriggeredBy:              release.TriggeredBy,
 		TraceID:                  release.TraceID,
 		Status:                   release.Status,
+		TrafficPercent:           release.TrafficPercent,
 		TargetSlot:               release.TargetSlot,
 		PreviousLiveSlot:         release.PreviousLiveSlot,
 		CurrentTaskID:            release.CurrentTaskID,
@@ -1104,6 +1118,62 @@ func (s *Service) publishAgent(agentID string) error {
 		return nil
 	}
 	return s.proxyConfigs.PublishAgent(agentID)
+}
+
+func (s *Service) completeSupersededRelease(current *model.Release, operator string) error {
+	if current == nil || current.ServiceID == uuid.Nil || current.TargetSlot == 0 {
+		return nil
+	}
+	releases, err := s.repo.ListReleases(0)
+	if err != nil {
+		return err
+	}
+	for i := range releases {
+		item := releases[i]
+		if item.ID == current.ID || item.ServiceID != current.ServiceID || item.TargetSlot != current.TargetSlot {
+			continue
+		}
+		if item.Status != model.ReleaseStatusReadyToSwitch && item.Status != model.ReleaseStatusSwitched {
+			continue
+		}
+		if item.TrafficPercent != 0 {
+			continue
+		}
+		now := time.Now()
+		item.Status = model.ReleaseStatusCompleted
+		item.CompletedAt = &now
+		if err := s.repo.UpdateRelease(&item); err != nil {
+			return err
+		}
+		if err := s.repo.CreateAudit(newAudit("release", item.ID.String(), "release_superseded", item.TraceID, operator)); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (s *Service) autoSkipQueuedBeforeStart(current *model.Release, operator string) error {
+	if current == nil || current.ServiceID == uuid.Nil {
+		return nil
+	}
+	releases, err := s.repo.ListQueuedBefore(current.ServiceID, current.CreatedAt, current.ID)
+	if err != nil {
+		return err
+	}
+	message := fmt.Sprintf("operator=%s started_release_id=%s", strings.TrimSpace(operator), current.ID.String())
+	for i := range releases {
+		item := releases[i]
+		now := time.Now()
+		item.Status = model.ReleaseStatusSkipped
+		item.CompletedAt = &now
+		if err := s.repo.UpdateRelease(&item); err != nil {
+			return err
+		}
+		if err := s.repo.CreateAudit(newAudit("release", item.ID.String(), "release_auto_skipped", item.TraceID, message)); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func (s *Service) recordLateTaskUpdate(release *model.Release, task *model.Task, update *grpcapi.TaskUpdate, reason string) error {

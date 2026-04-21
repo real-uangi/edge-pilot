@@ -167,17 +167,6 @@ func (e *Executor) executeTrafficSwitch(ctx context.Context, task *grpcapi.TaskC
 	if err := e.proxy.EnsureReady(ctx); err != nil {
 		return &TaskExecutionError{Step: "proxy_stack_not_ready", Err: err}
 	}
-	if err := e.proxy.SetServerAddress(ctx, task.GetBackendName(), task.GetServerName(), agentdomain.ManagedContainerName(task.GetServiceKey(), task.GetTargetSlot()), int(task.GetContainerPort())); err != nil {
-		return err
-	}
-	if err := e.proxy.EnableServer(ctx, task.GetBackendName(), task.GetServerName()); err != nil {
-		return err
-	}
-	if task.GetPreviousServer() != "" {
-		if err := e.proxy.DisableServer(ctx, task.GetBackendName(), task.GetPreviousServer()); err != nil {
-			return err
-		}
-	}
 	if removed, err := e.cleanupManagedContainers(ctx, task); err != nil {
 		_ = report(&grpcapi.TaskUpdate{
 			TaskId:       task.GetTaskId(),

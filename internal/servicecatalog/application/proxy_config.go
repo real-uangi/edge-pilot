@@ -55,6 +55,15 @@ func BackendName(serviceID uuid.UUID) string {
 	return serviceID.String()
 }
 
+func BackendNameForRelease(serviceID uuid.UUID, releaseID string) string {
+	svc := strings.ReplaceAll(serviceID.String(), "-", "")
+	rel := strings.ReplaceAll(strings.TrimSpace(releaseID), "-", "")
+	if svc == "" || rel == "" {
+		return ""
+	}
+	return "be_" + svc + "_" + rel
+}
+
 func BackendNameForSlot(base string, slot model.Slot) string {
 	return base + "_" + SlotToken(slot)
 }

@@ -1146,18 +1146,21 @@ func (x *TaskUpdate) GetCleanupCompleted() bool {
 }
 
 type ProxyServiceConfig struct {
-	state           protoimpl.MessageState `protogen:"open.v1"`
-	ServiceId       string                 `protobuf:"bytes,1,opt,name=service_id,json=serviceId,proto3" json:"service_id,omitempty"`
-	ServiceKey      string                 `protobuf:"bytes,2,opt,name=service_key,json=serviceKey,proto3" json:"service_key,omitempty"`
-	RouteHost       string                 `protobuf:"bytes,3,opt,name=route_host,json=routeHost,proto3" json:"route_host,omitempty"`
-	RoutePathPrefix string                 `protobuf:"bytes,4,opt,name=route_path_prefix,json=routePathPrefix,proto3" json:"route_path_prefix,omitempty"`
-	BackendName     string                 `protobuf:"bytes,5,opt,name=backend_name,json=backendName,proto3" json:"backend_name,omitempty"`
-	BlueServerName  string                 `protobuf:"bytes,6,opt,name=blue_server_name,json=blueServerName,proto3" json:"blue_server_name,omitempty"`
-	GreenServerName string                 `protobuf:"bytes,7,opt,name=green_server_name,json=greenServerName,proto3" json:"green_server_name,omitempty"`
-	ContainerPort   int32                  `protobuf:"varint,8,opt,name=container_port,json=containerPort,proto3" json:"container_port,omitempty"`
-	CurrentLiveSlot Slot                   `protobuf:"varint,9,opt,name=current_live_slot,json=currentLiveSlot,proto3,enum=edgepilot.grpcapi.Slot" json:"current_live_slot,omitempty"`
-	unknownFields   protoimpl.UnknownFields
-	sizeCache       protoimpl.SizeCache
+	state                   protoimpl.MessageState `protogen:"open.v1"`
+	ServiceId               string                 `protobuf:"bytes,1,opt,name=service_id,json=serviceId,proto3" json:"service_id,omitempty"`
+	ServiceKey              string                 `protobuf:"bytes,2,opt,name=service_key,json=serviceKey,proto3" json:"service_key,omitempty"`
+	RouteHost               string                 `protobuf:"bytes,3,opt,name=route_host,json=routeHost,proto3" json:"route_host,omitempty"`
+	RoutePathPrefix         string                 `protobuf:"bytes,4,opt,name=route_path_prefix,json=routePathPrefix,proto3" json:"route_path_prefix,omitempty"`
+	BackendName             string                 `protobuf:"bytes,5,opt,name=backend_name,json=backendName,proto3" json:"backend_name,omitempty"`
+	ContainerPort           int32                  `protobuf:"varint,8,opt,name=container_port,json=containerPort,proto3" json:"container_port,omitempty"`
+	CurrentLiveSlot         Slot                   `protobuf:"varint,9,opt,name=current_live_slot,json=currentLiveSlot,proto3,enum=edgepilot.grpcapi.Slot" json:"current_live_slot,omitempty"`
+	LiveReleaseId           string                 `protobuf:"bytes,10,opt,name=live_release_id,json=liveReleaseId,proto3" json:"live_release_id,omitempty"`
+	LiveBackendName         string                 `protobuf:"bytes,11,opt,name=live_backend_name,json=liveBackendName,proto3" json:"live_backend_name,omitempty"`
+	CandidateReleaseId      string                 `protobuf:"bytes,12,opt,name=candidate_release_id,json=candidateReleaseId,proto3" json:"candidate_release_id,omitempty"`
+	CandidateBackendName    string                 `protobuf:"bytes,13,opt,name=candidate_backend_name,json=candidateBackendName,proto3" json:"candidate_backend_name,omitempty"`
+	CandidateTrafficPercent int32                  `protobuf:"varint,14,opt,name=candidate_traffic_percent,json=candidateTrafficPercent,proto3" json:"candidate_traffic_percent,omitempty"`
+	unknownFields           protoimpl.UnknownFields
+	sizeCache               protoimpl.SizeCache
 }
 
 func (x *ProxyServiceConfig) Reset() {
@@ -1225,20 +1228,6 @@ func (x *ProxyServiceConfig) GetBackendName() string {
 	return ""
 }
 
-func (x *ProxyServiceConfig) GetBlueServerName() string {
-	if x != nil {
-		return x.BlueServerName
-	}
-	return ""
-}
-
-func (x *ProxyServiceConfig) GetGreenServerName() string {
-	if x != nil {
-		return x.GreenServerName
-	}
-	return ""
-}
-
 func (x *ProxyServiceConfig) GetContainerPort() int32 {
 	if x != nil {
 		return x.ContainerPort
@@ -1251,6 +1240,41 @@ func (x *ProxyServiceConfig) GetCurrentLiveSlot() Slot {
 		return x.CurrentLiveSlot
 	}
 	return Slot_SLOT_UNSPECIFIED
+}
+
+func (x *ProxyServiceConfig) GetLiveReleaseId() string {
+	if x != nil {
+		return x.LiveReleaseId
+	}
+	return ""
+}
+
+func (x *ProxyServiceConfig) GetLiveBackendName() string {
+	if x != nil {
+		return x.LiveBackendName
+	}
+	return ""
+}
+
+func (x *ProxyServiceConfig) GetCandidateReleaseId() string {
+	if x != nil {
+		return x.CandidateReleaseId
+	}
+	return ""
+}
+
+func (x *ProxyServiceConfig) GetCandidateBackendName() string {
+	if x != nil {
+		return x.CandidateBackendName
+	}
+	return ""
+}
+
+func (x *ProxyServiceConfig) GetCandidateTrafficPercent() int32 {
+	if x != nil {
+		return x.CandidateTrafficPercent
+	}
+	return 0
 }
 
 type ProxyConfigSnapshot struct {
@@ -1693,7 +1717,7 @@ const file_internal_shared_grpcapi_agent_control_proto_rawDesc = "" +
 	"\x11cleanup_completed\x18\f \x01(\bR\x10cleanupCompleted\x1a:\n" +
 	"\fMetricsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\x03R\x05value:\x028\x01\"\x84\x03\n" +
+	"\x05value\x18\x02 \x01(\x03R\x05value:\x028\x01\"\xa6\x04\n" +
 	"\x12ProxyServiceConfig\x12\x1d\n" +
 	"\n" +
 	"service_id\x18\x01 \x01(\tR\tserviceId\x12\x1f\n" +
@@ -1702,11 +1726,15 @@ const file_internal_shared_grpcapi_agent_control_proto_rawDesc = "" +
 	"\n" +
 	"route_host\x18\x03 \x01(\tR\trouteHost\x12*\n" +
 	"\x11route_path_prefix\x18\x04 \x01(\tR\x0froutePathPrefix\x12!\n" +
-	"\fbackend_name\x18\x05 \x01(\tR\vbackendName\x12(\n" +
-	"\x10blue_server_name\x18\x06 \x01(\tR\x0eblueServerName\x12*\n" +
-	"\x11green_server_name\x18\a \x01(\tR\x0fgreenServerName\x12%\n" +
+	"\fbackend_name\x18\x05 \x01(\tR\vbackendName\x12%\n" +
 	"\x0econtainer_port\x18\b \x01(\x05R\rcontainerPort\x12C\n" +
-	"\x11current_live_slot\x18\t \x01(\x0e2\x17.edgepilot.grpcapi.SlotR\x0fcurrentLiveSlot\"\xde\x01\n" +
+	"\x11current_live_slot\x18\t \x01(\x0e2\x17.edgepilot.grpcapi.SlotR\x0fcurrentLiveSlot\x12&\n" +
+	"\x0flive_release_id\x18\n" +
+	" \x01(\tR\rliveReleaseId\x12*\n" +
+	"\x11live_backend_name\x18\v \x01(\tR\x0fliveBackendName\x120\n" +
+	"\x14candidate_release_id\x18\f \x01(\tR\x12candidateReleaseId\x124\n" +
+	"\x16candidate_backend_name\x18\r \x01(\tR\x14candidateBackendName\x12:\n" +
+	"\x19candidate_traffic_percent\x18\x0e \x01(\x05R\x17candidateTrafficPercent\"\xde\x01\n" +
 	"\x13ProxyConfigSnapshot\x12\x19\n" +
 	"\bagent_id\x18\x01 \x01(\tR\aagentId\x12#\n" +
 	"\rfrontend_name\x18\x02 \x01(\tR\ffrontendName\x12'\n" +

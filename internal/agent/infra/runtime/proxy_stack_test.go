@@ -35,9 +35,9 @@ func TestReconcileLockedUsesTransactionAndAppliesLiveSlotAfterCommit(t *testing.
 		"version",
 		"start-transaction:42",
 		"ensure-backend:be-api_blue@tx-1",
-		"ensure-server:be-api_blue/blue@tx-1",
+		"ensure-server:be-api_blue/srv@tx-1",
 		"ensure-backend:be-api_green@tx-1",
-		"ensure-server:be-api_green/green@tx-1",
+		"ensure-server:be-api_green/srv@tx-1",
 		"replace-frontend:ep_http@tx-1",
 		"list-backends",
 		"commit:tx-1",
@@ -99,9 +99,9 @@ func TestReconcileLockedAbortsTransactionWhenFrontendUpdateFails(t *testing.T) {
 		"version",
 		"start-transaction:9",
 		"ensure-backend:be-api_blue@tx-3",
-		"ensure-server:be-api_blue/blue@tx-3",
+		"ensure-server:be-api_blue/srv@tx-3",
 		"ensure-backend:be-api_green@tx-3",
-		"ensure-server:be-api_green/green@tx-3",
+		"ensure-server:be-api_green/srv@tx-3",
 		"replace-frontend:ep_http@tx-3",
 		"abort:tx-3",
 	}
@@ -131,10 +131,10 @@ func TestReconcileLockedAbortsTransactionWhenCommitFails(t *testing.T) {
 	expected := []string{
 		"version",
 		"start-transaction:10",
-		"ensure-backend:be-api_blue@tx-4",
-		"ensure-server:be-api_blue/blue@tx-4",
 		"ensure-backend:be-api_green@tx-4",
-		"ensure-server:be-api_green/green@tx-4",
+		"ensure-server:be-api_green/srv@tx-4",
+		"ensure-backend:be-api_blue@tx-4",
+		"ensure-server:be-api_blue/srv@tx-4",
 		"replace-frontend:ep_http@tx-4",
 		"list-backends",
 		"commit:tx-4",
@@ -167,9 +167,9 @@ func TestReconcileLockedPreservesPrimaryErrorWhenAbortFails(t *testing.T) {
 		"version",
 		"start-transaction:11",
 		"ensure-backend:be-api_blue@tx-5",
-		"ensure-server:be-api_blue/blue@tx-5",
+		"ensure-server:be-api_blue/srv@tx-5",
 		"ensure-backend:be-api_green@tx-5",
-		"ensure-server:be-api_green/green@tx-5",
+		"ensure-server:be-api_green/srv@tx-5",
 		"replace-frontend:ep_http@tx-5",
 		"abort:tx-5",
 	}
@@ -199,7 +199,7 @@ func TestReconcileLockedAbortsTransactionWhenEnsureServerFails(t *testing.T) {
 		"version",
 		"start-transaction:13",
 		"ensure-backend:be-api_blue@tx-7",
-		"ensure-server:be-api_blue/blue@tx-7",
+		"ensure-server:be-api_blue/srv@tx-7",
 		"abort:tx-7",
 	}
 	if !reflect.DeepEqual(callLog, expected) {
@@ -220,8 +220,8 @@ func TestFormatDataplaneFailureContextIncludesCommitFailureDetails(t *testing.T)
 			{Name: "be-api_green", Mode: "http", Balance: backendBalance{Algorithm: "roundrobin"}},
 		},
 		Servers: []dataplaneBackendServer{
-			{Backend: "be-api_blue", Server: backendServer{Name: "blue", Address: "svc-a-blue", Port: 8080}},
-			{Backend: "be-api_green", Server: backendServer{Name: "green", Address: "svc-a-green", Port: 8080}},
+			{Backend: "be-api_blue", Server: backendServer{Name: "srv", Address: "svc-a-blue", Port: 8080}},
+			{Backend: "be-api_green", Server: backendServer{Name: "srv", Address: "svc-a-green", Port: 8080}},
 		},
 		DesiredBackends: []string{"be-api_blue", "be-api_green", "ep_default"},
 		StaleBackends:   []string{"stale-api"},
@@ -256,7 +256,7 @@ func TestFormatDataplaneFailureContextIncludesFrontendDetails(t *testing.T) {
 				Mode:              "http",
 				From:              managedProxyDefaultsName,
 				Balance:           backendBalance{Algorithm: "roundrobin"},
-				HTTPResponseRules: serviceBackendResponseRules(testProxySnapshotWithService(grpcapi.Slot_SLOT_BLUE).Services[0], grpcapi.Slot_SLOT_BLUE),
+				HTTPResponseRules: serviceBackendResponseRules("svc-a", "/", "release-blue", "release-blue"),
 			},
 		},
 	})
@@ -362,9 +362,9 @@ func TestReconcileLockedPrecreatesServersWithResolversForEmptyInstances(t *testi
 		"version",
 		"start-transaction:12",
 		"ensure-backend:be-api_blue@tx-6",
-		"ensure-server:be-api_blue/blue@tx-6",
+		"ensure-server:be-api_blue/srv@tx-6",
 		"ensure-backend:be-api_green@tx-6",
-		"ensure-server:be-api_green/green@tx-6",
+		"ensure-server:be-api_green/srv@tx-6",
 		"replace-frontend:ep_http@tx-6",
 		"list-backends",
 		"commit:tx-6",
@@ -452,7 +452,7 @@ func TestReconcileLockedFiltersInvalidBackendResponseHeaderRules(t *testing.T) {
 	runtime := &fakeManagedProxyRuntime{callLog: &callLog}
 	proxy := newTestManagedProxyRuntime(dataplane, runtime)
 	snapshot := testProxySnapshotWithService(grpcapi.Slot_SLOT_BLUE)
-	snapshot.Services[0].GreenServerName = ""
+	snapshot.Services[0].CandidateReleaseId = ""
 
 	if err := proxy.reconcileLocked(context.Background(), snapshot); err != nil {
 		t.Fatalf("reconcileLocked() error = %v", err)
@@ -552,6 +552,20 @@ func newTestManagedProxyRuntime(dataplane managedProxyDataPlaneAPI, runtime mana
 }
 
 func testProxySnapshotWithService(slot grpcapi.Slot) *grpcapi.ProxyConfigSnapshot {
+	liveSlot := slot
+	if liveSlot != grpcapi.Slot_SLOT_BLUE && liveSlot != grpcapi.Slot_SLOT_GREEN {
+		liveSlot = grpcapi.Slot_SLOT_BLUE
+	}
+	liveReleaseID := "release-blue"
+	liveBackendName := "be-api_blue"
+	candidateReleaseID := "release-green"
+	candidateBackendName := "be-api_green"
+	if liveSlot == grpcapi.Slot_SLOT_GREEN {
+		liveReleaseID = "release-green"
+		liveBackendName = "be-api_green"
+		candidateReleaseID = "release-blue"
+		candidateBackendName = "be-api_blue"
+	}
 	return &grpcapi.ProxyConfigSnapshot{
 		AgentId:        "agent-1",
 		FrontendName:   "ep_http",
@@ -559,15 +573,18 @@ func testProxySnapshotWithService(slot grpcapi.Slot) *grpcapi.ProxyConfigSnapsho
 		BindPort:       80,
 		Services: []*grpcapi.ProxyServiceConfig{
 			{
-				ServiceId:       "svc-1",
-				ServiceKey:      "svc-a",
-				RouteHost:       "api.example.com",
-				RoutePathPrefix: "/",
-				BackendName:     "be-api",
-				BlueServerName:  "release-blue",
-				GreenServerName: "release-green",
-				ContainerPort:   8080,
-				CurrentLiveSlot: slot,
+				ServiceId:               "svc-1",
+				ServiceKey:              "svc-a",
+				RouteHost:               "api.example.com",
+				RoutePathPrefix:         "/",
+				BackendName:             "be-api",
+				ContainerPort:           8080,
+				CurrentLiveSlot:         liveSlot,
+				LiveReleaseId:           liveReleaseID,
+				LiveBackendName:         liveBackendName,
+				CandidateReleaseId:      candidateReleaseID,
+				CandidateBackendName:    candidateBackendName,
+				CandidateTrafficPercent: 0,
 			},
 		},
 	}

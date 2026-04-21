@@ -7,6 +7,9 @@ import (
 	"edge-pilot/internal/shared/grpcapi"
 	"edge-pilot/internal/shared/model"
 	"errors"
+	"strings"
+
+	"github.com/google/uuid"
 )
 
 type ProxyConfigPublisher struct {
@@ -45,20 +48,23 @@ func (p *ProxyConfigPublisher) buildProxyConfigSnapshot(agentID string, services
 	configs := servicecatalogapp.BuildProxyServiceConfigs(services)
 	out := make([]*grpcapi.ProxyServiceConfig, 0, len(configs))
 	for _, item := range configs {
-		blueReleaseID, greenReleaseID, err := p.allowedReleaseIDs(item)
+		liveReleaseID, candidateReleaseID, candidateTrafficPercent, err := p.resolveReleases(item)
 		if err != nil {
 			return nil, err
 		}
 		out = append(out, &grpcapi.ProxyServiceConfig{
-			ServiceId:       item.ServiceID.String(),
-			ServiceKey:      item.ServiceKey,
-			RouteHost:       item.RouteHost,
-			RoutePathPrefix: item.RoutePathPrefix,
-			BackendName:     item.BackendName,
-			BlueServerName:  blueReleaseID,
-			GreenServerName: greenReleaseID,
-			ContainerPort:   int32(item.ContainerPort),
-			CurrentLiveSlot: toProtoSlot(item.CurrentLiveSlot),
+			ServiceId:               item.ServiceID.String(),
+			ServiceKey:              item.ServiceKey,
+			RouteHost:               item.RouteHost,
+			RoutePathPrefix:         item.RoutePathPrefix,
+			BackendName:             item.BackendName,
+			ContainerPort:           int32(item.ContainerPort),
+			CurrentLiveSlot:         toProtoSlot(item.CurrentLiveSlot),
+			LiveReleaseId:           liveReleaseID,
+			LiveBackendName:         servicecatalogapp.BackendNameForRelease(item.ServiceID, liveReleaseID),
+			CandidateReleaseId:      candidateReleaseID,
+			CandidateBackendName:    servicecatalogapp.BackendNameForRelease(item.ServiceID, candidateReleaseID),
+			CandidateTrafficPercent: int32(candidateTrafficPercent),
 		})
 	}
 	return &grpcapi.ProxyConfigSnapshot{
@@ -84,51 +90,70 @@ func buildProxyConfigSnapshot(agentID string, services []model.Service) *grpcapi
 	return snapshot
 }
 
-func (p *ProxyConfigPublisher) allowedReleaseIDs(item servicecatalogapp.ProxyServiceConfig) (string, string, error) {
+func (p *ProxyConfigPublisher) resolveReleases(item servicecatalogapp.ProxyServiceConfig) (string, string, int, error) {
 	if p.releases == nil {
-		return "", "", nil
+		return "", "", 0, nil
 	}
 	instances, err := p.releases.ListRuntimeInstancesByService(item.ServiceID)
 	if err != nil {
-		return "", "", err
+		return "", "", 0, err
 	}
+	liveSlot := normalizeLiveSlot(item.CurrentLiveSlot)
+	candidateSlot := nextSlot(liveSlot)
 	liveReleaseID := ""
-	targetReleaseID := ""
+	candidateReleaseID := ""
 	for i := range instances {
 		instance := instances[i]
 		if instance.ServiceID != item.ServiceID {
 			continue
 		}
-		if instance.Slot == item.CurrentLiveSlot {
+		if instance.Slot == liveSlot {
 			liveReleaseID = instance.ReleaseID.String()
 		}
-	}
-	readyRelease, err := p.releases.FindReadyToSwitchRelease(item.ServiceID)
-	if err != nil {
-		return "", "", err
-	}
-	if readyRelease != nil {
-		for i := range instances {
-			instance := instances[i]
-			if instance.Slot == readyRelease.TargetSlot {
-				targetReleaseID = instance.ReleaseID.String()
-				break
-			}
+		if instance.Slot == candidateSlot {
+			candidateReleaseID = instance.ReleaseID.String()
 		}
 	}
-	blue := ""
-	green := ""
-	switch item.CurrentLiveSlot {
+	candidateTrafficPercent := 0
+	candidateID, parseErr := uuid.Parse(strings.TrimSpace(candidateReleaseID))
+	if parseErr == nil {
+		candidateRelease, getErr := p.releases.GetRelease(candidateID)
+		if getErr != nil {
+			return "", "", 0, getErr
+		}
+		if candidateRelease != nil {
+			candidateTrafficPercent = clampTrafficPercent(candidateRelease.TrafficPercent)
+		}
+	}
+	return liveReleaseID, candidateReleaseID, candidateTrafficPercent, nil
+}
+
+func normalizeLiveSlot(slot model.Slot) model.Slot {
+	switch slot {
+	case model.SlotBlue, model.SlotGreen:
+		return slot
+	default:
+		return model.SlotBlue
+	}
+}
+
+func nextSlot(slot model.Slot) model.Slot {
+	switch slot {
 	case model.SlotBlue:
-		blue = liveReleaseID
-		if readyRelease != nil && readyRelease.TargetSlot == model.SlotGreen {
-			green = targetReleaseID
-		}
+		return model.SlotGreen
 	case model.SlotGreen:
-		green = liveReleaseID
-		if readyRelease != nil && readyRelease.TargetSlot == model.SlotBlue {
-			blue = targetReleaseID
-		}
+		return model.SlotBlue
+	default:
+		return model.SlotGreen
 	}
-	return blue, green, nil
+}
+
+func clampTrafficPercent(percent int) int {
+	if percent < 0 {
+		return 0
+	}
+	if percent > 100 {
+		return 100
+	}
+	return percent
 }

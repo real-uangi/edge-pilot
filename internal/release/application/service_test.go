@@ -11,7 +11,9 @@ import (
 	"edge-pilot/internal/shared/grpcapi"
 	"edge-pilot/internal/shared/model"
 	"edge-pilot/internal/shared/secret"
+	"errors"
 	"sort"
+	"strings"
 	"testing"
 	"time"
 
@@ -581,6 +583,235 @@ func TestStartQueuedReleaseRejectsWhenAnotherReleaseIsActive(t *testing.T) {
 
 	if _, err := releaseService.Start(queuedRelease.ID, "admin"); err == nil {
 		t.Fatalf("expected start to fail when another release is active")
+	}
+}
+
+func TestStartQueuedReleaseRejectsTrafficSplitInProgress(t *testing.T) {
+	serviceRepo := &fakeServiceRepo{}
+	agentRepo := &fakeAgentRepo{nodes: map[string]*model.AgentNode{}}
+	releaseRepo := newFakeReleaseRepo()
+	dispatcher := &fakeDispatcher{}
+
+	serviceCatalog := servicecatalogapp.NewService(serviceRepo)
+	registry := agentregistry.NewRegistryService(config.LoadAgentAuthConfig(), agentRepo)
+	releaseService := NewService(releaseRepo, dispatcher, serviceCatalog, registry)
+
+	enabled := true
+	dockerHealth := true
+	online := true
+	now := time.Now()
+	service := &model.Service{
+		ID:                uuid.New(),
+		ServiceKey:        "svc-a",
+		Name:              "svc-a",
+		AgentID:           "agent-a",
+		ImageRepo:         "repo/app",
+		ContainerPort:     8080,
+		CurrentLiveSlot:   model.SlotBlue,
+		DockerHealthCheck: &dockerHealth,
+		Enabled:           &enabled,
+	}
+	serviceRepo.ensure()
+	serviceRepo.byID[service.ID] = service
+	serviceRepo.byKey[service.ServiceKey] = service
+	agentRepo.nodes["agent-a"] = &model.AgentNode{
+		ID:              "agent-a",
+		Enabled:         &enabled,
+		Online:          &online,
+		LastHeartbeatAt: &now,
+	}
+
+	splitRelease := &model.Release{
+		ID:               uuid.New(),
+		ServiceID:        service.ID,
+		AgentID:          "agent-a",
+		ImageRepo:        "repo/app",
+		ImageTag:         "v1.0.0",
+		Status:           model.ReleaseStatusReadyToSwitch,
+		TargetSlot:       model.SlotGreen,
+		PreviousLiveSlot: model.SlotBlue,
+		TrafficPercent:   30,
+		SwitchConfirmed:  boolPointer(false),
+	}
+	queuedRelease := &model.Release{
+		ID:        uuid.New(),
+		ServiceID: service.ID,
+		AgentID:   "agent-a",
+		ImageRepo: "repo/app",
+		ImageTag:  "v1.1.0",
+		Status:    model.ReleaseStatusQueued,
+	}
+	if err := releaseRepo.CreateRelease(splitRelease); err != nil {
+		t.Fatalf("CreateRelease() split error = %v", err)
+	}
+	if err := releaseRepo.CreateRelease(queuedRelease); err != nil {
+		t.Fatalf("CreateRelease() queued error = %v", err)
+	}
+
+	_, err := releaseService.Start(queuedRelease.ID, "admin")
+	if err == nil {
+		t.Fatalf("expected start to fail when traffic split in progress")
+	}
+	var statusCarrier interface{ GetStatusCode() int }
+	if !errors.As(err, &statusCarrier) || statusCarrier.GetStatusCode() != 409 {
+		t.Fatalf("expected 409 error, got %v", err)
+	}
+	if !strings.Contains(err.Error(), "1-99") {
+		t.Fatalf("expected traffic split error message, got %q", err.Error())
+	}
+}
+
+func TestStartQueuedReleaseAllowsWhenExistingReleaseIsAt100Percent(t *testing.T) {
+	serviceRepo := &fakeServiceRepo{}
+	agentRepo := &fakeAgentRepo{nodes: map[string]*model.AgentNode{}}
+	releaseRepo := newFakeReleaseRepo()
+	dispatcher := &fakeDispatcher{}
+
+	serviceCatalog := servicecatalogapp.NewService(serviceRepo)
+	registry := agentregistry.NewRegistryService(config.LoadAgentAuthConfig(), agentRepo)
+	releaseService := NewService(releaseRepo, dispatcher, serviceCatalog, registry)
+
+	enabled := true
+	dockerHealth := true
+	online := true
+	now := time.Now()
+	service := &model.Service{
+		ID:                uuid.New(),
+		ServiceKey:        "svc-a",
+		Name:              "svc-a",
+		AgentID:           "agent-a",
+		ImageRepo:         "repo/app",
+		ContainerPort:     8080,
+		CurrentLiveSlot:   model.SlotBlue,
+		DockerHealthCheck: &dockerHealth,
+		Enabled:           &enabled,
+	}
+	serviceRepo.ensure()
+	serviceRepo.byID[service.ID] = service
+	serviceRepo.byKey[service.ServiceKey] = service
+	agentRepo.nodes["agent-a"] = &model.AgentNode{
+		ID:              "agent-a",
+		Enabled:         &enabled,
+		Online:          &online,
+		LastHeartbeatAt: &now,
+	}
+
+	switched := &model.Release{
+		ID:               uuid.New(),
+		ServiceID:        service.ID,
+		AgentID:          "agent-a",
+		ImageRepo:        "repo/app",
+		ImageTag:         "v1.0.0",
+		Status:           model.ReleaseStatusSwitched,
+		TargetSlot:       model.SlotGreen,
+		PreviousLiveSlot: model.SlotBlue,
+		TrafficPercent:   100,
+		SwitchConfirmed:  boolPointer(true),
+	}
+	queued := &model.Release{
+		ID:        uuid.New(),
+		ServiceID: service.ID,
+		AgentID:   "agent-a",
+		ImageRepo: "repo/app",
+		ImageTag:  "v1.1.0",
+		Status:    model.ReleaseStatusQueued,
+	}
+	if err := releaseRepo.CreateRelease(switched); err != nil {
+		t.Fatalf("CreateRelease() switched error = %v", err)
+	}
+	if err := releaseRepo.CreateRelease(queued); err != nil {
+		t.Fatalf("CreateRelease() queued error = %v", err)
+	}
+
+	started, err := releaseService.Start(queued.ID, "admin")
+	if err != nil {
+		t.Fatalf("Start() error = %v", err)
+	}
+	if started.Status != model.ReleaseStatusDispatching {
+		t.Fatalf("expected dispatching status, got %v", started.Status)
+	}
+}
+
+func TestStartQueuedReleaseAutoSkipsEarlierQueuedReleases(t *testing.T) {
+	serviceRepo := &fakeServiceRepo{}
+	agentRepo := &fakeAgentRepo{nodes: map[string]*model.AgentNode{}}
+	releaseRepo := newFakeReleaseRepo()
+	dispatcher := &fakeDispatcher{}
+
+	serviceCatalog := servicecatalogapp.NewService(serviceRepo)
+	registry := agentregistry.NewRegistryService(config.LoadAgentAuthConfig(), agentRepo)
+	releaseService := NewService(releaseRepo, dispatcher, serviceCatalog, registry)
+
+	enabled := true
+	dockerHealth := true
+	online := true
+	now := time.Now()
+	service := &model.Service{
+		ID:                uuid.New(),
+		ServiceKey:        "svc-a",
+		Name:              "svc-a",
+		AgentID:           "agent-a",
+		ImageRepo:         "repo/app",
+		ContainerPort:     8080,
+		DockerHealthCheck: &dockerHealth,
+		Enabled:           &enabled,
+	}
+	serviceRepo.ensure()
+	serviceRepo.byID[service.ID] = service
+	serviceRepo.byKey[service.ServiceKey] = service
+	agentRepo.nodes["agent-a"] = &model.AgentNode{
+		ID:              "agent-a",
+		Enabled:         &enabled,
+		Online:          &online,
+		LastHeartbeatAt: &now,
+	}
+
+	older := &model.Release{
+		ID:        uuid.New(),
+		ServiceID: service.ID,
+		AgentID:   "agent-a",
+		ImageRepo: "repo/app",
+		ImageTag:  "v0.9.0",
+		Status:    model.ReleaseStatusQueued,
+	}
+	current := &model.Release{
+		ID:        uuid.New(),
+		ServiceID: service.ID,
+		AgentID:   "agent-a",
+		ImageRepo: "repo/app",
+		ImageTag:  "v1.0.0",
+		Status:    model.ReleaseStatusQueued,
+	}
+	if err := releaseRepo.CreateRelease(older); err != nil {
+		t.Fatalf("CreateRelease() older error = %v", err)
+	}
+	time.Sleep(5 * time.Millisecond)
+	if err := releaseRepo.CreateRelease(current); err != nil {
+		t.Fatalf("CreateRelease() current error = %v", err)
+	}
+
+	if _, err := releaseService.Start(current.ID, "admin"); err != nil {
+		t.Fatalf("Start() error = %v", err)
+	}
+	storedOlder := releaseRepo.releases[older.ID]
+	if storedOlder == nil || storedOlder.Status != model.ReleaseStatusSkipped {
+		t.Fatalf("expected older queued release skipped, got %#v", storedOlder)
+	}
+	if storedOlder.CompletedAt == nil {
+		t.Fatalf("expected older queued release completedAt set")
+	}
+	foundAutoSkippedAudit := false
+	for _, item := range releaseRepo.audits {
+		if item.EventType != "release_auto_skipped" {
+			continue
+		}
+		if item.AggregateID == older.ID.String() && strings.Contains(item.Message, current.ID.String()) {
+			foundAutoSkippedAudit = true
+			break
+		}
+	}
+	if !foundAutoSkippedAudit {
+		t.Fatalf("expected release_auto_skipped audit for older release, got %#v", releaseRepo.audits)
 	}
 }
 
@@ -1221,6 +1452,242 @@ func TestStartQueuedReleaseDefersDispatchWhenAgentSessionDrops(t *testing.T) {
 	}
 }
 
+func TestSetTrafficPercentAdjustsLiveSlotAndStatus(t *testing.T) {
+	serviceRepo := &fakeServiceRepo{}
+	agentRepo := &fakeAgentRepo{}
+	releaseRepo := newFakeReleaseRepo()
+	dispatcher := &fakeDispatcher{}
+	serviceCatalog := servicecatalogapp.NewService(serviceRepo)
+	registry := agentregistry.NewRegistryService(config.LoadAgentAuthConfig(), agentRepo)
+	releaseService := NewService(releaseRepo, dispatcher, serviceCatalog, registry)
+
+	enabled := true
+	dockerHealth := true
+	service := &model.Service{
+		ID:                uuid.New(),
+		ServiceKey:        "svc-a",
+		Name:              "svc-a",
+		AgentID:           "agent-a",
+		ImageRepo:         "repo/app",
+		ContainerPort:     8080,
+		CurrentLiveSlot:   model.SlotBlue,
+		DockerHealthCheck: &dockerHealth,
+		Enabled:           &enabled,
+	}
+	serviceRepo.ensure()
+	serviceRepo.byID[service.ID] = service
+	serviceRepo.byKey[service.ServiceKey] = service
+	release := &model.Release{
+		ID:               uuid.New(),
+		ServiceID:        service.ID,
+		AgentID:          "agent-a",
+		ImageRepo:        "repo/app",
+		ImageTag:         "v1.0.0",
+		Status:           model.ReleaseStatusReadyToSwitch,
+		TargetSlot:       model.SlotGreen,
+		PreviousLiveSlot: model.SlotBlue,
+		SwitchConfirmed:  boolPointer(false),
+		TrafficPercent:   0,
+	}
+	if err := releaseRepo.CreateRelease(release); err != nil {
+		t.Fatalf("CreateRelease() error = %v", err)
+	}
+
+	output, err := releaseService.SetTrafficPercent(release.ID, 30, "admin")
+	if err != nil {
+		t.Fatalf("SetTrafficPercent() error = %v", err)
+	}
+	if output.TrafficPercent != 30 || output.Status != model.ReleaseStatusReadyToSwitch {
+		t.Fatalf("unexpected release output: %#v", output)
+	}
+	if serviceRepo.byID[service.ID].CurrentLiveSlot != model.SlotBlue {
+		t.Fatalf("expected live slot stay blue, got %v", serviceRepo.byID[service.ID].CurrentLiveSlot)
+	}
+}
+
+func TestConfirmSwitchSetsTrafficToHundred(t *testing.T) {
+	serviceRepo := &fakeServiceRepo{}
+	agentRepo := &fakeAgentRepo{}
+	releaseRepo := newFakeReleaseRepo()
+	dispatcher := &fakeDispatcher{}
+	serviceCatalog := servicecatalogapp.NewService(serviceRepo)
+	registry := agentregistry.NewRegistryService(config.LoadAgentAuthConfig(), agentRepo)
+	releaseService := NewService(releaseRepo, dispatcher, serviceCatalog, registry)
+
+	enabled := true
+	dockerHealth := true
+	service := &model.Service{
+		ID:                uuid.New(),
+		ServiceKey:        "svc-a",
+		Name:              "svc-a",
+		AgentID:           "agent-a",
+		ImageRepo:         "repo/app",
+		ContainerPort:     8080,
+		CurrentLiveSlot:   model.SlotBlue,
+		DockerHealthCheck: &dockerHealth,
+		Enabled:           &enabled,
+	}
+	serviceRepo.ensure()
+	serviceRepo.byID[service.ID] = service
+	serviceRepo.byKey[service.ServiceKey] = service
+	release := &model.Release{
+		ID:               uuid.New(),
+		ServiceID:        service.ID,
+		AgentID:          "agent-a",
+		ImageRepo:        "repo/app",
+		ImageTag:         "v1.0.0",
+		Status:           model.ReleaseStatusReadyToSwitch,
+		TargetSlot:       model.SlotGreen,
+		PreviousLiveSlot: model.SlotBlue,
+		SwitchConfirmed:  boolPointer(false),
+		TrafficPercent:   0,
+	}
+	if err := releaseRepo.CreateRelease(release); err != nil {
+		t.Fatalf("CreateRelease() error = %v", err)
+	}
+
+	output, err := releaseService.ConfirmSwitch(release.ID, "admin")
+	if err != nil {
+		t.Fatalf("ConfirmSwitch() error = %v", err)
+	}
+	if output.TrafficPercent != 100 || output.Status != model.ReleaseStatusSwitched {
+		t.Fatalf("unexpected release output: %#v", output)
+	}
+	if serviceRepo.byID[service.ID].CurrentLiveSlot != model.SlotGreen {
+		t.Fatalf("expected live slot switch to green, got %v", serviceRepo.byID[service.ID].CurrentLiveSlot)
+	}
+}
+
+func TestRollbackSetsTrafficToZeroWithoutTerminalState(t *testing.T) {
+	serviceRepo := &fakeServiceRepo{}
+	agentRepo := &fakeAgentRepo{}
+	releaseRepo := newFakeReleaseRepo()
+	dispatcher := &fakeDispatcher{}
+	serviceCatalog := servicecatalogapp.NewService(serviceRepo)
+	registry := agentregistry.NewRegistryService(config.LoadAgentAuthConfig(), agentRepo)
+	releaseService := NewService(releaseRepo, dispatcher, serviceCatalog, registry)
+
+	enabled := true
+	dockerHealth := true
+	service := &model.Service{
+		ID:                uuid.New(),
+		ServiceKey:        "svc-a",
+		Name:              "svc-a",
+		AgentID:           "agent-a",
+		ImageRepo:         "repo/app",
+		ContainerPort:     8080,
+		CurrentLiveSlot:   model.SlotGreen,
+		DockerHealthCheck: &dockerHealth,
+		Enabled:           &enabled,
+	}
+	serviceRepo.ensure()
+	serviceRepo.byID[service.ID] = service
+	serviceRepo.byKey[service.ServiceKey] = service
+	release := &model.Release{
+		ID:               uuid.New(),
+		ServiceID:        service.ID,
+		AgentID:          "agent-a",
+		ImageRepo:        "repo/app",
+		ImageTag:         "v1.0.0",
+		Status:           model.ReleaseStatusSwitched,
+		TargetSlot:       model.SlotGreen,
+		PreviousLiveSlot: model.SlotBlue,
+		SwitchConfirmed:  boolPointer(true),
+		TrafficPercent:   100,
+	}
+	if err := releaseRepo.CreateRelease(release); err != nil {
+		t.Fatalf("CreateRelease() error = %v", err)
+	}
+
+	output, err := releaseService.Rollback(release.ID, "admin")
+	if err != nil {
+		t.Fatalf("Rollback() error = %v", err)
+	}
+	if output.TrafficPercent != 0 || output.Status != model.ReleaseStatusReadyToSwitch {
+		t.Fatalf("unexpected release output: %#v", output)
+	}
+	if output.CompletedAt != nil {
+		t.Fatalf("expected rollback keep non-terminal completedAt nil, got %v", output.CompletedAt)
+	}
+	if serviceRepo.byID[service.ID].CurrentLiveSlot != model.SlotBlue {
+		t.Fatalf("expected live slot rollback to blue, got %v", serviceRepo.byID[service.ID].CurrentLiveSlot)
+	}
+}
+
+func TestStartCompletesSupersededReleaseWhenSlotIsReused(t *testing.T) {
+	serviceRepo := &fakeServiceRepo{}
+	agentRepo := &fakeAgentRepo{nodes: map[string]*model.AgentNode{}}
+	releaseRepo := newFakeReleaseRepo()
+	dispatcher := &fakeDispatcher{}
+	serviceCatalog := servicecatalogapp.NewService(serviceRepo)
+	registry := agentregistry.NewRegistryService(config.LoadAgentAuthConfig(), agentRepo)
+	releaseService := NewService(releaseRepo, dispatcher, serviceCatalog, registry)
+
+	enabled := true
+	online := true
+	dockerHealth := true
+	now := time.Now()
+	service := &model.Service{
+		ID:                uuid.New(),
+		ServiceKey:        "svc-a",
+		Name:              "svc-a",
+		AgentID:           "agent-a",
+		ImageRepo:         "repo/app",
+		ContainerPort:     8080,
+		CurrentLiveSlot:   model.SlotBlue,
+		DockerHealthCheck: &dockerHealth,
+		Enabled:           &enabled,
+	}
+	serviceRepo.ensure()
+	serviceRepo.byID[service.ID] = service
+	serviceRepo.byKey[service.ServiceKey] = service
+	agentRepo.nodes["agent-a"] = &model.AgentNode{
+		ID:              "agent-a",
+		Enabled:         &enabled,
+		Online:          &online,
+		LastHeartbeatAt: &now,
+	}
+
+	superseded := &model.Release{
+		ID:               uuid.New(),
+		ServiceID:        service.ID,
+		AgentID:          "agent-a",
+		ImageRepo:        "repo/app",
+		ImageTag:         "old",
+		Status:           model.ReleaseStatusReadyToSwitch,
+		TargetSlot:       model.SlotGreen,
+		PreviousLiveSlot: model.SlotBlue,
+		SwitchConfirmed:  boolPointer(false),
+		TrafficPercent:   0,
+	}
+	if err := releaseRepo.CreateRelease(superseded); err != nil {
+		t.Fatalf("CreateRelease(superseded) error = %v", err)
+	}
+	queued := &model.Release{
+		ID:               uuid.New(),
+		ServiceID:        service.ID,
+		AgentID:          "agent-a",
+		ImageRepo:        "repo/app",
+		ImageTag:         "new",
+		Status:           model.ReleaseStatusQueued,
+		TargetSlot:       model.SlotGreen,
+		PreviousLiveSlot: model.SlotBlue,
+		SwitchConfirmed:  boolPointer(false),
+		TrafficPercent:   0,
+	}
+	if err := releaseRepo.CreateRelease(queued); err != nil {
+		t.Fatalf("CreateRelease(queued) error = %v", err)
+	}
+
+	if _, err := releaseService.Start(queued.ID, "admin"); err != nil {
+		t.Fatalf("Start() error = %v", err)
+	}
+	stored := releaseRepo.releases[superseded.ID]
+	if stored == nil || stored.Status != model.ReleaseStatusCompleted || stored.CompletedAt == nil {
+		t.Fatalf("expected superseded release completed, got %#v", stored)
+	}
+}
+
 type fakeServiceRepo struct {
 	byID  map[uuid.UUID]*model.Service
 	byKey map[string]*model.Service
@@ -1437,6 +1904,22 @@ func (r *fakeReleaseRepo) ListReleases(limit int) ([]model.Release, error) {
 	return out, nil
 }
 
+func (r *fakeReleaseRepo) ListQueuedBefore(serviceID uuid.UUID, createdAt time.Time, releaseID uuid.UUID) ([]model.Release, error) {
+	out := make([]model.Release, 0)
+	for _, item := range r.releases {
+		if item.ID == releaseID || item.ServiceID != serviceID || item.Status != model.ReleaseStatusQueued {
+			continue
+		}
+		if item.CreatedAt.Before(createdAt) {
+			out = append(out, *item)
+		}
+	}
+	sort.Slice(out, func(i, j int) bool {
+		return out[i].CreatedAt.Before(out[j].CreatedAt)
+	})
+	return out, nil
+}
+
 func (r *fakeReleaseRepo) FindReadyToSwitchRelease(serviceID uuid.UUID) (*model.Release, error) {
 	var matched []*model.Release
 	for _, item := range r.releases {
@@ -1457,7 +1940,14 @@ func (r *fakeReleaseRepo) FindReadyToSwitchRelease(serviceID uuid.UUID) (*model.
 
 func (r *fakeReleaseRepo) HasActiveRelease(serviceID uuid.UUID) (bool, error) {
 	for _, item := range r.releases {
-		if item.ServiceID == serviceID && item.Status.IsActive() {
+		if item.ServiceID != serviceID {
+			continue
+		}
+		if item.Status == model.ReleaseStatusDispatching || item.Status == model.ReleaseStatusDeploying {
+			return true, nil
+		}
+		if (item.Status == model.ReleaseStatusReadyToSwitch || item.Status == model.ReleaseStatusSwitched) &&
+			item.TrafficPercent >= 1 && item.TrafficPercent <= 99 {
 			return true, nil
 		}
 	}

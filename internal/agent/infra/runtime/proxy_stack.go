@@ -7,7 +7,6 @@ import (
 	servicecatalogapp "edge-pilot/internal/servicecatalog/application"
 	"edge-pilot/internal/shared/config"
 	"edge-pilot/internal/shared/grpcapi"
-	"edge-pilot/internal/shared/model"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
@@ -402,15 +401,26 @@ func (m *ManagedProxyRuntime) reconcileLocked(ctx context.Context, snapshot *grp
 		ServiceCount:           len(snapshot.GetServices()),
 	}
 	for _, service := range snapshot.GetServices() {
-		for _, slot := range []grpcapi.Slot{grpcapi.Slot_SLOT_BLUE, grpcapi.Slot_SLOT_GREEN} {
+		for _, target := range []serviceBackendTarget{
+			serviceLiveTarget(service),
+			serviceCandidateTarget(service),
+		} {
+			if strings.TrimSpace(target.BackendName) == "" {
+				continue
+			}
 			backend := backendSection{
-				Name: serviceBackendName(service, slot),
+				Name: target.BackendName,
 				Mode: "http",
 				From: managedProxyDefaultsName,
 				Balance: backendBalance{
 					Algorithm: "roundrobin",
 				},
-				HTTPResponseRules: serviceBackendResponseRules(service, slot),
+				HTTPResponseRules: serviceBackendResponseRules(
+					service.GetServiceKey(),
+					service.GetRoutePathPrefix(),
+					target.ReleaseID,
+					strings.TrimSpace(service.GetLiveReleaseId()),
+				),
 			}
 			failureContext.Backends = append(failureContext.Backends, backend)
 			if err := m.dataplane.EnsureBackendInTransaction(ctx, transactionID, backend); err != nil {
@@ -418,8 +428,8 @@ func (m *ManagedProxyRuntime) reconcileLocked(ctx context.Context, snapshot *grp
 				return err
 			}
 			server := backendServer{
-				Name:      serviceServerName(service, slot),
-				Address:   agentdomain.ManagedContainerName(service.GetServiceKey(), slot),
+				Name:      "srv",
+				Address:   agentdomain.ManagedContainerName(service.GetServiceKey(), target.Slot),
 				Port:      int(service.GetContainerPort()),
 				Check:     "enabled",
 				Resolvers: managedProxyResolversName,
@@ -447,8 +457,15 @@ func (m *ManagedProxyRuntime) reconcileLocked(ctx context.Context, snapshot *grp
 		snapshot.GetDefaultBackend(): {},
 	}
 	for _, service := range snapshot.GetServices() {
-		desiredBackends[serviceBackendName(service, grpcapi.Slot_SLOT_BLUE)] = struct{}{}
-		desiredBackends[serviceBackendName(service, grpcapi.Slot_SLOT_GREEN)] = struct{}{}
+		for _, name := range []string{
+			strings.TrimSpace(service.GetLiveBackendName()),
+			strings.TrimSpace(service.GetCandidateBackendName()),
+		} {
+			if name == "" {
+				continue
+			}
+			desiredBackends[name] = struct{}{}
+		}
 	}
 	failureContext.DesiredBackends = sortedBackendNames(desiredBackends)
 	for _, name := range existing {
@@ -628,87 +645,80 @@ func (m *ManagedProxyRuntime) frontendSection(snapshot *grpcapi.ProxyConfigSnaps
 		}
 		return services[i].GetServiceKey() < services[j].GetServiceKey()
 	})
-	acls := make([]frontendACL, 0, len(services)*6)
-	rules := make([]frontendSwitchRule, 0, len(services)*5)
-	for idx, service := range services {
+	acls := make([]frontendACL, 0, len(services)*8)
+	rules := make([]frontendSwitchRule, 0, len(services)*8)
+	addACL := func(name string, criterion string, value string) {
+		acls = append(acls, frontendACL{
+			Name:      name,
+			Criterion: criterion,
+			Value:     value,
+			Index:     len(acls),
+		})
+	}
+	addRule := func(name string, condTest string) {
+		name = strings.TrimSpace(name)
+		if name == "" {
+			return
+		}
+		rules = append(rules, frontendSwitchRule{
+			Name:     name,
+			Cond:     "if",
+			CondTest: strings.TrimSpace(condTest),
+			Index:    len(rules),
+		})
+	}
+	for _, service := range services {
 		hostACL := aclName(service.GetServiceId(), "host")
 		pathACL := aclName(service.GetServiceId(), "path")
-		queryBlueACL := aclName(service.GetServiceId(), "query_blue")
-		queryGreenACL := aclName(service.GetServiceId(), "query_green")
-		cookieBlueACL := aclName(service.GetServiceId(), "cookie_blue")
-		cookieGreenACL := aclName(service.GetServiceId(), "cookie_green")
+		queryLiveACL := aclName(service.GetServiceId(), "query_live")
+		queryCandidateACL := aclName(service.GetServiceId(), "query_candidate")
+		cookieLiveACL := aclName(service.GetServiceId(), "cookie_live")
+		cookieCandidateACL := aclName(service.GetServiceId(), "cookie_candidate")
+		splitACL := aclName(service.GetServiceId(), "split_candidate")
 		cookieName := servicecatalogapp.StickyCookieName(service.GetServiceKey())
-		blueReleaseID := blueReleaseID(service)
-		greenReleaseID := greenReleaseID(service)
-		acls = append(acls, frontendACL{
-			Name:      hostACL,
-			Criterion: "hdr(host)",
-			Value:     "-i " + service.GetRouteHost(),
-			Index:     idx * 6,
-		})
-		acls = append(acls, frontendACL{
-			Name:      pathACL,
-			Criterion: "path_beg",
-			Value:     service.GetRoutePathPrefix(),
-			Index:     idx*6 + 1,
-		})
-		acls = append(acls,
-			frontendACL{
-				Name:      queryBlueACL,
-				Criterion: "url_param(" + servicecatalogapp.PreviewReleaseIDQueryParam + ")",
-				Value:     exactMatchValue(blueReleaseID),
-				Index:     idx*6 + 2,
-			},
-			frontendACL{
-				Name:      queryGreenACL,
-				Criterion: "url_param(" + servicecatalogapp.PreviewReleaseIDQueryParam + ")",
-				Value:     exactMatchValue(greenReleaseID),
-				Index:     idx*6 + 3,
-			},
-			frontendACL{
-				Name:      cookieBlueACL,
-				Criterion: "cook(" + cookieName + ")",
-				Value:     exactMatchValue(blueReleaseID),
-				Index:     idx*6 + 4,
-			},
-			frontendACL{
-				Name:      cookieGreenACL,
-				Criterion: "cook(" + cookieName + ")",
-				Value:     exactMatchValue(greenReleaseID),
-				Index:     idx*6 + 5,
-			},
-		)
-		ruleBase := idx * 5
-		rules = append(rules, frontendSwitchRule{
-			Name:     serviceBackendName(service, grpcapi.Slot_SLOT_BLUE),
-			Cond:     "if",
-			CondTest: hostACL + " " + pathACL + " " + queryBlueACL,
-			Index:    ruleBase,
-		})
-		rules = append(rules, frontendSwitchRule{
-			Name:     serviceBackendName(service, grpcapi.Slot_SLOT_GREEN),
-			Cond:     "if",
-			CondTest: hostACL + " " + pathACL + " " + queryGreenACL,
-			Index:    ruleBase + 1,
-		})
-		rules = append(rules, frontendSwitchRule{
-			Name:     serviceBackendName(service, grpcapi.Slot_SLOT_BLUE),
-			Cond:     "if",
-			CondTest: hostACL + " " + pathACL + " !" + queryBlueACL + " !" + queryGreenACL + " " + cookieBlueACL,
-			Index:    ruleBase + 2,
-		})
-		rules = append(rules, frontendSwitchRule{
-			Name:     serviceBackendName(service, grpcapi.Slot_SLOT_GREEN),
-			Cond:     "if",
-			CondTest: hostACL + " " + pathACL + " !" + queryBlueACL + " !" + queryGreenACL + " " + cookieGreenACL,
-			Index:    ruleBase + 3,
-		})
-		rules = append(rules, frontendSwitchRule{
-			Name:     serviceBackendName(service, liveSlot(service)),
-			Cond:     "if",
-			CondTest: hostACL + " " + pathACL + " !" + queryBlueACL + " !" + queryGreenACL + " !" + cookieBlueACL + " !" + cookieGreenACL,
-			Index:    ruleBase + 4,
-		})
+		liveRelease := strings.TrimSpace(service.GetLiveReleaseId())
+		candidateRelease := strings.TrimSpace(service.GetCandidateReleaseId())
+		liveBackend := strings.TrimSpace(service.GetLiveBackendName())
+		candidateBackend := strings.TrimSpace(service.GetCandidateBackendName())
+		trafficPercent := clampTrafficPercent(int(service.GetCandidateTrafficPercent()))
+
+		addACL(hostACL, "hdr(host)", "-i "+service.GetRouteHost())
+		addACL(pathACL, "path_beg", service.GetRoutePathPrefix())
+		addACL(queryLiveACL, "url_param("+servicecatalogapp.PreviewReleaseIDQueryParam+")", exactMatchValue(liveRelease))
+		addACL(queryCandidateACL, "url_param("+servicecatalogapp.PreviewReleaseIDQueryParam+")", exactMatchValue(candidateRelease))
+		addACL(cookieLiveACL, "cook("+cookieName+")", exactMatchValue(liveRelease))
+		addACL(cookieCandidateACL, "cook("+cookieName+")", exactMatchValue(candidateRelease))
+
+		baseMatch := hostACL + " " + pathACL
+		baseNoOverride := baseMatch + " !" + queryLiveACL + " !" + queryCandidateACL + " !" + cookieLiveACL + " !" + cookieCandidateACL
+
+		addRule(candidateBackend, baseMatch+" "+queryCandidateACL)
+		addRule(liveBackend, baseMatch+" "+queryLiveACL)
+		addRule(candidateBackend, baseMatch+" !"+queryLiveACL+" !"+queryCandidateACL+" "+cookieCandidateACL)
+		addRule(liveBackend, baseMatch+" !"+queryLiveACL+" !"+queryCandidateACL+" "+cookieLiveACL)
+
+		if liveBackend == "" && candidateBackend == "" {
+			continue
+		}
+		if liveBackend == "" {
+			addRule(candidateBackend, baseNoOverride)
+			continue
+		}
+		if candidateBackend == "" {
+			addRule(liveBackend, baseNoOverride)
+			continue
+		}
+		if trafficPercent <= 0 {
+			addRule(liveBackend, baseNoOverride)
+			continue
+		}
+		if trafficPercent >= 100 {
+			addRule(candidateBackend, baseNoOverride)
+			continue
+		}
+		addACL(splitACL, "rand(100)", fmt.Sprintf("lt %d", trafficPercent))
+		addRule(candidateBackend, baseNoOverride+" "+splitACL)
+		addRule(liveBackend, baseNoOverride+" !"+splitACL)
 	}
 	return frontendSection{
 		Name:           snapshot.GetFrontendName(),
@@ -959,44 +969,37 @@ func cloneSnapshot(snapshot *grpcapi.ProxyConfigSnapshot) *grpcapi.ProxyConfigSn
 	}
 	for _, item := range snapshot.GetServices() {
 		out.Services = append(out.Services, &grpcapi.ProxyServiceConfig{
-			ServiceId:       item.GetServiceId(),
-			ServiceKey:      item.GetServiceKey(),
-			RouteHost:       item.GetRouteHost(),
-			RoutePathPrefix: item.GetRoutePathPrefix(),
-			BackendName:     item.GetBackendName(),
-			BlueServerName:  item.GetBlueServerName(),
-			GreenServerName: item.GetGreenServerName(),
-			ContainerPort:   item.GetContainerPort(),
-			CurrentLiveSlot: item.GetCurrentLiveSlot(),
+			ServiceId:               item.GetServiceId(),
+			ServiceKey:              item.GetServiceKey(),
+			RouteHost:               item.GetRouteHost(),
+			RoutePathPrefix:         item.GetRoutePathPrefix(),
+			BackendName:             item.GetBackendName(),
+			ContainerPort:           item.GetContainerPort(),
+			CurrentLiveSlot:         item.GetCurrentLiveSlot(),
+			LiveReleaseId:           item.GetLiveReleaseId(),
+			LiveBackendName:         item.GetLiveBackendName(),
+			CandidateReleaseId:      item.GetCandidateReleaseId(),
+			CandidateBackendName:    item.GetCandidateBackendName(),
+			CandidateTrafficPercent: item.GetCandidateTrafficPercent(),
 		})
 	}
 	return out
 }
 
-func serviceBackendName(service *grpcapi.ProxyServiceConfig, slot grpcapi.Slot) string {
-	return servicecatalogapp.BackendNameForSlot(service.GetBackendName(), model.Slot(slot))
+type serviceBackendTarget struct {
+	BackendName string
+	ReleaseID   string
+	Slot        grpcapi.Slot
 }
 
-func serviceServerName(service *grpcapi.ProxyServiceConfig, slot grpcapi.Slot) string {
-	switch slot {
-	case grpcapi.Slot_SLOT_BLUE:
-		return servicecatalogapp.ServerName(model.SlotBlue)
-	case grpcapi.Slot_SLOT_GREEN:
-		return servicecatalogapp.ServerName(model.SlotGreen)
-	default:
-		return ""
-	}
-}
-
-func serviceBackendResponseRules(service *grpcapi.ProxyServiceConfig, slot grpcapi.Slot) []httpResponseRule {
-	currentReleaseID := slotReleaseID(service, slot)
-	cookieName := servicecatalogapp.StickyCookieName(service.GetServiceKey())
+func serviceBackendResponseRules(serviceKey string, routePathPrefix string, currentReleaseID string, liveReleaseID string) []httpResponseRule {
+	cookieName := servicecatalogapp.StickyCookieName(serviceKey)
 	rules := []httpResponseRule{
 		{
 			Type:   "add-header",
 			Action: "add-header",
 			Header: "Set-Cookie",
-			Format: servicecatalogapp.BuildStickyCookie(cookieName, currentReleaseID, service.GetRoutePathPrefix()),
+			Format: servicecatalogapp.BuildStickyCookie(cookieName, currentReleaseID, routePathPrefix),
 		},
 		{
 			Type:   "set-header",
@@ -1008,49 +1011,57 @@ func serviceBackendResponseRules(service *grpcapi.ProxyServiceConfig, slot grpca
 			Type:   "set-header",
 			Action: "set-header",
 			Header: servicecatalogapp.LiveReleaseIDHeaderName,
-			Format: liveReleaseID(service),
+			Format: liveReleaseID,
 		},
 	}
 	return filterHTTPResponseRules(rules)
 }
 
-func slotReleaseID(service *grpcapi.ProxyServiceConfig, slot grpcapi.Slot) string {
-	switch slot {
-	case grpcapi.Slot_SLOT_BLUE:
-		return blueReleaseID(service)
-	case grpcapi.Slot_SLOT_GREEN:
-		return greenReleaseID(service)
-	default:
-		return ""
+func serviceLiveTarget(service *grpcapi.ProxyServiceConfig) serviceBackendTarget {
+	slot := normalizedSlot(service.GetCurrentLiveSlot())
+	return serviceBackendTarget{
+		BackendName: strings.TrimSpace(service.GetLiveBackendName()),
+		ReleaseID:   strings.TrimSpace(service.GetLiveReleaseId()),
+		Slot:        slot,
 	}
 }
 
-func blueReleaseID(service *grpcapi.ProxyServiceConfig) string {
-	return strings.TrimSpace(service.GetBlueServerName())
+func serviceCandidateTarget(service *grpcapi.ProxyServiceConfig) serviceBackendTarget {
+	return serviceBackendTarget{
+		BackendName: strings.TrimSpace(service.GetCandidateBackendName()),
+		ReleaseID:   strings.TrimSpace(service.GetCandidateReleaseId()),
+		Slot:        oppositeSlot(normalizedSlot(service.GetCurrentLiveSlot())),
+	}
 }
 
-func greenReleaseID(service *grpcapi.ProxyServiceConfig) string {
-	return strings.TrimSpace(service.GetGreenServerName())
-}
-
-func liveSlot(service *grpcapi.ProxyServiceConfig) grpcapi.Slot {
-	switch service.GetCurrentLiveSlot() {
+func normalizedSlot(slot grpcapi.Slot) grpcapi.Slot {
+	switch slot {
 	case grpcapi.Slot_SLOT_BLUE, grpcapi.Slot_SLOT_GREEN:
-		return service.GetCurrentLiveSlot()
+		return slot
 	default:
 		return grpcapi.Slot_SLOT_BLUE
 	}
 }
 
-func liveReleaseID(service *grpcapi.ProxyServiceConfig) string {
-	switch liveSlot(service) {
+func oppositeSlot(slot grpcapi.Slot) grpcapi.Slot {
+	switch slot {
 	case grpcapi.Slot_SLOT_BLUE:
-		return blueReleaseID(service)
+		return grpcapi.Slot_SLOT_GREEN
 	case grpcapi.Slot_SLOT_GREEN:
-		return greenReleaseID(service)
+		return grpcapi.Slot_SLOT_BLUE
 	default:
-		return ""
+		return grpcapi.Slot_SLOT_GREEN
 	}
+}
+
+func clampTrafficPercent(percent int) int {
+	if percent < 0 {
+		return 0
+	}
+	if percent > 100 {
+		return 100
+	}
+	return percent
 }
 
 func exactMatchValue(value string) string {

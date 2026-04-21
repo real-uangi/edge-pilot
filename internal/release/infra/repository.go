@@ -64,15 +64,33 @@ func (r *repository) FindReadyToSwitchRelease(serviceID uuid.UUID) (*model.Relea
 	return &release, nil
 }
 
+func (r *repository) ListQueuedBefore(serviceID uuid.UUID, createdAt time.Time, releaseID uuid.UUID) ([]model.Release, error) {
+	var releases []model.Release
+	if err := r.conn.Where("service_id = ? AND status = ? AND created_at < ? AND id <> ?",
+		serviceID, model.ReleaseStatusQueued, createdAt, releaseID).
+		Order("created_at asc").
+		Find(&releases).Error; err != nil {
+		return nil, err
+	}
+	return releases, nil
+}
+
 func (r *repository) HasActiveRelease(serviceID uuid.UUID) (bool, error) {
 	var count int64
 	if err := r.conn.Model(&model.Release{}).
-		Where("service_id = ? AND status IN ?", serviceID, []model.ReleaseStatus{
-			model.ReleaseStatusDispatching,
-			model.ReleaseStatusDeploying,
-			model.ReleaseStatusReadyToSwitch,
-			model.ReleaseStatusSwitched,
-		}).Count(&count).Error; err != nil {
+		Where("service_id = ? AND ((status IN ?) OR (status IN ? AND traffic_percent BETWEEN ? AND ?))",
+			serviceID,
+			[]model.ReleaseStatus{
+				model.ReleaseStatusDispatching,
+				model.ReleaseStatusDeploying,
+			},
+			[]model.ReleaseStatus{
+				model.ReleaseStatusReadyToSwitch,
+				model.ReleaseStatusSwitched,
+			},
+			1,
+			99,
+		).Count(&count).Error; err != nil {
 		return false, err
 	}
 	return count > 0, nil

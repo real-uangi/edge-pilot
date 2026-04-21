@@ -22,6 +22,7 @@ type releaseAdminActions interface {
 	Start(id uuid.UUID, operator string) (*dto.ReleaseOutput, error)
 	Retry(id uuid.UUID, operator string) (*dto.ReleaseOutput, error)
 	Skip(id uuid.UUID, operator string) (*dto.ReleaseOutput, error)
+	SetTrafficPercent(id uuid.UUID, percent int, operator string) (*dto.ReleaseOutput, error)
 	ConfirmSwitch(id uuid.UUID, operator string) (*dto.ReleaseOutput, error)
 	Rollback(id uuid.UUID, operator string) (*dto.ReleaseOutput, error)
 }
@@ -123,6 +124,24 @@ func registerAdminReleaseRoutes(admin *gin.RouterGroup, releases releaseAdminAct
 			return
 		}
 		output, err := releases.ConfirmSwitch(id, adaptermiddleware.CurrentAdminUsername(c))
+		if err != nil {
+			c.Render(api.HandleErr(err))
+			return
+		}
+		c.Render(http.StatusOK, result.Ok(output))
+	})
+	admin.POST("/releases/:id/traffic", func(c *gin.Context) {
+		id, err := uuid.Parse(c.Param("id"))
+		if err != nil {
+			c.Render(api.HandleErr(err))
+			return
+		}
+		var input dto.AdjustTrafficRequest
+		if err := c.BindJSON(&input); err != nil {
+			c.Render(api.HandleErr(err))
+			return
+		}
+		output, err := releases.SetTrafficPercent(id, input.Percent, adaptermiddleware.CurrentAdminUsername(c))
 		if err != nil {
 			c.Render(api.HandleErr(err))
 			return

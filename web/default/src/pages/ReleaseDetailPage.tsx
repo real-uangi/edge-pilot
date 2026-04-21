@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate, useParams } from "react-router-dom";
 import { api, getErrorMessage } from "../lib/api";
@@ -17,6 +17,18 @@ import { useDialog } from "../components/DialogProvider";
 import { StatusPill } from "../components/StatusPill";
 import { EmptyState, ErrorState, InlineNotice, LoadingState } from "../components/StateBlocks";
 import styles from "../styles/admin.module.css";
+
+function isConflictError(error: unknown) {
+  if (!error || typeof error !== "object") {
+    return false;
+  }
+  const status = (error as { status?: unknown }).status;
+  return typeof status === "number" && status === 409;
+}
+
+function isTrafficGateError(error: unknown) {
+  return isConflictError(error) && getErrorMessage(error).includes("1-99");
+}
 
 function cleanupLabel(value: boolean | null) {
   if (value == null) {
@@ -105,6 +117,15 @@ export function ReleaseDetailPage() {
   const startMutation = useMutation({
     mutationFn: () => api.startRelease(id!),
     onSuccess: invalidate,
+    onError: (error) => {
+      if (!isTrafficGateError(error)) {
+        return;
+      }
+      void dialog.alert({
+        title: "无法开始发布",
+        message: getErrorMessage(error),
+      });
+    },
   });
   const skipMutation = useMutation({
     mutationFn: () => api.skipRelease(id!),
@@ -122,6 +143,17 @@ export function ReleaseDetailPage() {
     mutationFn: () => api.retryRelease(id!),
     onSuccess: invalidate,
   });
+  const trafficMutation = useMutation({
+    mutationFn: (percent: number) => api.setReleaseTraffic(id!, percent),
+    onSuccess: invalidate,
+  });
+  const [trafficDraft, setTrafficDraft] = useState(0);
+  useEffect(() => {
+    if (!detailQuery.data?.release) {
+      return;
+    }
+    setTrafficDraft(detailQuery.data.release.trafficPercent);
+  }, [detailQuery.data?.release?.trafficPercent]);
 
   const confirmAction = async (message: string, action: () => void) => {
     const confirmed = await dialog.confirm({
@@ -165,7 +197,12 @@ export function ReleaseDetailPage() {
   const { release, tasks } = detailQuery.data;
   const agent = agentsQuery.data?.find((item) => item.id === release.agentId);
   const actionError = getErrorMessage(
-    startMutation.error ?? skipMutation.error ?? confirmMutation.error ?? rollbackMutation.error ?? retryMutation.error,
+    startMutation.error ??
+      skipMutation.error ??
+      confirmMutation.error ??
+      rollbackMutation.error ??
+      retryMutation.error ??
+      trafficMutation.error,
   );
 
   return (
@@ -204,14 +241,14 @@ export function ReleaseDetailPage() {
           />
           <ActionButton
             label="确认切流"
-            pending={confirmMutation.isPending}
+            pending={confirmMutation.isPending || trafficMutation.isPending}
             variant="primary"
             disabled={release.status !== 4}
             onClick={() => void confirmAction("确认执行切流？", () => confirmMutation.mutate())}
           />
           <ActionButton
             label="回滚"
-            pending={rollbackMutation.isPending}
+            pending={rollbackMutation.isPending || trafficMutation.isPending}
             variant="danger"
             disabled={[1, 9].includes(release.status)}
             onClick={() => void confirmAction("确认回滚这个发布单？", () => rollbackMutation.mutate())}
@@ -232,6 +269,7 @@ export function ReleaseDetailPage() {
         confirmMutation.isError,
         rollbackMutation.isError,
         retryMutation.isError,
+        trafficMutation.isError,
       ].some(Boolean) ? (
         <InlineNotice message={actionError} tone="error" />
       ) : null}
@@ -241,6 +279,10 @@ export function ReleaseDetailPage() {
           <div className={styles.keyValue}>
             <span className={styles.key}>状态</span>
             <span className={styles.value}>{releaseStatusLabel(release.status)}</span>
+          </div>
+          <div className={styles.keyValue}>
+            <span className={styles.key}>当前切流比例</span>
+            <span className={styles.value}>{release.trafficPercent}%</span>
           </div>
           <div className={styles.keyValue}>
             <span className={styles.key}>镜像</span>
@@ -281,6 +323,43 @@ export function ReleaseDetailPage() {
           label={release.switchConfirmed ? "已确认切流" : "未确认切流"}
           tone={release.switchConfirmed ? "success" : releaseStatusTone(release.status, release.isActive)}
         />
+        <div className={styles.buttonRow}>
+          {[0, 10, 30, 50, 80, 100].map((value) => (
+            <ActionButton
+              key={value}
+              label={`${value}%`}
+              variant={value === release.trafficPercent ? "primary" : "secondary"}
+              pending={trafficMutation.isPending && trafficDraft === value}
+              disabled={trafficMutation.isPending || release.status === 1 || release.status === 9}
+              onClick={() => {
+                setTrafficDraft(value);
+                void confirmAction(`确认设置切流比例为 ${value}%？`, () => trafficMutation.mutate(value));
+              }}
+            />
+          ))}
+          <input
+            type="number"
+            min={0}
+            max={100}
+            value={trafficDraft}
+            className={styles.input}
+            onChange={(event) => {
+              const next = Number(event.target.value);
+              if (!Number.isFinite(next)) {
+                setTrafficDraft(0);
+                return;
+              }
+              setTrafficDraft(Math.max(0, Math.min(100, Math.round(next))));
+            }}
+          />
+          <ActionButton
+            label="应用比例"
+            pending={trafficMutation.isPending}
+            variant="primary"
+            disabled={trafficMutation.isPending || release.status === 1 || release.status === 9}
+            onClick={() => void confirmAction(`确认设置切流比例为 ${trafficDraft}%？`, () => trafficMutation.mutate(trafficDraft))}
+          />
+        </div>
         {release.verificationUrl ? (
           <InlineNotice
             message={`目标版本验证链接已就绪，浏览器将写入 ${release.stickyCookieName}，并可通过 ${release.currentReleaseHeaderName} / ${release.liveReleaseHeaderName} 对比当前命中版本与最新 live 版本。`}
