@@ -96,9 +96,13 @@ type resolvedRegistryCredential struct {
 
 type fakeRegistryCredentialResolver struct {
 	credential *resolvedRegistryCredential
+	err        error
 }
 
 func (f fakeRegistryCredentialResolver) ResolveForImageRepo(string) (*releasedomain.ResolvedRegistryCredential, error) {
+	if f.err != nil {
+		return nil, f.err
+	}
 	if f.credential == nil {
 		return nil, nil
 	}

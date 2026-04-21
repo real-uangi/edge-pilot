@@ -583,6 +583,8 @@ func TestStartQueuedReleaseRejectsWhenAnotherReleaseIsActive(t *testing.T) {
 
 	if _, err := releaseService.Start(queuedRelease.ID, "admin"); err == nil {
 		t.Fatalf("expected start to fail when another release is active")
+	} else if !strings.Contains(err.Error(), "active release") {
+		t.Fatalf("expected active release error message, got %q", err.Error())
 	}
 }
 
@@ -812,6 +814,82 @@ func TestStartQueuedReleaseAutoSkipsEarlierQueuedReleases(t *testing.T) {
 	}
 	if !foundAutoSkippedAudit {
 		t.Fatalf("expected release_auto_skipped audit for older release, got %#v", releaseRepo.audits)
+	}
+}
+
+func TestStartQueuedReleaseDoesNotAutoSkipWhenResolveRegistryCredentialFails(t *testing.T) {
+	serviceRepo := &fakeServiceRepo{}
+	agentRepo := &fakeAgentRepo{nodes: map[string]*model.AgentNode{}}
+	releaseRepo := newFakeReleaseRepo()
+	dispatcher := &fakeDispatcher{}
+	resolver := fakeRegistryCredentialResolver{err: errors.New("resolve failed")}
+
+	serviceCatalog := servicecatalogapp.NewService(serviceRepo)
+	registry := agentregistry.NewRegistryService(config.LoadAgentAuthConfig(), agentRepo)
+	releaseService := NewServiceWithRegistryCredentials(releaseRepo, dispatcher, serviceCatalog, registry, resolver)
+
+	enabled := true
+	dockerHealth := true
+	online := true
+	now := time.Now()
+	service := &model.Service{
+		ID:                uuid.New(),
+		ServiceKey:        "svc-a",
+		Name:              "svc-a",
+		AgentID:           "agent-a",
+		ImageRepo:         "repo/app",
+		ContainerPort:     8080,
+		DockerHealthCheck: &dockerHealth,
+		Enabled:           &enabled,
+	}
+	serviceRepo.ensure()
+	serviceRepo.byID[service.ID] = service
+	serviceRepo.byKey[service.ServiceKey] = service
+	agentRepo.nodes["agent-a"] = &model.AgentNode{
+		ID:              "agent-a",
+		Enabled:         &enabled,
+		Online:          &online,
+		LastHeartbeatAt: &now,
+	}
+
+	older := &model.Release{
+		ID:        uuid.New(),
+		ServiceID: service.ID,
+		AgentID:   "agent-a",
+		ImageRepo: "repo/app",
+		ImageTag:  "v0.9.0",
+		Status:    model.ReleaseStatusQueued,
+	}
+	current := &model.Release{
+		ID:        uuid.New(),
+		ServiceID: service.ID,
+		AgentID:   "agent-a",
+		ImageRepo: "repo/app",
+		ImageTag:  "v1.0.0",
+		Status:    model.ReleaseStatusQueued,
+	}
+	if err := releaseRepo.CreateRelease(older); err != nil {
+		t.Fatalf("CreateRelease() older error = %v", err)
+	}
+	time.Sleep(5 * time.Millisecond)
+	if err := releaseRepo.CreateRelease(current); err != nil {
+		t.Fatalf("CreateRelease() current error = %v", err)
+	}
+
+	if _, err := releaseService.Start(current.ID, "admin"); err == nil {
+		t.Fatalf("expected start to fail when registry credential resolve fails")
+	}
+	storedOlder := releaseRepo.releases[older.ID]
+	if storedOlder == nil || storedOlder.Status != model.ReleaseStatusQueued {
+		t.Fatalf("expected older queued release to remain queued, got %#v", storedOlder)
+	}
+	if storedOlder.CompletedAt != nil {
+		t.Fatalf("expected older queued release completedAt to remain nil")
+	}
+	for _, item := range releaseRepo.audits {
+		if item.EventType == "release_auto_skipped" && item.AggregateID == older.ID.String() {
+			t.Fatalf("expected no release_auto_skipped audit for older release when start failed")
+		}
 	}
 }
 
@@ -1945,6 +2023,19 @@ func (r *fakeReleaseRepo) HasActiveRelease(serviceID uuid.UUID) (bool, error) {
 		}
 		if item.Status == model.ReleaseStatusDispatching || item.Status == model.ReleaseStatusDeploying {
 			return true, nil
+		}
+		if (item.Status == model.ReleaseStatusReadyToSwitch || item.Status == model.ReleaseStatusSwitched) &&
+			item.TrafficPercent >= 1 && item.TrafficPercent <= 99 {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
+func (r *fakeReleaseRepo) HasTrafficSplitRelease(serviceID uuid.UUID) (bool, error) {
+	for _, item := range r.releases {
+		if item.ServiceID != serviceID {
+			continue
 		}
 		if (item.Status == model.ReleaseStatusReadyToSwitch || item.Status == model.ReleaseStatusSwitched) &&
 			item.TrafficPercent >= 1 && item.TrafficPercent <= 99 {

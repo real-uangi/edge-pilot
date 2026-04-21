@@ -96,6 +96,23 @@ func (r *repository) HasActiveRelease(serviceID uuid.UUID) (bool, error) {
 	return count > 0, nil
 }
 
+func (r *repository) HasTrafficSplitRelease(serviceID uuid.UUID) (bool, error) {
+	var count int64
+	if err := r.conn.Model(&model.Release{}).
+		Where("service_id = ? AND status IN ? AND traffic_percent BETWEEN ? AND ?",
+			serviceID,
+			[]model.ReleaseStatus{
+				model.ReleaseStatusReadyToSwitch,
+				model.ReleaseStatusSwitched,
+			},
+			1,
+			99,
+		).Count(&count).Error; err != nil {
+		return false, err
+	}
+	return count > 0, nil
+}
+
 func (r *repository) FindQueuedOrActiveDuplicate(serviceID uuid.UUID, imageTag string, commitSHA string) (*model.Release, error) {
 	var release model.Release
 	query := r.conn.Where("service_id = ? AND image_tag = ? AND status IN ?", serviceID, imageTag, []model.ReleaseStatus{

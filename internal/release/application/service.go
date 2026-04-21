@@ -154,7 +154,14 @@ func (s *Service) Start(id uuid.UUID, operator string) (*dto.ReleaseOutput, erro
 		return nil, err
 	}
 	if active {
-		return nil, business.NewErrorWithCode("service has in-progress traffic split (1-99%), finish at 0% or 100% before starting a new release", 409)
+		split, err := s.repo.HasTrafficSplitRelease(release.ServiceID)
+		if err != nil {
+			return nil, err
+		}
+		if split {
+			return nil, business.NewErrorWithCode("service has in-progress traffic split (1-99%), finish at 0% or 100% before starting a new release", 409)
+		}
+		return nil, business.NewErrorWithCode("service has active release", 409)
 	}
 	spec, err := s.services.GetSpecByID(release.ServiceID)
 	if err != nil {
@@ -178,9 +185,6 @@ func (s *Service) Start(id uuid.UUID, operator string) (*dto.ReleaseOutput, erro
 	release.TargetSlot = nextSlot(spec.CurrentLiveSlot)
 	release.TrafficPercent = 0
 	if err := s.completeSupersededRelease(release, operator); err != nil {
-		return nil, err
-	}
-	if err := s.autoSkipQueuedBeforeStart(release, operator); err != nil {
 		return nil, err
 	}
 	registryAuth, err := s.registryAuth.ResolveForImageRepo(release.ImageRepo)
@@ -208,6 +212,9 @@ func (s *Service) Start(id uuid.UUID, operator string) (*dto.ReleaseOutput, erro
 		return nil, err
 	}
 	if err := s.dispatch(task); err != nil {
+		return nil, err
+	}
+	if err := s.autoSkipQueuedBeforeStart(release, operator); err != nil {
 		return nil, err
 	}
 	output, err := s.enrichReleaseOutput(release)

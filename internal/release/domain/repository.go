@@ -16,6 +16,7 @@ type Repository interface {
 	ListQueuedBefore(uuid.UUID, time.Time, uuid.UUID) ([]model.Release, error)
 	FindReadyToSwitchRelease(uuid.UUID) (*model.Release, error)
 	HasActiveRelease(uuid.UUID) (bool, error)
+	HasTrafficSplitRelease(uuid.UUID) (bool, error)
 	FindQueuedOrActiveDuplicate(uuid.UUID, string, string) (*model.Release, error)
 	CountQueuedBefore(uuid.UUID, time.Time, uuid.UUID) (int, error)
 	CreateTask(*model.Task) error

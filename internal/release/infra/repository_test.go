@@ -69,6 +69,42 @@ func TestHasActiveReleaseReturnsFalseWhenCountIsZero(t *testing.T) {
 	}
 }
 
+func TestHasTrafficSplitRelease(t *testing.T) {
+	repo, mock := newMockedRepository(t)
+
+	mock.ExpectQuery(`SELECT count\(\*\) FROM "ep_release"`).
+		WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(1))
+
+	active, err := repo.HasTrafficSplitRelease(uuid.New())
+	if err != nil {
+		t.Fatalf("HasTrafficSplitRelease() error = %v", err)
+	}
+	if !active {
+		t.Fatalf("expected traffic split release")
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatalf("ExpectationsWereMet() error = %v", err)
+	}
+}
+
+func TestHasTrafficSplitReleaseReturnsFalseWhenCountIsZero(t *testing.T) {
+	repo, mock := newMockedRepository(t)
+
+	mock.ExpectQuery(`SELECT count\(\*\) FROM "ep_release"`).
+		WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(0))
+
+	active, err := repo.HasTrafficSplitRelease(uuid.New())
+	if err != nil {
+		t.Fatalf("HasTrafficSplitRelease() error = %v", err)
+	}
+	if active {
+		t.Fatalf("expected no traffic split release")
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatalf("ExpectationsWereMet() error = %v", err)
+	}
+}
+
 func TestListQueuedBefore(t *testing.T) {
 	repo, mock := newMockedRepository(t)
 	serviceID := uuid.New()
