@@ -1,46 +1,56 @@
+@import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&family=Space+Grotesk:wght@500;600;700&display=swap");
+
 :root {
-  color-scheme: light;
-  font-family:
-    Inter,
-    system-ui,
-    -apple-system,
-    BlinkMacSystemFont,
-    "Segoe UI",
-    sans-serif;
-  background: #ffffff;
-  color: #000000;
-  font-synthesis: none;
-  text-rendering: optimizeLegibility;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
-  --ep-black: #000000;
-  --ep-white: #ffffff;
-  --ep-body: #4b4b4b;
-  --ep-muted: #afafaf;
-  --ep-chip: #efefef;
-  --ep-hover: #f3f3f3;
-  --ep-border: #000000;
-  --ep-shadow: rgba(0, 0, 0, 0.12);
-  --ep-shadow-strong: rgba(0, 0, 0, 0.16);
-  --ep-radius: 12px;
-  --ep-radius-sm: 8px;
-  --ep-radius-lg: 16px;
-  --ep-pill: 999px;
-  --ep-container: min(1136px, calc(100vw - 32px));
+  color-scheme: dark;
+  --ep-font-heading: "Space Grotesk", "Inter", system-ui, sans-serif;
+  --ep-font-body: "Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --ep-font-mono: "JetBrains Mono", "SFMono-Regular", ui-monospace, Menlo, monospace;
+
+  --ep-bg: #10131a;
+  --ep-surface-lowest: #0b0e14;
+  --ep-surface: #10131a;
+  --ep-surface-low: #191c22;
+  --ep-surface-mid: #1d2026;
+  --ep-surface-high: #272a31;
+  --ep-surface-highest: #32353c;
+
+  --ep-text: #e1e2eb;
+  --ep-text-muted: #bbc9cf;
+  --ep-text-dim: #859399;
+  --ep-outline: #3c494e;
+  --ep-outline-ghost: rgba(60, 73, 78, 0.15);
+
+  --ep-primary: #a4e6ff;
+  --ep-primary-strong: #00d1ff;
+  --ep-primary-ink: #003543;
+  --ep-secondary: #4edea3;
+  --ep-secondary-soft: rgba(78, 222, 163, 0.16);
+  --ep-warning: #ffd5a5;
+  --ep-warning-soft: rgba(255, 176, 68, 0.14);
+  --ep-danger: #ffb4ab;
+  --ep-danger-soft: rgba(255, 180, 171, 0.14);
+
+  --ep-radius-xs: 4px;
+  --ep-radius-sm: 6px;
+  --ep-radius-md: 8px;
+  --ep-radius-lg: 10px;
+  --ep-radius-xl: 12px;
+
   --ep-space-1: 4px;
   --ep-space-2: 8px;
   --ep-space-3: 12px;
   --ep-space-4: 16px;
-  --ep-space-5: 24px;
-  --ep-space-6: 32px;
-  --ep-text-1: 12px;
-  --ep-text-2: 13px;
-  --ep-text-3: 14px;
-  --ep-text-4: 16px;
+  --ep-space-5: 20px;
+  --ep-space-6: 24px;
+  --ep-space-7: 32px;
+
   --ep-motion-fast: 120ms;
   --ep-motion-base: 180ms;
   --ep-ease-standard: cubic-bezier(0.2, 0, 0, 1);
-  --ep-focus-ring: 0 0 0 2px #ffffff, 0 0 0 4px #000000;
+
+  --ep-shadow-soft: 0 10px 24px rgba(0, 0, 0, 0.32);
+  --ep-shadow-ambient: 0 16px 32px rgba(76, 214, 255, 0.08);
+  --ep-focus-ring: 0 0 0 1px rgba(164, 230, 255, 0.92), 0 0 0 4px rgba(164, 230, 255, 0.2);
 }
 
 * {
@@ -55,8 +65,27 @@ body,
 }
 
 body {
-  background: var(--ep-white);
-  color: var(--ep-black);
+  font-family: var(--ep-font-body);
+  background:
+    radial-gradient(circle at 88% 8%, rgba(76, 214, 255, 0.08), transparent 38%),
+    radial-gradient(circle at 16% 20%, rgba(78, 222, 163, 0.05), transparent 34%),
+    var(--ep-bg);
+  color: var(--ep-text);
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+  margin: 0;
+  font-family: var(--ep-font-heading);
+  letter-spacing: 0.01em;
 }
 
 a {
@@ -69,6 +98,7 @@ input,
 select,
 textarea {
   font: inherit;
+  color: inherit;
 }
 
 button {
@@ -98,28 +128,47 @@ textarea:focus-visible {
   box-shadow: var(--ep-focus-ring);
 }
 
+code,
+pre,
+kbd,
+samp {
+  font-family: var(--ep-font-mono);
+}
+
 table {
   width: 100%;
-  border-collapse: collapse;
+  border-collapse: separate;
+  border-spacing: 0 6px;
 }
 
 th,
 td {
   text-align: left;
-  padding: 10px;
-  border-bottom: 1px solid rgba(0, 0, 0, 0.08);
+  padding: 10px 12px;
   vertical-align: top;
   font-size: 13px;
 }
 
 th {
+  color: var(--ep-text-dim);
   font-size: 11px;
   text-transform: uppercase;
-  letter-spacing: 0.04em;
-  color: var(--ep-body);
-  white-space: nowrap;
+  letter-spacing: 0.08em;
+  font-weight: 600;
+}
+
+tbody td {
+  background: var(--ep-surface-low);
+}
+
+tbody tr td:first-child {
+  border-radius: var(--ep-radius-sm) 0 0 var(--ep-radius-sm);
+}
+
+tbody tr td:last-child {
+  border-radius: 0 var(--ep-radius-sm) var(--ep-radius-sm) 0;
 }
 
 tbody tr:hover td {
-  background: #fafafa;
+  background: var(--ep-surface-high);
 }

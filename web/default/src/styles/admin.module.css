@@ -1,6 +1,6 @@
 .page {
   display: grid;
-  gap: 18px;
+  gap: 16px;
   animation: fade-in-up var(--ep-motion-base) var(--ep-ease-standard);
 }
 
@@ -18,29 +18,34 @@
 .hero {
   display: grid;
   gap: 10px;
-  padding: 24px;
-  background: #000000;
-  color: #ffffff;
-  border-radius: var(--ep-radius-lg);
+  padding: 22px;
+  background:
+    linear-gradient(135deg, rgba(164, 230, 255, 0.16), rgba(0, 209, 255, 0.14)),
+    var(--ep-surface-low);
+  color: var(--ep-text);
+  border-radius: var(--ep-radius-xl);
+  border: 1px solid var(--ep-outline-ghost);
+  box-shadow: var(--ep-shadow-ambient);
 }
 
 .eyebrow {
-  font-size: 12px;
+  font-size: 11px;
   text-transform: uppercase;
   letter-spacing: 0.08em;
-  color: rgba(255, 255, 255, 0.72);
+  color: var(--ep-text-dim);
 }
 
 .title {
   margin: 0;
-  font-size: clamp(24px, 3vw, 38px);
-  line-height: 1.08;
+  font-size: clamp(28px, 3vw, 44px);
+  line-height: 1.06;
+  max-width: 840px;
 }
 
 .subtitle {
   margin: 0;
-  max-width: 820px;
-  color: rgba(255, 255, 255, 0.76);
+  max-width: 860px;
+  color: var(--ep-text-muted);
   line-height: 1.5;
   font-size: 14px;
 }
@@ -50,28 +55,30 @@
   flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
-  gap: 14px;
+  gap: 12px;
 }
 
 .sectionTitle {
   margin: 0;
-  font-size: 22px;
-  line-height: 1.12;
+  font-size: clamp(20px, 2vw, 30px);
+  line-height: 1.15;
 }
 
 .sectionCopy {
-  margin: 0;
-  color: var(--ep-body);
+  margin: 4px 0 0;
+  color: var(--ep-text-muted);
   font-size: 13px;
+  line-height: 1.45;
 }
 
 .sectionCard {
-  background: #ffffff;
-  border-radius: var(--ep-radius);
-  box-shadow: 0 4px 16px var(--ep-shadow);
-  padding: 18px;
+  background: var(--ep-surface-low);
+  border-radius: var(--ep-radius-lg);
+  padding: 14px;
   display: grid;
-  gap: 14px;
+  gap: 12px;
+  border: 1px solid var(--ep-outline-ghost);
+  box-shadow: inset 0 0 0 1px rgba(60, 73, 78, 0.08);
 }
 
 .cardGrid {
@@ -81,35 +88,37 @@
 }
 
 .statCard {
-  padding: 16px;
-  background: #ffffff;
-  border-radius: var(--ep-radius);
-  box-shadow: 0 4px 16px var(--ep-shadow);
+  padding: 12px;
+  background: var(--ep-surface-mid);
+  border-radius: var(--ep-radius-md);
+  border: 1px solid var(--ep-outline-ghost);
   display: grid;
-  gap: 6px;
+  gap: 5px;
 }
 
 .metricLabel {
-  font-size: 12px;
+  font-size: 11px;
   text-transform: uppercase;
   letter-spacing: 0.08em;
-  color: var(--ep-body);
+  color: var(--ep-text-dim);
 }
 
 .metricValue {
-  font-size: clamp(24px, 3vw, 34px);
-  font-weight: 800;
+  font-family: var(--ep-font-heading);
+  font-size: clamp(25px, 2.9vw, 38px);
+  font-weight: 700;
   line-height: 1;
+  color: var(--ep-text);
 }
 
 .metricMeta {
-  color: var(--ep-body);
+  color: var(--ep-text-muted);
   font-size: 12px;
 }
 
 .buttonRow {
   display: flex;
-  gap: 10px;
+  gap: 8px;
   flex-wrap: wrap;
   align-items: center;
 }
@@ -118,54 +127,50 @@
 .secondaryButton,
 .dangerButton,
 .ghostButton {
-  border: 1px solid transparent;
-  border-radius: var(--ep-pill);
-  padding: 9px 13px;
-  font-weight: 700;
-  font-size: 13px;
-  line-height: 1.1;
+  border: 0;
+  border-radius: var(--ep-radius-sm);
+  padding: 8px 12px;
+  font-weight: 600;
+  font-size: 12px;
+  line-height: 1.2;
 }
 
 .primaryButton {
-  background: #000000;
-  color: #ffffff;
-  border-color: #000000;
+  background: linear-gradient(135deg, var(--ep-primary), var(--ep-primary-strong));
+  color: var(--ep-primary-ink);
 }
 
 .primaryButton:hover:not(:disabled) {
   transform: translateY(-1px);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.16);
+  box-shadow: var(--ep-shadow-ambient);
 }
 
 .secondaryButton {
-  background: var(--ep-chip);
-  color: #000000;
-  border-color: rgba(0, 0, 0, 0.08);
+  background: var(--ep-surface-high);
+  color: var(--ep-text);
 }
 
 .secondaryButton:hover:not(:disabled) {
-  background: #e2e2e2;
+  background: var(--ep-surface-highest);
 }
 
 .dangerButton {
-  background: #ffffff;
-  color: #000000;
-  border-color: #000000;
-  border-width: 2px;
+  background: var(--ep-danger-soft);
+  color: var(--ep-danger);
 }
 
 .dangerButton:hover:not(:disabled) {
-  background: #f3f3f3;
+  background: rgba(255, 180, 171, 0.24);
 }
 
 .ghostButton {
-  background: #ffffff;
-  color: #000000;
-  border-color: #000000;
+  background: transparent;
+  color: var(--ep-primary);
+  border: 1px solid var(--ep-outline-ghost);
 }
 
 .ghostButton:hover:not(:disabled) {
-  background: #f3f3f3;
+  background: rgba(164, 230, 255, 0.08);
 }
 
 .primaryButton:disabled,
@@ -173,7 +178,7 @@
 .dangerButton:disabled,
 .ghostButton:disabled {
   cursor: not-allowed;
-  opacity: 0.48;
+  opacity: 0.44;
 }
 
 .tableWrap {
@@ -181,13 +186,15 @@
 }
 
 .tableLink {
-  font-weight: 700;
+  font-family: var(--ep-font-mono);
+  font-weight: 600;
   text-decoration: underline;
-  font-size: 13px;
+  text-decoration-thickness: 1px;
+  color: var(--ep-primary);
 }
 
 .muted {
-  color: var(--ep-body);
+  color: var(--ep-text-muted);
 }
 
 .strong {
@@ -211,35 +218,50 @@
 
 .label {
   font-size: 12px;
-  font-weight: 700;
+  font-weight: 600;
+  color: var(--ep-text);
 }
 
 .hint {
   font-size: 11px;
-  color: var(--ep-body);
+  color: var(--ep-text-dim);
 }
 
 .input,
 .textarea,
 .select {
   width: 100%;
-  border: 1px solid #000000;
-  border-radius: 8px;
-  padding: 10px 12px;
-  background: #ffffff;
-  color: #000000;
+  border: 0;
+  border-bottom: 2px solid var(--ep-outline);
+  border-radius: var(--ep-radius-sm) var(--ep-radius-sm) 0 0;
+  padding: 10px 10px 8px;
+  background: var(--ep-surface-mid);
+  color: var(--ep-text);
   font-size: 13px;
+}
+
+.input::placeholder,
+.textarea::placeholder,
+.select::placeholder {
+  color: var(--ep-text-dim);
 }
 
 .input:hover,
 .textarea:hover,
 .select:hover {
-  background: #fcfcfc;
+  background: var(--ep-surface-high);
+}
+
+.input:focus,
+.textarea:focus,
+.select:focus {
+  border-bottom-color: var(--ep-primary-strong);
 }
 
 .textarea {
   min-height: 100px;
   resize: vertical;
+  line-height: 1.5;
 }
 
 .checkboxRow {
@@ -249,19 +271,20 @@
 }
 
 .error {
-  color: #000000;
-  font-weight: 700;
-  background: #f3f3f3;
-  border-radius: 12px;
-  padding: 12px 14px;
+  color: var(--ep-danger);
+  font-weight: 600;
+  background: var(--ep-danger-soft);
+  border-radius: var(--ep-radius-md);
+  padding: 12px;
   font-size: 13px;
 }
 
 .stateCard {
-  border-radius: 12px;
-  padding: 18px;
-  background: #f7f7f7;
-  color: #000000;
+  border-radius: var(--ep-radius-md);
+  padding: 16px;
+  background: var(--ep-surface-mid);
+  color: var(--ep-text);
+  border: 1px solid var(--ep-outline-ghost);
   display: grid;
   gap: 8px;
 }
@@ -275,13 +298,13 @@
 .stateMessage {
   margin: 0;
   font-size: 13px;
-  color: var(--ep-body);
-  line-height: 1.45;
+  color: var(--ep-text-muted);
+  line-height: 1.5;
 }
 
 .stateActions {
   display: flex;
-  gap: 10px;
+  gap: 8px;
   flex-wrap: wrap;
   align-items: center;
 }
@@ -289,9 +312,9 @@
 .loadingDot {
   width: 18px;
   height: 18px;
-  border-radius: 999px;
-  border: 2px solid rgba(0, 0, 0, 0.2);
-  border-top-color: #000000;
+  border-radius: 50%;
+  border: 2px solid rgba(164, 230, 255, 0.3);
+  border-top-color: var(--ep-primary-strong);
   animation: spin 900ms linear infinite;
 }
 
@@ -305,145 +328,145 @@
 }
 
 .inlineNotice {
-  border-radius: 12px;
-  padding: 12px 14px;
+  border-radius: var(--ep-radius-md);
+  padding: 10px 12px;
   font-size: 13px;
-  font-weight: 600;
-  background: #f3f3f3;
-  color: #000000;
+  font-weight: 500;
+  background: var(--ep-surface-mid);
+  color: var(--ep-text);
 }
 
 .inlineNoticeError {
-  border: 1px solid #000000;
+  border: 1px solid rgba(255, 180, 171, 0.32);
+  color: var(--ep-danger);
 }
 
 .inlineNoticeInfo {
-  border: 1px dashed #000000;
+  border: 1px solid var(--ep-outline-ghost);
+  color: var(--ep-text-muted);
 }
 
 .credentialCard {
-  background: #000000;
-  color: #ffffff;
+  background:
+    linear-gradient(135deg, rgba(164, 230, 255, 0.14), rgba(0, 209, 255, 0.1)),
+    var(--ep-surface-low);
+  color: var(--ep-text);
   border-radius: var(--ep-radius-lg);
-  padding: 16px;
+  padding: 14px;
   display: grid;
   gap: 8px;
+  border: 1px solid var(--ep-outline-ghost);
 }
 
 .credentialValue {
   word-break: break-all;
-  font-family: "SFMono-Regular", ui-monospace, monospace;
-  font-size: 13px;
+  font-family: var(--ep-font-mono);
+  font-size: 12px;
+  color: var(--ep-primary);
 }
 
 .keyValueGrid {
   display: grid;
-  gap: 12px;
+  gap: 10px;
   grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
 .keyValue {
   display: grid;
   gap: 4px;
-  padding: 13px;
-  border-radius: 12px;
-  background: #f7f7f7;
+  padding: 10px;
+  border-radius: var(--ep-radius-sm);
+  background: var(--ep-surface-mid);
+  border: 1px solid var(--ep-outline-ghost);
 }
 
 .key {
-  font-size: 12px;
-  color: var(--ep-body);
+  font-size: 11px;
+  color: var(--ep-text-dim);
   text-transform: uppercase;
   letter-spacing: 0.08em;
 }
 
 .value {
-  font-size: 14px;
-  font-weight: 700;
+  font-size: 13px;
+  font-weight: 600;
   word-break: break-word;
+  font-family: var(--ep-font-mono);
 }
 
 .statusPill {
   display: inline-flex;
   align-items: center;
   gap: 7px;
-  padding: 6px 10px;
-  border-radius: var(--ep-pill);
-  border: 1px solid rgba(0, 0, 0, 0.12);
+  padding: 5px 8px;
+  border-radius: var(--ep-radius-md);
   font-size: 11px;
-  font-weight: 700;
+  font-weight: 600;
   line-height: 1;
-  letter-spacing: 0.02em;
+  letter-spacing: 0.01em;
 }
 
 .statusDot {
   width: 7px;
   height: 7px;
-  border-radius: 999px;
+  border-radius: 50%;
   flex: 0 0 auto;
 }
 
 .tonedefault {
-  background: #ffffff;
-  color: #000000;
+  background: rgba(133, 147, 153, 0.14);
+  color: var(--ep-text-muted);
 }
 
 .tonesuccess {
-  background: #000000;
-  color: #ffffff;
-  border-color: #000000;
+  background: var(--ep-secondary-soft);
+  color: var(--ep-secondary);
 }
 
 .tonedanger {
-  background: #ffffff;
-  color: #000000;
-  border-color: #000000;
-  border-width: 2px;
+  background: var(--ep-danger-soft);
+  color: var(--ep-danger);
 }
 
 .tonewarning {
-  background: #efefef;
-  color: #000000;
-  border-style: dashed;
-  border-color: #000000;
+  background: var(--ep-warning-soft);
+  color: var(--ep-warning);
 }
 
 .tonedark {
-  background: #000000;
-  color: #ffffff;
-  border-color: #000000;
+  background: rgba(164, 230, 255, 0.14);
+  color: var(--ep-primary);
 }
 
 .dotdefault {
-  background: transparent;
-  border: 1.5px solid #000000;
+  background: var(--ep-text-dim);
 }
 
 .dotsuccess {
-  background: #ffffff;
+  background: var(--ep-secondary);
 }
 
 .dotdanger {
-  background: #000000;
-  border-radius: 2px;
+  background: var(--ep-danger);
 }
 
 .dotwarning {
-  background: #000000;
+  background: var(--ep-warning);
 }
 
 .dotdark {
-  background: #ffffff;
+  background: var(--ep-primary);
 }
 
 .split {
   display: grid;
   gap: 12px;
-  grid-template-columns: 1.4fr 1fr;
+  grid-template-columns: 1fr;
 }
 
 .timelineDetailRow td {
-  border-top: 0;
+  background: transparent;
+  padding-top: 0;
 }
 
 .timelineDetailCell {
@@ -451,32 +474,36 @@
 }
 
 .logCard {
-  border-radius: 12px;
-  background: #f7f7f7;
-  padding: 12px 14px;
+  border-radius: var(--ep-radius-md);
+  background: var(--ep-surface-mid);
+  padding: 10px 12px;
+  border: 1px solid var(--ep-outline-ghost);
 }
 
 .logSummary {
   cursor: pointer;
-  font-size: 13px;
-  font-weight: 700;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--ep-text);
 }
 
 .logMeta {
   display: grid;
   gap: 4px;
   margin-top: 10px;
-  color: var(--ep-body);
+  color: var(--ep-text-muted);
   font-size: 12px;
+  line-height: 1.45;
 }
 
 .logBlock {
   margin: 10px 0 0;
-  padding: 12px;
-  height: 280px;
-  border-radius: 8px;
-  background: #000000;
-  color: #ffffff;
+  padding: 10px;
+  height: 300px;
+  border-radius: var(--ep-radius-sm);
+  background: var(--ep-surface-lowest);
+  color: var(--ep-text);
+  border: 1px solid var(--ep-outline-ghost);
   font-size: 12px;
   line-height: 1.45;
   overflow-y: auto;
@@ -487,10 +514,11 @@
 
 .configBlock {
   margin: 10px 0 0;
-  padding: 12px;
-  border-radius: 8px;
-  background: #000000;
-  color: #ffffff;
+  padding: 10px;
+  border-radius: var(--ep-radius-sm);
+  background: var(--ep-surface-lowest);
+  color: var(--ep-text);
+  border: 1px solid var(--ep-outline-ghost);
   font-size: 12px;
   line-height: 1.45;
   overflow-y: auto;
@@ -501,8 +529,18 @@
 
 .logEmpty {
   margin-top: 10px;
-  color: var(--ep-body);
+  color: var(--ep-text-dim);
   font-size: 12px;
+}
+
+@media (max-width: 1180px) {
+  .cardGrid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .keyValueGrid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 }
 
 @media (max-width: 980px) {
@@ -511,5 +549,9 @@
   .keyValueGrid,
   .split {
     grid-template-columns: 1fr;
+  }
+
+  .title {
+    font-size: clamp(24px, 6vw, 34px);
   }
 }

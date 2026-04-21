@@ -50,10 +50,11 @@ export function DashboardPage() {
 
   return (
     <div className={styles.page}>
-      <section className={styles.hero}>
-        <span className={styles.eyebrow}>总览</span>
-        <h1 className={styles.title}>把单机服务运行成一套可控的发布面板</h1>
-        <p className={styles.subtitle}>聚焦服务健康、节点状态和发布进度，降低切换与回滚风险。</p>
+      <section className={styles.sectionHeader}>
+        <div>
+          <h1 className={styles.sectionTitle}>总览</h1>
+          <p className={styles.sectionCopy}>集中查看服务、节点与发布状态。</p>
+        </div>
       </section>
 
       <section className={styles.cardGrid}>
@@ -82,7 +83,7 @@ export function DashboardPage() {
       <section className={styles.sectionCard}>
         <div className={styles.sectionHeader}>
           <div>
-            <h2 className={styles.sectionTitle}>服务</h2>
+            <h2 className={styles.sectionTitle}>服务目录</h2>
           </div>
           <Link className={styles.primaryButton} to="/services">
             查看服务
@@ -128,7 +129,49 @@ export function DashboardPage() {
         <div className={styles.sectionCard}>
           <div className={styles.sectionHeader}>
             <div>
-              <h2 className={styles.sectionTitle}>节点</h2>
+              <h2 className={styles.sectionTitle}>发布流</h2>
+            </div>
+            <Link className={styles.secondaryButton} to="/releases">
+              查看发布
+            </Link>
+          </div>
+          <div className={styles.tableWrap}>
+            <table>
+              <thead>
+                <tr>
+                  <th>发布单</th>
+                  <th>状态</th>
+                  <th>镜像</th>
+                  <th>创建时间</th>
+                </tr>
+              </thead>
+              <tbody>
+                {recentReleases.map((release) => (
+                  <tr key={release.id}>
+                    <td>
+                      <Link className={styles.tableLink} to={`/releases/${release.id}`}>
+                        {release.id.slice(0, 8)}
+                      </Link>
+                    </td>
+                    <td>
+                      <StatusPill
+                        label={releaseStatusLabel(release.status)}
+                        tone={releaseStatusTone(release.status, release.isActive)}
+                      />
+                    </td>
+                    <td>{release.imageRepo + ":" + release.imageTag}</td>
+                    <td>{formatDateTime(release.createdAt)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div className={styles.sectionCard}>
+          <div className={styles.sectionHeader}>
+            <div>
+              <h2 className={styles.sectionTitle}>节点态势</h2>
             </div>
             <Link className={styles.secondaryButton} to="/agents">
               查看节点
@@ -162,48 +205,6 @@ export function DashboardPage() {
                     </td>
                     <td>{boolLabel(agent.enabled, "启用", "停用")}</td>
                     <td>{formatDateTime(agent.lastHeartbeatAt)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
-
-        <div className={styles.sectionCard}>
-          <div className={styles.sectionHeader}>
-            <div>
-              <h2 className={styles.sectionTitle}>最近发布</h2>
-            </div>
-            <Link className={styles.secondaryButton} to="/releases">
-              查看发布
-            </Link>
-          </div>
-          <div className={styles.tableWrap}>
-            <table>
-              <thead>
-                <tr>
-                  <th>发布单</th>
-                  <th>状态</th>
-                  <th>镜像</th>
-                  <th>创建时间</th>
-                </tr>
-              </thead>
-              <tbody>
-                {recentReleases.map((release) => (
-                  <tr key={release.id}>
-                    <td>
-                      <Link className={styles.tableLink} to={`/releases/${release.id}`}>
-                        {release.id.slice(0, 8)}
-                      </Link>
-                    </td>
-                    <td>
-                      <StatusPill
-                        label={releaseStatusLabel(release.status)}
-                        tone={releaseStatusTone(release.status, release.isActive)}
-                      />
-                    </td>
-                    <td>{release.imageRepo + ":" + release.imageTag}</td>
-                    <td>{formatDateTime(release.createdAt)}</td>
                   </tr>
                 ))}
               </tbody>

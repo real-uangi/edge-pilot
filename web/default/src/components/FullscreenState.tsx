@@ -5,10 +5,11 @@ export function FullscreenState({ title }: { title: string }) {
         minHeight: "100vh",
         display: "grid",
         placeItems: "center",
-        background: "#fff",
-        color: "#000",
+        background: "#10131a",
+        color: "#e1e2eb",
         fontSize: "18px",
         fontWeight: 600,
+        fontFamily: "'Inter', system-ui, sans-serif",
       }}
     >
       {title}
