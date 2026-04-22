@@ -1,34 +1,10 @@
 import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { ResponsiveLine, type LineSeries } from "@nivo/line";
+import { UnifiedLineChart, type ChartSeries } from "../components/UnifiedLineChart";
+import { EmptyState, ErrorState, LoadingState } from "../components/StateBlocks";
 import { api, getErrorMessage, type PerformancePoint } from "../lib/api";
 import { boolLabel, formatAgentLabel, formatBytes, formatDateTime, formatPercent } from "../lib/format";
-import { EmptyState, ErrorState, LoadingState } from "../components/StateBlocks";
 import styles from "../styles/admin.module.css";
-
-const chartTheme = {
-  axis: {
-    ticks: {
-      line: { stroke: "rgba(60,73,78,0.3)" },
-      text: { fill: "#bbc9cf", fontSize: 11 },
-    },
-    legend: {
-      text: { fill: "#859399", fontSize: 11 },
-    },
-  },
-  grid: {
-    line: { stroke: "rgba(60,73,78,0.2)" },
-  },
-  tooltip: {
-    container: {
-      background: "#10131a",
-      color: "#e1e2eb",
-      border: "1px solid rgba(60,73,78,0.35)",
-      borderRadius: "8px",
-      fontSize: "12px",
-    },
-  },
-} as const;
 
 export function SystemPerformancePage() {
   const [selectedAgentID, setSelectedAgentID] = useState<string | null>(null);
@@ -130,17 +106,17 @@ export function SystemPerformancePage() {
         </div>
         {controlPlaneHistory.length ? (
           <div className={styles.split}>
-            <LineChart
+            <UnifiedLineChart
               title="CPU 使用率"
-              suffix="%"
-              data={buildSeries(controlPlaneHistory, (item) => round(item.cpuPercent))}
-              color="#00d1ff"
+              series={toChartSeries(controlPlaneHistory, (item) => round(item.cpuPercent), "CPU")}
+              yValueFormatter={formatPercentValue}
+              tooltipValueFormatter={formatPercentValue}
             />
-            <LineChart
+            <UnifiedLineChart
               title="内存使用"
-              suffix="MiB"
-              data={buildSeries(controlPlaneHistory, (item) => round(item.memoryUsedBytes / 1024 / 1024))}
-              color="#4edea3"
+              series={toChartSeries(controlPlaneHistory, (item) => round(item.memoryUsedBytes / 1024 / 1024), "Memory")}
+              yValueFormatter={formatMibValue}
+              tooltipValueFormatter={formatMibValue}
             />
           </div>
         ) : (
@@ -218,17 +194,21 @@ export function SystemPerformancePage() {
           <EmptyState title="暂无 Agent 历史数据" message="该节点尚未上报自身性能快照。" />
         ) : (
           <div className={styles.split}>
-            <LineChart
+            <UnifiedLineChart
               title="CPU 使用率"
-              suffix="%"
-              data={buildSeries(agentHistoryQuery.data.history, (item) => round(item.cpuPercent))}
-              color="#00d1ff"
+              series={toChartSeries(agentHistoryQuery.data.history, (item) => round(item.cpuPercent), "CPU")}
+              yValueFormatter={formatPercentValue}
+              tooltipValueFormatter={formatPercentValue}
             />
-            <LineChart
+            <UnifiedLineChart
               title="内存使用"
-              suffix="MiB"
-              data={buildSeries(agentHistoryQuery.data.history, (item) => round(item.memoryUsedBytes / 1024 / 1024))}
-              color="#4edea3"
+              series={toChartSeries(
+                agentHistoryQuery.data.history,
+                (item) => round(item.memoryUsedBytes / 1024 / 1024),
+                "Memory",
+              )}
+              yValueFormatter={formatMibValue}
+              tooltipValueFormatter={formatMibValue}
             />
           </div>
         )}
@@ -237,70 +217,32 @@ export function SystemPerformancePage() {
   );
 }
 
-function LineChart({
-  title,
-  suffix,
-  data,
-  color,
-}: {
-  title: string;
-  suffix: string;
-  data: readonly LineSeries[];
-  color: string;
-}) {
-  return (
-    <div className={styles.chartCard}>
-      <div className={styles.chartTitle}>{title}</div>
-      <div className={styles.chartWrap}>
-        <ResponsiveLine
-          data={data}
-          margin={{ top: 12, right: 16, bottom: 28, left: 44 }}
-          xScale={{ type: "point" }}
-          yScale={{ type: "linear", min: 0, max: "auto", stacked: false, reverse: false }}
-          axisTop={null}
-          axisRight={null}
-          axisBottom={{
-            tickSize: 0,
-            tickPadding: 8,
-            tickRotation: 0,
-            tickValues: [],
-          }}
-          axisLeft={{
-            tickSize: 0,
-            tickPadding: 8,
-            tickRotation: 0,
-            format: (value) => `${value}${suffix}`,
-          }}
-          enablePoints={false}
-          lineWidth={2}
-          colors={[color]}
-          enableGridX={false}
-          useMesh
-          theme={chartTheme}
-          tooltip={({ point }) => (
-            <div>
-              点位 {point.data.xFormatted} · {point.data.yFormatted}
-              {suffix}
-            </div>
-          )}
-        />
-      </div>
-    </div>
-  );
-}
-
-function buildSeries(history: PerformancePoint[], selector: (value: PerformancePoint) => number): LineSeries[] {
+function toChartSeries(
+  history: PerformancePoint[],
+  selector: (value: PerformancePoint) => number,
+  id: string,
+): ChartSeries[] {
   return [
     {
-      id: "series",
-      data: history.map((point, index) => ({
-        x: String(index + 1),
-        y: selector(point),
-      })),
+      id,
+      data: history
+        .filter((point) => Boolean(point.collectedAt))
+        .map((point) => ({
+          x: point.collectedAt,
+          y: selector(point),
+        })),
     },
   ];
 }
 
 function round(value: number): number {
   return Math.round(value * 100) / 100;
+}
+
+function formatPercentValue(value: number): string {
+  return `${round(value)}%`;
+}
+
+function formatMibValue(value: number): string {
+  return `${round(value)} MiB`;
 }
