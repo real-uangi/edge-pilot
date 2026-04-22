@@ -9,6 +9,7 @@ import (
 	"edge-pilot/internal/agent/infra/persistence"
 	"edge-pilot/internal/agent/infra/runtime"
 	"edge-pilot/internal/shared/config"
+	"edge-pilot/internal/shared/perf"
 
 	"github.com/real-uangi/allingo/common/log"
 	"go.uber.org/fx"
@@ -58,6 +59,7 @@ var RuntimeModule = fx.Module(
 	"agent-runtime",
 	fx.Provide(
 		config.LoadAgentRuntimeConfig,
+		perf.NewCollector,
 		runtime.NewRawDockerClient,
 		func(client *runtime.DockerClient) agentdomain.DockerRuntime { return client },
 		runtime.NewManagedProxyRuntime,

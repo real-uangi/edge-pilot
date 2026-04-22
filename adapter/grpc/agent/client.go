@@ -6,6 +6,7 @@ import (
 	agentdomain "edge-pilot/internal/agent/domain"
 	"edge-pilot/internal/shared/config"
 	"edge-pilot/internal/shared/grpcapi"
+	"edge-pilot/internal/shared/perf"
 	"errors"
 	"sync"
 	"time"
@@ -17,20 +18,22 @@ import (
 )
 
 type Client struct {
-	cfg      *config.AgentRuntimeConfig
-	executor *taskexec.Executor
-	proxy    agentdomain.ProxyRuntime
-	state    *taskexec.RuntimeState
-	logger   *log.StdLogger
+	cfg       *config.AgentRuntimeConfig
+	executor  *taskexec.Executor
+	proxy     agentdomain.ProxyRuntime
+	state     *taskexec.RuntimeState
+	collector perf.Collector
+	logger    *log.StdLogger
 }
 
-func NewClient(cfg *config.AgentRuntimeConfig, executor *taskexec.Executor, proxy agentdomain.ProxyRuntime, state *taskexec.RuntimeState) *Client {
+func NewClient(cfg *config.AgentRuntimeConfig, executor *taskexec.Executor, proxy agentdomain.ProxyRuntime, state *taskexec.RuntimeState, collector perf.Collector) *Client {
 	return &Client{
-		cfg:      cfg,
-		executor: executor,
-		proxy:    proxy,
-		state:    state,
-		logger:   log.NewStdLogger("agent.grpc-client"),
+		cfg:       cfg,
+		executor:  executor,
+		proxy:     proxy,
+		state:     state,
+		collector: collector,
+		logger:    log.NewStdLogger("agent.grpc-client"),
 	}
 }
 
@@ -137,13 +140,27 @@ func (c *Client) connectOnce(ctx context.Context) error {
 					c.logger.Errorf(err, "failed to collect stats: agentId=%s", c.cfg.AgentID)
 					continue
 				}
-				if len(stats) > 0 {
+				var selfPerformance *grpcapi.PerformanceSnapshot
+				selfSnapshot, selfErr := c.collector.Collect(ctx)
+				if selfErr != nil {
+					c.logger.Errorf(selfErr, "failed to collect self performance: agentId=%s", c.cfg.AgentID)
+				} else if selfSnapshot != nil {
+					selfPerformance = &grpcapi.PerformanceSnapshot{
+						CpuPercent:        selfSnapshot.CPUPercent,
+						MemoryUsedBytes:   selfSnapshot.MemoryUsedBytes,
+						MemoryLimitBytes:  selfSnapshot.MemoryLimitBytes,
+						Source:            selfSnapshot.Source,
+						CollectedAtUnixMs: selfSnapshot.CollectedAt.UnixMilli(),
+					}
+				}
+				if len(stats) > 0 || selfPerformance != nil {
 					c.logger.Infof("sending stats report: agentId=%s entries=%d", c.cfg.AgentID, len(stats))
 					outbound <- &grpcapi.AgentMessage{
 						Payload: &grpcapi.AgentMessage_Stats{
 							Stats: &grpcapi.StatsReport{
-								AgentId:  c.cfg.AgentID,
-								Services: stats,
+								AgentId:         c.cfg.AgentID,
+								Services:        stats,
+								SelfPerformance: selfPerformance,
 							},
 						},
 					}

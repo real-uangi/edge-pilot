@@ -193,6 +193,14 @@
   color: var(--ep-primary);
 }
 
+.tableRowInteractive td {
+  cursor: pointer;
+}
+
+.tableRowSelected td {
+  background: rgba(164, 230, 255, 0.12);
+}
+
 .muted {
   color: var(--ep-text-muted);
 }
@@ -525,6 +533,25 @@
   overflow-x: auto;
   white-space: pre;
   max-height: 420px;
+}
+
+.chartCard {
+  border-radius: var(--ep-radius-md);
+  background: var(--ep-surface-mid);
+  border: 1px solid var(--ep-outline-ghost);
+  padding: 10px;
+  display: grid;
+  gap: 8px;
+}
+
+.chartTitle {
+  color: var(--ep-text-muted);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.chartWrap {
+  height: 260px;
 }
 
 .logEmpty {

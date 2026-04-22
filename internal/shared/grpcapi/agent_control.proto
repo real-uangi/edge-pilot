@@ -163,6 +163,15 @@ message BackendStatPoint {
 message StatsReport {
   string agent_id = 1;
   repeated BackendStatPoint services = 2;
+  PerformanceSnapshot self_performance = 3;
+}
+
+message PerformanceSnapshot {
+  double cpu_percent = 1;
+  uint64 memory_used_bytes = 2;
+  uint64 memory_limit_bytes = 3;
+  string source = 4;
+  int64 collected_at_unix_ms = 5;
 }
 
 message HAProxyConfigRequest {

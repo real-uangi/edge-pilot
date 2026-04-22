@@ -21,6 +21,11 @@ const DashboardPage = lazy(async () => {
   return { default: module.DashboardPage };
 });
 
+const SystemPerformancePage = lazy(async () => {
+  const module = await import("./pages/SystemPerformancePage");
+  return { default: module.SystemPerformancePage };
+});
+
 const ServicesPage = lazy(async () => {
   const module = await import("./pages/ServicesPage");
   return { default: module.ServicesPage };
@@ -147,6 +152,7 @@ export const router = createBrowserRouter([
     element: <ProtectedLayout />,
     children: [
       { index: true, element: <DashboardPage /> },
+      { path: "system-performance", element: <SystemPerformancePage /> },
       { path: "services", element: <ServicesPage /> },
       { path: "services/new", element: <ServiceEditorPage /> },
       { path: "services/:id", element: <ServiceEditorPage /> },

@@ -1,16 +1,25 @@
 package application
 
 import (
+	"context"
 	releaseapp "edge-pilot/internal/release/application"
 	servicecatalogapp "edge-pilot/internal/servicecatalog/application"
 	"edge-pilot/internal/shared/dto"
 	"edge-pilot/internal/shared/grpcapi"
 	"edge-pilot/internal/shared/model"
+	"edge-pilot/internal/shared/perf"
+	"strings"
+	"sync"
 	"time"
 
 	"edge-pilot/internal/observability/domain"
 
 	"github.com/google/uuid"
+	"github.com/real-uangi/allingo/common/log"
+)
+
+const (
+	performanceRingCapacity = 240
 )
 
 type AgentOverviewReader interface {
@@ -18,10 +27,15 @@ type AgentOverviewReader interface {
 }
 
 type Service struct {
-	repo     domain.Repository
-	agents   AgentOverviewReader
-	services *servicecatalogapp.Service
-	releases *releaseapp.Service
+	repo             domain.Repository
+	agents           AgentOverviewReader
+	services         *servicecatalogapp.Service
+	releases         *releaseapp.Service
+	collector        perf.Collector
+	controlPlaneRing *snapshotRing
+	agentRings       map[string]*snapshotRing
+	agentRingsMu     sync.RWMutex
+	logger           *log.StdLogger
 }
 
 func NewService(
@@ -29,12 +43,17 @@ func NewService(
 	agents AgentOverviewReader,
 	services *servicecatalogapp.Service,
 	releases *releaseapp.Service,
+	collector perf.Collector,
 ) *Service {
 	return &Service{
-		repo:     repo,
-		agents:   agents,
-		services: services,
-		releases: releases,
+		repo:             repo,
+		agents:           agents,
+		services:         services,
+		releases:         releases,
+		collector:        collector,
+		controlPlaneRing: newSnapshotRing(performanceRingCapacity),
+		agentRings:       make(map[string]*snapshotRing),
+		logger:           log.NewStdLogger("observability.service"),
 	}
 }
 
@@ -54,6 +73,9 @@ func (s *Service) RecordStats(report *grpcapi.StatsReport) error {
 			Rate:          item.GetRate(),
 			ErrorRequests: item.GetErrorRequests(),
 		})
+	}
+	if report.GetSelfPerformance() != nil {
+		s.recordAgentPerformance(report.GetAgentId(), fromProtoPerformance(report.GetSelfPerformance()))
 	}
 	return s.repo.SaveBackendStats(stats)
 }
@@ -128,6 +150,129 @@ func (s *Service) GetServiceObservability(serviceID uuid.UUID) (*dto.Observabili
 	return output, nil
 }
 
+func (s *Service) SampleControlPlanePerformance(ctx context.Context) error {
+	snapshot, err := s.collector.Collect(ctx)
+	if err != nil {
+		return err
+	}
+	s.controlPlaneRing.append(*snapshot)
+	return nil
+}
+
+func (s *Service) GetSystemPerformanceOverview() (*dto.SystemPerformanceOverviewOutput, error) {
+	if _, ok := s.controlPlaneRing.latest(); !ok {
+		if err := s.SampleControlPlanePerformance(context.Background()); err != nil {
+			s.logger.Errorf(err, "control-plane performance sampling failed")
+		}
+	}
+	controlPlaneLatest, hasControlPlaneLatest := s.controlPlaneRing.latest()
+	controlPlaneHistory := s.controlPlaneRing.list()
+	agentList, err := s.agents.List()
+	if err != nil {
+		return nil, err
+	}
+	output := &dto.SystemPerformanceOverviewOutput{
+		ControlPlaneHistory: make([]dto.PerformancePointOutput, 0, len(controlPlaneHistory)),
+		Agents:              make([]dto.AgentPerformanceLatestOutput, 0, len(agentList)),
+	}
+	if hasControlPlaneLatest {
+		latest := toOutputPerformancePoint(controlPlaneLatest)
+		output.ControlPlaneLatest = &latest
+	}
+	for _, point := range controlPlaneHistory {
+		output.ControlPlaneHistory = append(output.ControlPlaneHistory, toOutputPerformancePoint(point))
+	}
+	for _, agent := range agentList {
+		var latest *dto.PerformancePointOutput
+		if ring := s.getAgentRing(agent.ID); ring != nil {
+			if snapshot, ok := ring.latest(); ok {
+				value := toOutputPerformancePoint(snapshot)
+				latest = &value
+			}
+		}
+		output.Agents = append(output.Agents, dto.AgentPerformanceLatestOutput{
+			ID:       agent.ID,
+			Hostname: agent.Hostname,
+			IP:       agent.IP,
+			Enabled:  agent.Enabled,
+			Online:   agent.Online,
+			Latest:   latest,
+		})
+	}
+	return output, nil
+}
+
+func (s *Service) GetAgentPerformanceHistory(agentID string) (*dto.AgentPerformanceHistoryOutput, error) {
+	history := make([]dto.PerformancePointOutput, 0, performanceRingCapacity)
+	if ring := s.getAgentRing(agentID); ring != nil {
+		snapshots := ring.list()
+		history = make([]dto.PerformancePointOutput, 0, len(snapshots))
+		for _, snapshot := range snapshots {
+			history = append(history, toOutputPerformancePoint(snapshot))
+		}
+	}
+	return &dto.AgentPerformanceHistoryOutput{
+		AgentID: agentID,
+		History: history,
+	}, nil
+}
+
+func (s *Service) recordAgentPerformance(agentID string, snapshot perf.Snapshot) {
+	trimmedAgentID := strings.TrimSpace(agentID)
+	if trimmedAgentID == "" {
+		return
+	}
+	ring := s.getOrCreateAgentRing(trimmedAgentID)
+	ring.append(snapshot)
+}
+
+func (s *Service) getOrCreateAgentRing(agentID string) *snapshotRing {
+	s.agentRingsMu.RLock()
+	ring := s.agentRings[agentID]
+	s.agentRingsMu.RUnlock()
+	if ring != nil {
+		return ring
+	}
+	s.agentRingsMu.Lock()
+	defer s.agentRingsMu.Unlock()
+	if existing := s.agentRings[agentID]; existing != nil {
+		return existing
+	}
+	created := newSnapshotRing(performanceRingCapacity)
+	s.agentRings[agentID] = created
+	return created
+}
+
+func (s *Service) getAgentRing(agentID string) *snapshotRing {
+	s.agentRingsMu.RLock()
+	defer s.agentRingsMu.RUnlock()
+	return s.agentRings[agentID]
+}
+
+func toOutputPerformancePoint(snapshot perf.Snapshot) dto.PerformancePointOutput {
+	return dto.PerformancePointOutput{
+		CPUPercent:       snapshot.CPUPercent,
+		MemoryUsedBytes:  snapshot.MemoryUsedBytes,
+		MemoryLimitBytes: snapshot.MemoryLimitBytes,
+		Source:           snapshot.Source,
+		CollectedAt:      snapshot.CollectedAt,
+	}
+}
+
+func fromProtoPerformance(snapshot *grpcapi.PerformanceSnapshot) perf.Snapshot {
+	collectedAt := time.UnixMilli(snapshot.GetCollectedAtUnixMs())
+	if snapshot.GetCollectedAtUnixMs() <= 0 {
+		collectedAt = time.Now()
+	}
+	return perf.Snapshot{
+		CPUPercent:       snapshot.GetCpuPercent(),
+		MemoryUsedBytes:  snapshot.GetMemoryUsedBytes(),
+		MemoryLimitBytes: snapshot.GetMemoryLimitBytes(),
+		Source:           snapshot.GetSource(),
+		CollectedAt:      collectedAt,
+	}
+}
+
 func takeFirst[T any](items []T, limit int) []T {
 	if len(items) <= limit {
 		return items
@@ -136,5 +281,3 @@ func takeFirst[T any](items []T, limit int) []T {
 	copy(out, items[:limit])
 	return out
 }
-
-var _ = time.Now

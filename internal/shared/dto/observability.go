@@ -55,3 +55,31 @@ type OverviewOutput struct {
 	RecentReleases  []ReleaseOutput `json:"recentReleases"`
 	ActiveInstances int             `json:"activeInstances"`
 }
+
+type PerformancePointOutput struct {
+	CPUPercent       float64   `json:"cpuPercent"`
+	MemoryUsedBytes  uint64    `json:"memoryUsedBytes"`
+	MemoryLimitBytes uint64    `json:"memoryLimitBytes"`
+	Source           string    `json:"source"`
+	CollectedAt      time.Time `json:"collectedAt"`
+}
+
+type AgentPerformanceLatestOutput struct {
+	ID       string                  `json:"id"`
+	Hostname string                  `json:"hostname"`
+	IP       string                  `json:"ip"`
+	Enabled  *bool                   `json:"enabled"`
+	Online   *bool                   `json:"online"`
+	Latest   *PerformancePointOutput `json:"latest"`
+}
+
+type SystemPerformanceOverviewOutput struct {
+	ControlPlaneLatest  *PerformancePointOutput        `json:"controlPlaneLatest"`
+	ControlPlaneHistory []PerformancePointOutput       `json:"controlPlaneHistory"`
+	Agents              []AgentPerformanceLatestOutput `json:"agents"`
+}
+
+type AgentPerformanceHistoryOutput struct {
+	AgentID string                   `json:"agentId"`
+	History []PerformancePointOutput `json:"history"`
+}

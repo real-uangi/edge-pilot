@@ -30,6 +30,31 @@ export function boolLabel(value?: boolean | null, trueText = "是", falseText = 
   return value ? trueText : falseText;
 }
 
+export function formatPercent(value?: number | null): string {
+  if (value == null || Number.isNaN(value)) {
+    return "—";
+  }
+  return `${value.toFixed(1)}%`;
+}
+
+export function formatBytes(value?: number | null): string {
+  if (value == null || Number.isNaN(value) || value < 0) {
+    return "—";
+  }
+  if (value === 0) {
+    return "0 B";
+  }
+  const units = ["B", "KiB", "MiB", "GiB", "TiB"];
+  let current = value;
+  let unitIndex = 0;
+  while (current >= 1024 && unitIndex < units.length - 1) {
+    current /= 1024;
+    unitIndex += 1;
+  }
+  const precision = current >= 10 ? 1 : 2;
+  return `${current.toFixed(precision)} ${units[unitIndex]}`;
+}
+
 export function releaseStatusLabel(status: number): string {
   return (
     {
