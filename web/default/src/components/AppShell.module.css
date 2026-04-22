@@ -2,6 +2,9 @@
   min-height: 100vh;
   position: relative;
   --rail-left-width: 248px;
+  --rail-right-width-collapsed: 68px;
+  --rail-right-width-expanded: 304px;
+  --rail-handle-width: 22px;
   --rail-right-width: 304px;
 }
 
@@ -9,6 +12,11 @@
   min-height: 100vh;
   display: grid;
   grid-template-columns: var(--rail-left-width) minmax(0, 1fr) var(--rail-right-width);
+  transition: grid-template-columns var(--ep-motion-base) var(--ep-ease-standard);
+}
+
+.shellRightRailCollapsed .layout {
+  --rail-right-width: var(--rail-right-width-collapsed);
 }
 
 .mobileHeader {
@@ -36,11 +44,18 @@
 }
 
 .rightRail {
+  position: sticky;
   border-left: 1px solid var(--ep-outline-ghost);
-  background: rgba(16, 19, 26, 0.82);
-  padding: var(--ep-space-6);
-  display: grid;
-  gap: var(--ep-space-5);
+  background:
+    linear-gradient(180deg, rgba(16, 19, 26, 0.94), rgba(16, 19, 26, 0.82)),
+    radial-gradient(circle at 10% 10%, rgba(164, 230, 255, 0.06), transparent 45%);
+  padding: var(--ep-space-6) var(--ep-space-5) var(--ep-space-6)
+    calc(var(--ep-space-5) + var(--rail-handle-width) + 4px);
+  display: block;
+  transition:
+    background-color var(--ep-motion-base) var(--ep-ease-standard),
+    border-color var(--ep-motion-base) var(--ep-ease-standard),
+    width var(--ep-motion-base) var(--ep-ease-standard);
 }
 
 .railBrand {
@@ -143,9 +158,125 @@
   gap: 4px;
 }
 
+.rightRailExpanded {
+  display: grid;
+  gap: var(--ep-space-5);
+}
+
+.rightRailCollapsed {
+  padding: var(--ep-space-4) 10px;
+  cursor: pointer;
+  background:
+    linear-gradient(180deg, rgba(16, 19, 26, 0.95), rgba(16, 19, 26, 0.88)),
+    radial-gradient(circle at 50% 15%, rgba(164, 230, 255, 0.08), transparent 52%);
+}
+
+.rightRailCollapsed:hover {
+  background:
+    linear-gradient(180deg, rgba(25, 28, 34, 0.98), rgba(25, 28, 34, 0.92)),
+    radial-gradient(circle at 50% 15%, rgba(164, 230, 255, 0.11), transparent 54%);
+  box-shadow: inset 0 0 0 1px rgba(164, 230, 255, 0.22);
+}
+
+.rightRailCollapsed:focus-visible {
+  outline: none;
+  box-shadow: var(--ep-focus-ring);
+}
+
+.rightRailCompact {
+  display: none;
+}
+
+.rightRailCollapsed .rightRailExpanded {
+  display: none;
+}
+
+.rightRailCollapsed .rightRailCompact {
+  display: grid;
+  align-content: center;
+  justify-items: center;
+  gap: 10px;
+  min-height: 100%;
+}
+
 .rightTitle {
   font-size: 22px;
   line-height: 1.1;
+}
+
+.rightRailEdgeToggle {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: var(--rail-handle-width);
+  border: 1px solid var(--ep-outline-ghost);
+  border-left: 0;
+  border-top: 0;
+  border-bottom: 0;
+  background:
+    linear-gradient(180deg, rgba(39, 42, 49, 0.92), rgba(29, 32, 38, 0.88)),
+    radial-gradient(circle at center, rgba(164, 230, 255, 0.1), transparent 65%);
+  color: var(--ep-text-muted);
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.2;
+  padding: 12px 0;
+  writing-mode: vertical-rl;
+  text-orientation: mixed;
+  z-index: 2;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  letter-spacing: 0.04em;
+  transition:
+    color var(--ep-motion-fast) var(--ep-ease-standard),
+    background-color var(--ep-motion-base) var(--ep-ease-standard);
+}
+
+.rightRailEdgeToggle::after {
+  content: "";
+  position: absolute;
+  right: 2px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 2px;
+  height: 36px;
+  border-radius: 99px;
+  background: var(--ep-primary-strong);
+  opacity: 0.35;
+  transition: opacity var(--ep-motion-base) var(--ep-ease-standard);
+}
+
+.rightRailEdgeToggle:hover {
+  color: var(--ep-text);
+  background:
+    linear-gradient(180deg, rgba(39, 42, 49, 0.96), rgba(29, 32, 38, 0.92)),
+    radial-gradient(circle at center, rgba(164, 230, 255, 0.2), transparent 70%);
+}
+
+.rightRailEdgeToggle:hover::after {
+  opacity: 0.85;
+}
+
+.rightRailCompactTitle {
+  writing-mode: vertical-rl;
+  text-orientation: mixed;
+  color: var(--ep-text);
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  font-size: 11px;
+  font-weight: 800;
+  text-shadow: 0 0 10px rgba(164, 230, 255, 0.12);
+}
+
+.rightRailCompactTitle::before {
+  content: "◀";
+  color: var(--ep-primary);
+  font-size: 10px;
+  margin-bottom: 8px;
+  opacity: 0.9;
 }
 
 .healthGrid {
@@ -251,7 +382,9 @@
 @media (max-width: 1400px) {
   .shell {
     --rail-left-width: 232px;
-    --rail-right-width: 272px;
+    --rail-right-width-expanded: 272px;
+    --rail-right-width: var(--rail-right-width-expanded);
+    --rail-handle-width: 20px;
   }
 
   .healthGrid {
@@ -269,6 +402,7 @@
     right: 0;
     top: 0;
     width: min(340px, calc(100vw - 40px));
+    padding: var(--ep-space-6) var(--ep-space-5);
     transform: translateX(105%);
     transition: transform var(--ep-motion-base) var(--ep-ease-standard);
     z-index: 41;
@@ -276,6 +410,22 @@
 
   .rightRailOpen {
     transform: translateX(0);
+  }
+
+  .rightRailCollapsed {
+    padding: var(--ep-space-6) var(--ep-space-5);
+  }
+
+  .rightRailCollapsed .rightRailExpanded {
+    display: grid;
+  }
+
+  .rightRailCollapsed .rightRailCompact {
+    display: none;
+  }
+
+  .rightRailEdgeToggle {
+    display: none;
   }
 }
 
