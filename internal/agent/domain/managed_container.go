@@ -29,19 +29,35 @@ type ManagedContainer struct {
 }
 
 func ManagedContainerName(serviceKey string, slot grpcapi.Slot) string {
-	return fmt.Sprintf("ep-%s-%s", sanitizeContainerName(serviceKey), managedSlotName(slot))
+	return fmt.Sprintf("ep-%s-%s", sanitizeContainerToken(serviceKey, "service"), managedSlotName(slot))
+}
+
+func ManagedContainerNameForRelease(serviceKey string, releaseID string) string {
+	serviceToken := sanitizeContainerToken(serviceKey, "service")
+	releaseToken := sanitizeContainerToken(releaseID, "")
+	if releaseToken == "" {
+		return ""
+	}
+	return fmt.Sprintf("ep-%s-%s", serviceToken, releaseToken)
+}
+
+func ManagedContainerNameForTask(serviceKey string, releaseID string, slot grpcapi.Slot) string {
+	if name := ManagedContainerNameForRelease(serviceKey, releaseID); name != "" {
+		return name
+	}
+	return ManagedContainerName(serviceKey, slot)
 }
 
 func ManagedSlotValue(slot grpcapi.Slot) string {
 	return managedSlotName(slot)
 }
 
-func sanitizeContainerName(serviceKey string) string {
+func sanitizeContainerToken(value string, fallback string) string {
 	replacer := strings.NewReplacer("/", "-", "_", "-", " ", "-")
-	name := replacer.Replace(strings.TrimSpace(serviceKey))
+	name := replacer.Replace(strings.TrimSpace(value))
 	name = strings.Trim(name, "-")
 	if name == "" {
-		return "service"
+		return fallback
 	}
 	return name
 }

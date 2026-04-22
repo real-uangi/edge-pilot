@@ -199,7 +199,7 @@ const (
 )
 
 func (e *Executor) ensureDeployContainer(ctx context.Context, task *grpcapi.TaskCommand) (*agentdomain.ContainerRuntime, deployDecision, error) {
-	name := agentdomain.ManagedContainerName(task.GetServiceKey(), task.GetTargetSlot())
+	name := agentdomain.ManagedContainerNameForTask(task.GetServiceKey(), task.GetReleaseId(), task.GetTargetSlot())
 	existing, err := e.docker.FindContainerByName(ctx, name)
 	if err != nil {
 		return nil, deployDecisionStartNew, err
@@ -414,17 +414,13 @@ func (e *Executor) cleanupManagedContainers(ctx context.Context, task *grpcapi.T
 	if len(items) == 0 {
 		return 0, nil
 	}
-	preserve := map[string]struct{}{
-		agentdomain.ManagedContainerName(task.GetServiceKey(), task.GetTargetSlot()):      {},
-		agentdomain.ManagedContainerName(task.GetServiceKey(), task.GetCurrentLiveSlot()): {},
-	}
 	removed := 0
 	var errs []error
 	for _, item := range items {
 		if item == nil {
 			continue
 		}
-		if _, ok := preserve[item.Name]; ok {
+		if shouldPreserveManagedContainerForSwitch(item, task) {
 			continue
 		}
 		if err := e.docker.RemoveContainer(ctx, item.ContainerID); err != nil {
@@ -437,6 +433,21 @@ func (e *Executor) cleanupManagedContainers(ctx context.Context, task *grpcapi.T
 		return removed, errors.Join(errs...)
 	}
 	return removed, nil
+}
+
+func shouldPreserveManagedContainerForSwitch(item *agentdomain.ManagedContainer, task *grpcapi.TaskCommand) bool {
+	if item == nil || task == nil {
+		return false
+	}
+	releaseID := strings.TrimSpace(task.GetReleaseId())
+	if releaseID != "" && strings.TrimSpace(item.ReleaseID) == releaseID {
+		return true
+	}
+	if item.Slot != grpcapi.Slot_SLOT_UNSPECIFIED && item.Slot == task.GetCurrentLiveSlot() {
+		return true
+	}
+	// Fallback for malformed tasks without release id.
+	return releaseID == "" && item.Slot != grpcapi.Slot_SLOT_UNSPECIFIED && item.Slot == task.GetTargetSlot()
 }
 
 func (e *Executor) ReconcileManagedContainersOnStartup(ctx context.Context, agentID string) (StartupManagedContainerScanStats, error) {

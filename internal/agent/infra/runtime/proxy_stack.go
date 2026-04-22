@@ -429,7 +429,7 @@ func (m *ManagedProxyRuntime) reconcileLocked(ctx context.Context, snapshot *grp
 			}
 			server := backendServer{
 				Name:      "srv",
-				Address:   agentdomain.ManagedContainerName(service.GetServiceKey(), target.Slot),
+				Address:   agentdomain.ManagedContainerNameForTask(service.GetServiceKey(), target.ReleaseID, target.Slot),
 				Port:      int(service.GetContainerPort()),
 				Check:     "enabled",
 				Resolvers: managedProxyResolversName,

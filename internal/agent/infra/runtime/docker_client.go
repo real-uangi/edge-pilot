@@ -71,7 +71,7 @@ func (c *DockerClient) DeployContainer(ctx context.Context, task *grpcapi.TaskCo
 	if err != nil {
 		return nil, err
 	}
-	name := agentdomain.ManagedContainerName(task.GetServiceKey(), task.GetTargetSlot())
+	name := agentdomain.ManagedContainerNameForTask(task.GetServiceKey(), task.GetReleaseId(), task.GetTargetSlot())
 	c.logger.Infof(
 		"creating managed workload container: name=%s image=%s restartPolicy=%s maxRetries=%d",
 		name,

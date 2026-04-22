@@ -18,12 +18,16 @@ func ManagedContainerName(serviceKey string, slot grpcapi.Slot) string {
 	return agentdomain.ManagedContainerName(serviceKey, slot)
 }
 
+func ManagedContainerNameForRelease(serviceKey string, releaseID string) string {
+	return agentdomain.ManagedContainerNameForTask(serviceKey, releaseID, grpcapi.Slot_SLOT_UNSPECIFIED)
+}
+
 func TestExecuteDeployReusesHealthyManagedContainer(t *testing.T) {
 	docker := &fakeDockerRuntime{
 		foundByName: map[string]*ManagedContainer{
-			ManagedContainerName("svc-a", grpcapi.Slot_SLOT_GREEN): {
+			ManagedContainerNameForRelease("svc-a", "release-1"): {
 				ContainerRuntime: ContainerRuntime{ContainerID: "container-1"},
-				Name:             ManagedContainerName("svc-a", grpcapi.Slot_SLOT_GREEN),
+				Name:             ManagedContainerNameForRelease("svc-a", "release-1"),
 				Managed:          true,
 				AgentID:          "agent-a",
 				ServiceKey:       "svc-a",
@@ -55,9 +59,9 @@ func TestExecuteDeployReusesHealthyManagedContainer(t *testing.T) {
 func TestExecuteDeployPreservesCurrentReleaseContainerUntilHealthy(t *testing.T) {
 	docker := &fakeDockerRuntime{
 		foundByName: map[string]*ManagedContainer{
-			ManagedContainerName("svc-a", grpcapi.Slot_SLOT_GREEN): {
+			ManagedContainerNameForRelease("svc-a", "release-2"): {
 				ContainerRuntime: ContainerRuntime{ContainerID: "container-2"},
-				Name:             ManagedContainerName("svc-a", grpcapi.Slot_SLOT_GREEN),
+				Name:             ManagedContainerNameForRelease("svc-a", "release-2"),
 				Managed:          true,
 				AgentID:          "agent-a",
 				ServiceKey:       "svc-a",
@@ -89,9 +93,9 @@ func TestExecuteDeployPreservesCurrentReleaseContainerUntilHealthy(t *testing.T)
 func TestExecuteDeployFailsOnManagedContainerConflict(t *testing.T) {
 	docker := &fakeDockerRuntime{
 		foundByName: map[string]*ManagedContainer{
-			ManagedContainerName("svc-a", grpcapi.Slot_SLOT_GREEN): {
+			ManagedContainerNameForRelease("svc-a", "release-3"): {
 				ContainerRuntime: ContainerRuntime{ContainerID: "container-3"},
-				Name:             ManagedContainerName("svc-a", grpcapi.Slot_SLOT_GREEN),
+				Name:             ManagedContainerNameForRelease("svc-a", "release-3"),
 				Managed:          false,
 			},
 		},
@@ -209,24 +213,30 @@ func TestExecuteTrafficSwitchCleansOnlyCurrentAgentManagedContainers(t *testing.
 		managedItems: []*ManagedContainer{
 			{
 				ContainerRuntime: ContainerRuntime{ContainerID: "keep-target"},
-				Name:             ManagedContainerName("svc-a", grpcapi.Slot_SLOT_GREEN),
+				Name:             ManagedContainerNameForRelease("svc-a", "release-target"),
 				Managed:          true,
 				AgentID:          "agent-a",
 				ServiceKey:       "svc-a",
+				ReleaseID:        "release-target",
+				Slot:             grpcapi.Slot_SLOT_GREEN,
 			},
 			{
 				ContainerRuntime: ContainerRuntime{ContainerID: "keep-live"},
-				Name:             ManagedContainerName("svc-a", grpcapi.Slot_SLOT_BLUE),
+				Name:             ManagedContainerNameForRelease("svc-a", "release-live"),
 				Managed:          true,
 				AgentID:          "agent-a",
 				ServiceKey:       "svc-a",
+				ReleaseID:        "release-live",
+				Slot:             grpcapi.Slot_SLOT_BLUE,
 			},
 			{
 				ContainerRuntime: ContainerRuntime{ContainerID: "remove-old"},
-				Name:             "ep-svc-a-shadow",
+				Name:             ManagedContainerNameForRelease("svc-a", "release-old"),
 				Managed:          true,
 				AgentID:          "agent-a",
 				ServiceKey:       "svc-a",
+				ReleaseID:        "release-old",
+				Slot:             grpcapi.Slot_SLOT_GREEN,
 			},
 		},
 	}
@@ -234,6 +244,7 @@ func TestExecuteTrafficSwitchCleansOnlyCurrentAgentManagedContainers(t *testing.
 
 	err := executor.Execute(context.Background(), &grpcapi.TaskCommand{
 		TaskId:          "task-3",
+		ReleaseId:       "release-target",
 		AgentId:         "agent-a",
 		ServiceKey:      "svc-a",
 		Type:            grpcapi.TaskType_TASK_TYPE_SWITCH_TRAFFIC,
@@ -248,6 +259,61 @@ func TestExecuteTrafficSwitchCleansOnlyCurrentAgentManagedContainers(t *testing.
 		t.Fatalf("Execute() error = %v", err)
 	}
 	if len(docker.removedIDs) != 1 || docker.removedIDs[0] != "remove-old" {
+		t.Fatalf("expected only stale managed container to be removed, got %#v", docker.removedIDs)
+	}
+}
+
+func TestExecuteTrafficSwitchWithoutReleaseIDFallsBackToSlotPreserve(t *testing.T) {
+	docker := &fakeDockerRuntime{
+		managedItems: []*ManagedContainer{
+			{
+				ContainerRuntime: ContainerRuntime{ContainerID: "keep-target-slot"},
+				Name:             ManagedContainerName("svc-a", grpcapi.Slot_SLOT_GREEN),
+				Managed:          true,
+				AgentID:          "agent-a",
+				ServiceKey:       "svc-a",
+				ReleaseID:        "",
+				Slot:             grpcapi.Slot_SLOT_GREEN,
+			},
+			{
+				ContainerRuntime: ContainerRuntime{ContainerID: "keep-live-slot"},
+				Name:             ManagedContainerNameForRelease("svc-a", "release-live"),
+				Managed:          true,
+				AgentID:          "agent-a",
+				ServiceKey:       "svc-a",
+				ReleaseID:        "release-live",
+				Slot:             grpcapi.Slot_SLOT_BLUE,
+			},
+			{
+				ContainerRuntime: ContainerRuntime{ContainerID: "remove-stale"},
+				Name:             ManagedContainerNameForRelease("svc-a", "release-stale"),
+				Managed:          true,
+				AgentID:          "agent-a",
+				ServiceKey:       "svc-a",
+				ReleaseID:        "release-stale",
+				Slot:             grpcapi.Slot_SLOT_UNSPECIFIED,
+			},
+		},
+	}
+	executor := NewExecutor(&config.AgentRuntimeConfig{AgentID: "agent-a"}, docker, &fakeProxyRuntime{})
+
+	err := executor.Execute(context.Background(), &grpcapi.TaskCommand{
+		TaskId:          "task-no-release-id",
+		ReleaseId:       "",
+		AgentId:         "agent-a",
+		ServiceKey:      "svc-a",
+		Type:            grpcapi.TaskType_TASK_TYPE_SWITCH_TRAFFIC,
+		BackendName:     "be-api",
+		ServerName:      "srv-green",
+		PreviousServer:  "srv-blue",
+		TargetSlot:      grpcapi.Slot_SLOT_GREEN,
+		CurrentLiveSlot: grpcapi.Slot_SLOT_BLUE,
+		ContainerPort:   8080,
+	}, func(update *grpcapi.TaskUpdate) error { return nil })
+	if err != nil {
+		t.Fatalf("Execute() error = %v", err)
+	}
+	if len(docker.removedIDs) != 1 || docker.removedIDs[0] != "remove-stale" {
 		t.Fatalf("expected only stale managed container to be removed, got %#v", docker.removedIDs)
 	}
 }

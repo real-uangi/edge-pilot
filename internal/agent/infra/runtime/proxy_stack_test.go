@@ -2,6 +2,7 @@ package runtime
 
 import (
 	"context"
+	agentdomain "edge-pilot/internal/agent/domain"
 	servicecatalogapp "edge-pilot/internal/servicecatalog/application"
 	"edge-pilot/internal/shared/config"
 	"edge-pilot/internal/shared/grpcapi"
@@ -220,8 +221,8 @@ func TestFormatDataplaneFailureContextIncludesCommitFailureDetails(t *testing.T)
 			{Name: "be-api_green", Mode: "http", Balance: backendBalance{Algorithm: "roundrobin"}},
 		},
 		Servers: []dataplaneBackendServer{
-			{Backend: "be-api_blue", Server: backendServer{Name: "srv", Address: "svc-a-blue", Port: 8080}},
-			{Backend: "be-api_green", Server: backendServer{Name: "srv", Address: "svc-a-green", Port: 8080}},
+			{Backend: "be-api_blue", Server: backendServer{Name: "srv", Address: agentdomain.ManagedContainerNameForRelease("svc-a", "release-blue"), Port: 8080}},
+			{Backend: "be-api_green", Server: backendServer{Name: "srv", Address: agentdomain.ManagedContainerNameForRelease("svc-a", "release-green"), Port: 8080}},
 		},
 		DesiredBackends: []string{"be-api_blue", "be-api_green", "ep_default"},
 		StaleBackends:   []string{"stale-api"},
@@ -285,7 +286,7 @@ func TestFormatDataplaneFailureContextIncludesServerDetails(t *testing.T) {
 				Backend: "be-api_blue",
 				Server: backendServer{
 					Name:      "blue",
-					Address:   "svc-a-blue",
+					Address:   agentdomain.ManagedContainerNameForRelease("svc-a", "release-blue"),
 					Port:      8080,
 					Check:     "enabled",
 					Resolvers: managedProxyResolversName,
@@ -424,6 +425,17 @@ func TestReconcileLockedBuildsBackendResponseHeaderRules(t *testing.T) {
 	assertBackendResponseRuleExact(t, green.HTTPResponseRules, servicecatalogapp.CurrentReleaseIDHeaderName, "release-green")
 	assertBackendResponseRuleExact(t, blue.HTTPResponseRules, servicecatalogapp.LiveReleaseIDHeaderName, "release-green")
 	assertBackendResponseRuleExact(t, green.HTTPResponseRules, servicecatalogapp.LiveReleaseIDHeaderName, "release-green")
+	blueServer := findServerEntry(dataplane.serverEntries, "be-api_blue")
+	greenServer := findServerEntry(dataplane.serverEntries, "be-api_green")
+	if blueServer == nil || greenServer == nil {
+		t.Fatalf("expected both backend servers, got %#v", dataplane.serverEntries)
+	}
+	if blueServer.Server.Address != agentdomain.ManagedContainerNameForRelease("svc-a", "release-blue") {
+		t.Fatalf("expected be-api_blue server address by release id, got %q", blueServer.Server.Address)
+	}
+	if greenServer.Server.Address != agentdomain.ManagedContainerNameForRelease("svc-a", "release-green") {
+		t.Fatalf("expected be-api_green server address by release id, got %q", greenServer.Server.Address)
+	}
 	for _, backend := range []backendSection{*blue, *green} {
 		for i, rule := range backend.HTTPResponseRules {
 			if rule.Index != i {
@@ -476,6 +488,17 @@ func TestReconcileLockedFiltersInvalidBackendResponseHeaderRules(t *testing.T) {
 		t.Fatalf("green backend current release rule should be filtered when release id is empty, got %#v", green.HTTPResponseRules)
 	}
 	assertBackendResponseRuleExact(t, green.HTTPResponseRules, servicecatalogapp.LiveReleaseIDHeaderName, "release-blue")
+	blueServer := findServerEntry(dataplane.serverEntries, "be-api_blue")
+	greenServer := findServerEntry(dataplane.serverEntries, "be-api_green")
+	if blueServer == nil || greenServer == nil {
+		t.Fatalf("expected both backend servers, got %#v", dataplane.serverEntries)
+	}
+	if blueServer.Server.Address != agentdomain.ManagedContainerNameForRelease("svc-a", "release-blue") {
+		t.Fatalf("expected be-api_blue server address by release id, got %q", blueServer.Server.Address)
+	}
+	if greenServer.Server.Address != agentdomain.ManagedContainerName("svc-a", grpcapi.Slot_SLOT_GREEN) {
+		t.Fatalf("expected candidate backend server address fallback by slot, got %q", greenServer.Server.Address)
+	}
 }
 
 func TestProxyInspectNeedsBootstrapRefresh(t *testing.T) {
@@ -504,6 +527,15 @@ func findBackendConfig(backends []backendSection, name string) *backendSection {
 	for i := range backends {
 		if backends[i].Name == name {
 			return &backends[i]
+		}
+	}
+	return nil
+}
+
+func findServerEntry(items []dataplaneBackendServer, backend string) *dataplaneBackendServer {
+	for i := range items {
+		if items[i].Backend == backend {
+			return &items[i]
 		}
 	}
 	return nil
@@ -610,6 +642,7 @@ type fakeManagedProxyDataplane struct {
 	abortErr         error
 	callLog          *[]string
 	serverConfigs    []backendServer
+	serverEntries    []dataplaneBackendServer
 	backendConfigs   []backendSection
 }
 
@@ -656,6 +689,10 @@ func (f *fakeManagedProxyDataplane) EnsureBackendInTransaction(_ context.Context
 func (f *fakeManagedProxyDataplane) EnsureServerInTransaction(_ context.Context, backendName string, transactionID string, server backendServer) error {
 	*f.callLog = append(*f.callLog, "ensure-server:"+backendName+"/"+server.Name+"@"+transactionID)
 	f.serverConfigs = append(f.serverConfigs, server)
+	f.serverEntries = append(f.serverEntries, dataplaneBackendServer{
+		Backend: backendName,
+		Server:  server,
+	})
 	return f.ensureServerErr
 }
 
