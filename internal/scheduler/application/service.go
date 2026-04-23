@@ -141,16 +141,17 @@ func (s *Service) TriggerNow(id uuid.UUID, override map[string]any) (*dto.Schedu
 		payload[k] = v
 	}
 	run := &model.SchedulerJobRun{
-		ID:             uuid.New(),
-		JobID:          job.ID,
-		TaskType:       job.TaskType,
-		Payload:        commondb.NewJSONB(payload),
-		Status:         model.SchedulerJobRunStatusPending,
-		Attempt:        1,
-		MaxRetries:     effectiveMaxRetries(job.MaxRetries, s.cfg.DefaultMaxRetries),
-		ScheduledAt:    now,
-		DispatchPolicy: job.DispatchPolicy,
-		ExecutorGroup:  job.ExecutorGroup,
+		ID:              uuid.New(),
+		JobID:           job.ID,
+		TaskType:        job.TaskType,
+		Payload:         commondb.NewJSONB(payload),
+		Status:          model.SchedulerJobRunStatusPending,
+		Attempt:         1,
+		MaxRetries:      effectiveMaxRetries(job.MaxRetries, s.cfg.DefaultMaxRetries),
+		LeaseTimeoutSec: normalizeLeaseTimeout(job.LeaseTimeoutSec, s.cfg.DefaultLeaseSec),
+		ScheduledAt:     now,
+		DispatchPolicy:  job.DispatchPolicy,
+		ExecutorGroup:   job.ExecutorGroup,
 	}
 	run.IdempotencyKey = run.ID.String()
 	if err := s.repo.CreateRun(run); err != nil {
@@ -263,22 +264,21 @@ func (s *Service) DeleteExecutor(executorID string) error {
 	return s.repo.DeleteExecutor(executorID)
 }
 
-func (s *Service) AuthenticateExecutor(executorID string, token string, group string, liveSlot model.Slot, metadata map[string]string) error {
+func (s *Service) AuthenticateExecutor(executorID string, token string, group string, liveSlot model.Slot, metadata map[string]string) (*model.SchedulerExecutor, error) {
 	executor, err := s.repo.GetExecutor(executorID)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	if executor == nil || executor.Enabled == nil || !*executor.Enabled {
-		return business.ErrUnauthorized
+		return nil, business.ErrUnauthorized
 	}
 	if !s.auth.ValidateHash(executor.TokenHash, token) {
-		return business.ErrUnauthorized
+		return nil, business.ErrUnauthorized
+	}
+	if strings.TrimSpace(group) != "" && strings.TrimSpace(group) != executor.Group {
+		return nil, business.ErrUnauthorized
 	}
 	now := time.Now().UTC()
-	executor.Group = strings.TrimSpace(group)
-	if executor.Group == "" {
-		executor.Group = group
-	}
 	if liveSlot != 0 {
 		executor.LiveSlot = liveSlot
 	}
@@ -287,9 +287,9 @@ func (s *Service) AuthenticateExecutor(executorID string, token string, group st
 		executor.InstanceMeta = commondb.NewJSONB(copyStringMap(metadata))
 	}
 	if err := s.repo.UpsertExecutor(executor); err != nil {
-		return err
+		return nil, err
 	}
-	return nil
+	return executor, nil
 }
 
 func (s *Service) HeartbeatExecutor(executorID string) error {
@@ -379,16 +379,17 @@ func (s *Service) EnqueueDueJobs(now time.Time) error {
 			}
 			scheduled := fresh.NextRunAt.UTC()
 			run := &model.SchedulerJobRun{
-				ID:             uuid.New(),
-				JobID:          fresh.ID,
-				TaskType:       fresh.TaskType,
-				Payload:        commondb.NewJSONB(jobPayload(fresh)),
-				Status:         model.SchedulerJobRunStatusPending,
-				Attempt:        1,
-				MaxRetries:     effectiveMaxRetries(fresh.MaxRetries, s.cfg.DefaultMaxRetries),
-				ScheduledAt:    scheduled,
-				DispatchPolicy: fresh.DispatchPolicy,
-				ExecutorGroup:  fresh.ExecutorGroup,
+				ID:              uuid.New(),
+				JobID:           fresh.ID,
+				TaskType:        fresh.TaskType,
+				Payload:         commondb.NewJSONB(jobPayload(fresh)),
+				Status:          model.SchedulerJobRunStatusPending,
+				Attempt:         1,
+				MaxRetries:      effectiveMaxRetries(fresh.MaxRetries, s.cfg.DefaultMaxRetries),
+				LeaseTimeoutSec: normalizeLeaseTimeout(fresh.LeaseTimeoutSec, s.cfg.DefaultLeaseSec),
+				ScheduledAt:     scheduled,
+				DispatchPolicy:  fresh.DispatchPolicy,
+				ExecutorGroup:   fresh.ExecutorGroup,
 			}
 			run.IdempotencyKey = run.ID.String()
 			if err := tx.CreateRun(run); err != nil {
@@ -705,6 +706,9 @@ func retryBackoff(attempt int) time.Duration {
 func effectiveLeaseTimeout(run *model.SchedulerJobRun, fallback int) int {
 	if run == nil {
 		return fallback
+	}
+	if run.LeaseTimeoutSec > 0 {
+		return run.LeaseTimeoutSec
 	}
 	jobLease := 0
 	if run.Payload != nil {

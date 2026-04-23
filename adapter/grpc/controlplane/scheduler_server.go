@@ -125,16 +125,17 @@ func (s *SchedulerServer) Connect(stream grpcapi.SchedulerControl_ConnectServer)
 		return status.Error(codes.InvalidArgument, "hello required")
 	}
 	executorID := hello.GetExecutorId()
-	if err := s.service.AuthenticateExecutor(
+	executor, err := s.service.AuthenticateExecutor(
 		executorID,
 		hello.GetToken(),
 		hello.GetGroup(),
 		model.Slot(hello.GetLiveSlot()),
 		hello.GetMetadata(),
-	); err != nil {
+	)
+	if err != nil {
 		return status.Error(codes.Unauthenticated, err.Error())
 	}
-	session := s.hub.register(executorID, hello.GetGroup(), model.Slot(hello.GetLiveSlot()))
+	session := s.hub.register(executorID, executor.Group, executor.LiveSlot)
 	defer s.hub.unregister(executorID)
 
 	sendErrCh := make(chan error, 1)

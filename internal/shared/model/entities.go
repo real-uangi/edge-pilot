@@ -379,23 +379,24 @@ func (SchedulerJob) TableName() string {
 type SchedulerJobRun struct {
 	ID uuid.UUID `json:"id" gorm:"type:uuid;primaryKey"`
 	commondb.Model
-	JobID          uuid.UUID                       `json:"jobId" gorm:"type:uuid;index;not null"`
-	TaskType       string                          `json:"taskType" gorm:"size:128;index;not null"`
-	Payload        *commondb.JSONB[map[string]any] `json:"payload" gorm:"type:jsonb"`
-	Status         SchedulerJobRunStatus           `json:"status" gorm:"index;not null"`
-	Attempt        int                             `json:"attempt"`
-	MaxRetries     int                             `json:"maxRetries"`
-	ScheduledAt    time.Time                       `json:"scheduledAt" gorm:"index;type:timestamptz;not null"`
-	DispatchedAt   *time.Time                      `json:"dispatchedAt" gorm:"type:timestamptz"`
-	StartedAt      *time.Time                      `json:"startedAt" gorm:"type:timestamptz"`
-	CompletedAt    *time.Time                      `json:"completedAt" gorm:"type:timestamptz"`
-	LeaseExpiresAt *time.Time                      `json:"leaseExpiresAt" gorm:"index;type:timestamptz"`
-	LeasedBy       string                          `json:"leasedBy" gorm:"size:255;index"`
-	NextRetryAt    *time.Time                      `json:"nextRetryAt" gorm:"index;type:timestamptz"`
-	ErrorMessage   string                          `json:"errorMessage" gorm:"type:text"`
-	IdempotencyKey string                          `json:"idempotencyKey" gorm:"size:128;uniqueIndex;not null"`
-	DispatchPolicy SchedulerDispatchPolicy         `json:"dispatchPolicy" gorm:"index;not null"`
-	ExecutorGroup  string                          `json:"executorGroup" gorm:"size:128;index;not null"`
+	JobID           uuid.UUID                       `json:"jobId" gorm:"type:uuid;index;not null"`
+	TaskType        string                          `json:"taskType" gorm:"size:128;index;not null"`
+	Payload         *commondb.JSONB[map[string]any] `json:"payload" gorm:"type:jsonb"`
+	Status          SchedulerJobRunStatus           `json:"status" gorm:"index;not null"`
+	Attempt         int                             `json:"attempt"`
+	MaxRetries      int                             `json:"maxRetries"`
+	LeaseTimeoutSec int                             `json:"leaseTimeoutSec"`
+	ScheduledAt     time.Time                       `json:"scheduledAt" gorm:"index;type:timestamptz;not null"`
+	DispatchedAt    *time.Time                      `json:"dispatchedAt" gorm:"type:timestamptz"`
+	StartedAt       *time.Time                      `json:"startedAt" gorm:"type:timestamptz"`
+	CompletedAt     *time.Time                      `json:"completedAt" gorm:"type:timestamptz"`
+	LeaseExpiresAt  *time.Time                      `json:"leaseExpiresAt" gorm:"index;type:timestamptz"`
+	LeasedBy        string                          `json:"leasedBy" gorm:"size:255;index"`
+	NextRetryAt     *time.Time                      `json:"nextRetryAt" gorm:"index;type:timestamptz"`
+	ErrorMessage    string                          `json:"errorMessage" gorm:"type:text"`
+	IdempotencyKey  string                          `json:"idempotencyKey" gorm:"size:128;uniqueIndex;not null"`
+	DispatchPolicy  SchedulerDispatchPolicy         `json:"dispatchPolicy" gorm:"index;not null"`
+	ExecutorGroup   string                          `json:"executorGroup" gorm:"size:128;index;not null"`
 }
 
 func (SchedulerJobRun) TableName() string {

@@ -2,6 +2,7 @@ package application
 
 import (
 	"edge-pilot/internal/shared/dto"
+	"edge-pilot/internal/shared/model"
 	"testing"
 	"time"
 )
@@ -52,4 +53,13 @@ func TestIsReleaseLinkedTaskType(t *testing.T) {
 
 func TestDTOShapeCompileGuard(t *testing.T) {
 	_ = dto.UpsertSchedulerJobRequest{}
+}
+
+func TestEffectiveLeaseTimeoutPrefersRunField(t *testing.T) {
+	run := &model.SchedulerJobRun{
+		LeaseTimeoutSec: 90,
+	}
+	if got := effectiveLeaseTimeout(run, 60); got != 90 {
+		t.Fatalf("effectiveLeaseTimeout() = %d, want 90", got)
+	}
 }

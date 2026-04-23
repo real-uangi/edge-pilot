@@ -109,6 +109,8 @@ func (r *repository) ListDispatchableRuns(now time.Time, limit int) ([]model.Sch
 		now,
 		model.SchedulerJobRunStatusDispatched,
 		now,
+		model.SchedulerJobRunStatusRunning,
+		now,
 	).Order("scheduled_at asc").Limit(limit)
 	if err := query.Find(&runs).Error; err != nil {
 		return nil, err
@@ -124,6 +126,8 @@ func (r *repository) ClaimRun(runID uuid.UUID, leasedBy string, leaseExpiresAt t
 			model.SchedulerJobRunStatusRetryWaiting,
 			now,
 			model.SchedulerJobRunStatusDispatched,
+			now,
+			model.SchedulerJobRunStatusRunning,
 			now,
 		).
 		Updates(map[string]any{

@@ -100,5 +100,10 @@ func backfillServiceHealthConfig(conn *gorm.DB) error {
 		Update("max_retries", 0).Error; err != nil {
 		return err
 	}
+	if err := conn.Model(&SchedulerJobRun{}).
+		Where("lease_timeout_sec <= 0").
+		Update("lease_timeout_sec", 60).Error; err != nil {
+		return err
+	}
 	return nil
 }
