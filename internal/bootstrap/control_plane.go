@@ -11,6 +11,7 @@ import (
 	"edge-pilot/internal/release"
 	"edge-pilot/internal/scheduler"
 	"edge-pilot/internal/servicecatalog"
+	"edge-pilot/internal/shared/config"
 	"edge-pilot/internal/shared/model"
 	"edge-pilot/internal/shared/secret"
 	"edge-pilot/web"
@@ -27,6 +28,7 @@ func RunControlPlane() {
 	app.Current().Option(fx.WithLogger(log.NewFxLogger))
 	app.Current().Option(common.Module)
 	app.Current().Option(db.Module)
+	app.Current().Option(config.ControlPlaneModule)
 	app.Current().Option(model.ControlPlaneModule)
 	app.Current().Option(secret.ControlPlaneModule)
 	app.Current().Option(servicecatalog.ControlPlaneModule)

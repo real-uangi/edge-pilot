@@ -47,7 +47,6 @@ func startManagedContainerStartupReconcile(lc fx.Lifecycle, cfg *config.AgentRun
 var ControlPlaneModule = fx.Module(
 	"agent-control-plane",
 	fx.Provide(
-		config.LoadAgentAuthConfig,
 		persistence.NewRepository,
 		provideRegistryService,
 		provideProxyConfigAgentOnlineChecker,

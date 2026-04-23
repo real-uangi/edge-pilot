@@ -5,7 +5,6 @@ import (
 	"edge-pilot/internal/scheduler/domain"
 	"edge-pilot/internal/scheduler/infra"
 	servicecatalogapp "edge-pilot/internal/servicecatalog/application"
-	"edge-pilot/internal/shared/config"
 	"edge-pilot/internal/shared/model"
 
 	"github.com/google/uuid"
@@ -31,8 +30,6 @@ func provideLiveSlotResolver(services *servicecatalogapp.Service) domain.LiveSlo
 var ControlPlaneModule = fx.Module(
 	"scheduler",
 	fx.Provide(
-		config.LoadSchedulerConfig,
-		config.LoadAgentAuthConfig,
 		infra.NewRepository,
 		provideLiveSlotResolver,
 		application.NewService,
