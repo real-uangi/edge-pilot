@@ -169,6 +169,8 @@ func nextCronTimeUTC(expr string, from time.Time) (time.Time, error) {
 	if err != nil {
 		return time.Time{}, err
 	}
+	domRestricted := len(schedule.doms) != 31
+	dowRestricted := len(schedule.dows) != 7
 	current := from.UTC().Truncate(time.Minute).Add(time.Minute)
 	deadline := current.Add(366 * 24 * time.Hour)
 	for !current.After(deadline) {
@@ -184,13 +186,18 @@ func nextCronTimeUTC(expr string, from time.Time) (time.Time, error) {
 			current = current.Add(time.Minute)
 			continue
 		}
-		if _, ok := schedule.doms[current.Day()]; !ok {
-			current = current.Add(time.Minute)
-			continue
-		}
-		if _, ok := schedule.dows[int(current.Weekday())]; !ok {
-			current = current.Add(time.Minute)
-			continue
+		_, domMatch := schedule.doms[current.Day()]
+		_, dowMatch := schedule.dows[int(current.Weekday())]
+		if domRestricted && dowRestricted {
+			if !domMatch && !dowMatch {
+				current = current.Add(time.Minute)
+				continue
+			}
+		} else {
+			if !domMatch || !dowMatch {
+				current = current.Add(time.Minute)
+				continue
+			}
 		}
 		return current, nil
 	}

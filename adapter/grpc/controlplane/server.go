@@ -239,6 +239,9 @@ func (s *Server) Connect(stream grpcapi.AgentControl_ConnectServer) (err error) 
 	session := s.hub.register(hello.GetAgentId())
 	defer func() {
 		s.hub.unregister(hello.GetAgentId())
+		if s.schedulerRelay != nil {
+			s.schedulerRelay.CleanupAgentSessions(hello.GetAgentId())
+		}
 		_ = s.agents.MarkDisconnected(hello.GetAgentId(), "stream disconnected")
 	}()
 

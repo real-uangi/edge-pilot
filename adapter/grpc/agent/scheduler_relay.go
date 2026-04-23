@@ -32,6 +32,36 @@ type relayExecutorSession struct {
 	executorID string
 	routingKey string
 	sendCh     chan *grpcapi.SchedulerMessage
+	done       chan struct{}
+	doneOnce   sync.Once
+}
+
+func (s *relayExecutorSession) close() {
+	if s == nil {
+		return
+	}
+	s.doneOnce.Do(func() {
+		close(s.done)
+	})
+}
+
+func (s *relayExecutorSession) trySend(message *grpcapi.SchedulerMessage) bool {
+	if s == nil || message == nil {
+		return false
+	}
+	select {
+	case <-s.done:
+		return false
+	default:
+	}
+	select {
+	case <-s.done:
+		return false
+	case s.sendCh <- message:
+		return true
+	default:
+		return false
+	}
 }
 
 type localSchedulerRelayServer struct {
@@ -125,7 +155,7 @@ func (b *schedulerRelayBridge) unregisterSession(sessionID string) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	if session, ok := b.sessions[sessionID]; ok {
-		close(session.sendCh)
+		session.close()
 		delete(b.sessions, sessionID)
 	}
 }
@@ -154,7 +184,7 @@ func (b *schedulerRelayBridge) HandleControlEnvelope(envelope *grpcapi.Scheduler
 		if err := proto.Unmarshal(envelope.GetPayloadBytes(), &message); err != nil {
 			return
 		}
-		session.sendCh <- &message
+		_ = session.trySend(&message)
 	case grpcapi.SchedulerRelayPayloadType_SCHEDULER_RELAY_PAYLOAD_TYPE_SESSION_CLOSED,
 		grpcapi.SchedulerRelayPayloadType_SCHEDULER_RELAY_PAYLOAD_TYPE_SESSION_ERROR:
 		b.unregisterSession(sessionID)
@@ -180,6 +210,7 @@ func (s *localSchedulerRelayServer) Connect(stream grpcapi.SchedulerControl_Conn
 		executorID: hello.GetExecutorId(),
 		routingKey: hello.GetRoutingKey(),
 		sendCh:     make(chan *grpcapi.SchedulerMessage, 16),
+		done:       make(chan struct{}),
 	}
 	if session.routingKey == "" {
 		session.routingKey = session.executorID
@@ -189,10 +220,15 @@ func (s *localSchedulerRelayServer) Connect(stream grpcapi.SchedulerControl_Conn
 
 	sendErrCh := make(chan error, 1)
 	go func() {
-		for msg := range session.sendCh {
-			if sendErr := stream.Send(msg); sendErr != nil {
-				sendErrCh <- sendErr
+		for {
+			select {
+			case <-session.done:
 				return
+			case msg := <-session.sendCh:
+				if sendErr := stream.Send(msg); sendErr != nil {
+					sendErrCh <- sendErr
+					return
+				}
 			}
 		}
 	}()

@@ -75,3 +75,20 @@ func TestParseExecutorChannelMode(t *testing.T) {
 		t.Fatalf("expected parseExecutorChannelMode(bad_mode) to fail")
 	}
 }
+
+func TestSanitizeExecutorMetadata(t *testing.T) {
+	clean := sanitizeExecutorMetadata(map[string]string{
+		"relay_token": "secret",
+		"ReLaY_ToKeN": "secret2",
+		"instanceId":  "i-1",
+	})
+	if _, ok := clean["relay_token"]; ok {
+		t.Fatalf("relay_token should be removed")
+	}
+	if _, ok := clean["ReLaY_ToKeN"]; ok {
+		t.Fatalf("relay_token variant should be removed")
+	}
+	if got := clean["instanceId"]; got != "i-1" {
+		t.Fatalf("instanceId should be kept, got %q", got)
+	}
+}

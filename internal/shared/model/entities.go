@@ -431,8 +431,8 @@ func (SchedulerExecutor) TableName() string {
 type SchedulerDispatchCursor struct {
 	ID uuid.UUID `json:"id" gorm:"type:uuid;primaryKey"`
 	commondb.Model
-	JobID          uuid.UUID `json:"jobId" gorm:"type:uuid;index;not null"`
-	ExecutorGroup  string    `json:"executorGroup" gorm:"size:128;index;not null"`
+	JobID          uuid.UUID `json:"jobId" gorm:"type:uuid;index;uniqueIndex:idx_scheduler_dispatch_cursor_job_group;not null"`
+	ExecutorGroup  string    `json:"executorGroup" gorm:"size:128;index;uniqueIndex:idx_scheduler_dispatch_cursor_job_group;not null"`
 	LastExecutorID string    `json:"lastExecutorId" gorm:"size:128"`
 }
 

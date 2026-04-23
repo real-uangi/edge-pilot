@@ -117,6 +117,24 @@ func (h *schedulerSessionHub) unregisterRelay(agentID string, relaySessionID str
 	}
 }
 
+func (h *schedulerSessionHub) unregisterRelayByAgent(agentID string) {
+	if agentID == "" {
+		return
+	}
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	for key, session := range h.sessions {
+		if key.channelType != schedulerChannelRelay {
+			continue
+		}
+		if session.agentID != agentID {
+			continue
+		}
+		session.close()
+		delete(h.sessions, key)
+	}
+}
+
 func (h *schedulerSessionHub) getRelay(relaySessionID string, agentID string) *executorSession {
 	h.mu.RLock()
 	defer h.mu.RUnlock()
@@ -310,6 +328,10 @@ func (s *SchedulerServer) HandleRelayEnvelope(agentID string, envelope *grpcapi.
 	}
 }
 
+func (s *SchedulerServer) CleanupAgentSessions(agentID string) {
+	s.hub.unregisterRelayByAgent(agentID)
+}
+
 func (s *SchedulerServer) handleRelayExecutorMessage(agentID string, envelope *grpcapi.SchedulerRelayEnvelope, msg *grpcapi.ExecutorMessage) error {
 	if msg == nil {
 		return nil
@@ -342,7 +364,8 @@ func (s *SchedulerServer) handleRelayExecutorMessage(agentID string, envelope *g
 	}
 	session := s.hub.getRelay(envelope.GetRelaySessionId(), agentID)
 	if session == nil {
-		return status.Error(codes.NotFound, "relay session not found")
+		s.logger.Infof("dropping relay message for unknown session: agentId=%s relaySessionId=%s", agentID, envelope.GetRelaySessionId())
+		return nil
 	}
 	s.handleExecutorInbound(session.executorID, msg)
 	return nil

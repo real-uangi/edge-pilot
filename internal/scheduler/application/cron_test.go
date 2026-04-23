@@ -35,3 +35,16 @@ func TestParseCronSchedule_InvalidFieldCount(t *testing.T) {
 		t.Fatalf("expected error")
 	}
 }
+
+func TestNextCronTimeUTC_DomDowUsesStandardOr(t *testing.T) {
+	from := time.Date(2026, 4, 1, 0, 0, 0, 0, time.UTC)
+	// DOM=2, DOW=MON; April 2, 2026 is Thursday. Standard cron expects OR behavior.
+	next, err := nextCronTimeUTC("0 0 2 * MON", from)
+	if err != nil {
+		t.Fatalf("nextCronTimeUTC() error = %v", err)
+	}
+	expected := time.Date(2026, 4, 2, 0, 0, 0, 0, time.UTC)
+	if !next.Equal(expected) {
+		t.Fatalf("nextCronTimeUTC() = %v, want %v", next, expected)
+	}
+}

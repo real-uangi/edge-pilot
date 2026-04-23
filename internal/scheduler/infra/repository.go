@@ -8,6 +8,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/real-uangi/allingo/common/db"
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 type repository struct {
@@ -103,7 +104,7 @@ func (r *repository) ListRunsByJob(jobID uuid.UUID, limit int) ([]model.Schedule
 
 func (r *repository) ListDispatchableRuns(now time.Time, limit int) ([]model.SchedulerJobRun, error) {
 	var runs []model.SchedulerJobRun
-	query := r.conn.Where("status = ? OR (status = ? AND next_retry_at IS NOT NULL AND next_retry_at <= ?) OR (status = ? AND lease_expires_at IS NOT NULL AND lease_expires_at <= ?)",
+	query := r.conn.Where("status = ? OR (status = ? AND next_retry_at IS NOT NULL AND next_retry_at <= ?) OR (status = ? AND lease_expires_at IS NOT NULL AND lease_expires_at <= ?) OR (status = ? AND lease_expires_at IS NOT NULL AND lease_expires_at <= ?)",
 		model.SchedulerJobRunStatusPending,
 		model.SchedulerJobRunStatusRetryWaiting,
 		now,
@@ -120,7 +121,7 @@ func (r *repository) ListDispatchableRuns(now time.Time, limit int) ([]model.Sch
 
 func (r *repository) ClaimRun(runID uuid.UUID, leasedBy string, leaseExpiresAt time.Time, now time.Time) (bool, error) {
 	result := r.conn.Model(&model.SchedulerJobRun{}).
-		Where("id = ? AND (status = ? OR (status = ? AND next_retry_at IS NOT NULL AND next_retry_at <= ?) OR (status = ? AND lease_expires_at IS NOT NULL AND lease_expires_at <= ?))",
+		Where("id = ? AND (status = ? OR (status = ? AND next_retry_at IS NOT NULL AND next_retry_at <= ?) OR (status = ? AND lease_expires_at IS NOT NULL AND lease_expires_at <= ?) OR (status = ? AND lease_expires_at IS NOT NULL AND lease_expires_at <= ?))",
 			runID,
 			model.SchedulerJobRunStatusPending,
 			model.SchedulerJobRunStatusRetryWaiting,
@@ -159,17 +160,16 @@ func (r *repository) SaveDispatchCursor(cursor *model.SchedulerDispatchCursor) e
 	if cursor.ID == uuid.Nil {
 		cursor.ID = uuid.New()
 	}
-	var current model.SchedulerDispatchCursor
-	result := r.conn.Where("job_id = ? AND executor_group = ?", cursor.JobID, cursor.ExecutorGroup).First(&current)
-	if result.Error != nil && result.Error != gorm.ErrRecordNotFound {
-		return result.Error
-	}
-	if result.RowsAffected == 0 {
-		return r.conn.Create(cursor).Error
-	}
-	cursor.ID = current.ID
-	cursor.CreatedAt = current.CreatedAt
-	return r.conn.Model(cursor).Updates(cursor).Error
+	return r.conn.Clauses(clause.OnConflict{
+		Columns: []clause.Column{
+			{Name: "job_id"},
+			{Name: "executor_group"},
+		},
+		DoUpdates: clause.Assignments(map[string]any{
+			"last_executor_id": cursor.LastExecutorID,
+			"updated_at":       time.Now().UTC(),
+		}),
+	}).Create(cursor).Error
 }
 
 func (r *repository) UpsertExecutor(executor *model.SchedulerExecutor) error {

@@ -313,7 +313,7 @@ func (s *Service) AuthenticateExecutor(executorID string, token string, group st
 	}
 	executor.LastSeenAt = &now
 	if len(metadata) > 0 {
-		executor.InstanceMeta = commondb.NewJSONB(copyStringMap(metadata))
+		executor.InstanceMeta = commondb.NewJSONB(sanitizeExecutorMetadata(metadata))
 	}
 	if err := s.repo.UpsertExecutor(executor); err != nil {
 		return nil, err
@@ -903,6 +903,16 @@ func copyStringMap(in map[string]string) map[string]string {
 		out[k] = v
 	}
 	return out
+}
+
+func sanitizeExecutorMetadata(in map[string]string) map[string]string {
+	clean := copyStringMap(in)
+	for k := range clean {
+		if strings.EqualFold(strings.TrimSpace(k), "relay_token") {
+			delete(clean, k)
+		}
+	}
+	return clean
 }
 
 func boolPtr(v bool) *bool {
