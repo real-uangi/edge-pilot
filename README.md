@@ -231,6 +231,8 @@ Control-Plane CI 回调触发说明见：[docs/control-plane-ci-callback.md](doc
 
 业务前端如何根据 `X-Edge-Pilot-*` 响应头检查并刷新版本，见：[docs/edge-pilot-release-headers.md](docs/edge-pilot-release-headers.md)
 
+调度执行器 Go SDK 对接说明见：[docs/scheduler-executor-sdk.md](docs/scheduler-executor-sdk.md)
+
 ## 当前限制
 
 - 当前聚焦 HTTP 服务的蓝绿发布，不支持 worker 与非 HTTP 协议

@@ -77,14 +77,11 @@ type SchedulerExecutorOutput struct {
 }
 
 type UpsertSchedulerExecutorRequest struct {
-	ExecutorID      string            `json:"executorId" binding:"required"`
-	Group           string            `json:"group" binding:"required"`
-	ChannelMode     string            `json:"channelMode"`
-	RelayAgentID    string            `json:"relayAgentId"`
-	RelayRoutingKey string            `json:"relayRoutingKey"`
-	Enabled         *bool             `json:"enabled"`
-	LiveSlot        int               `json:"liveSlot"`
-	Metadata        map[string]string `json:"metadata"`
+	ExecutorID string            `json:"executorId" binding:"required"`
+	Group      string            `json:"group" binding:"required"`
+	Enabled    *bool             `json:"enabled"`
+	LiveSlot   int               `json:"liveSlot"`
+	Metadata   map[string]string `json:"metadata"`
 }
 
 type TriggerSchedulerJobRequest struct {

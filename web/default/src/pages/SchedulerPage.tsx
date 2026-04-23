@@ -52,9 +52,6 @@ function newExecutorForm(): UpsertSchedulerExecutorInput {
   return {
     executorId: "",
     group: "default",
-    channelMode: "direct",
-    relayAgentId: "",
-    relayRoutingKey: "",
     enabled: true,
     liveSlot: 0,
     metadata: {},
@@ -364,25 +361,6 @@ export function SchedulerPage() {
             <span className={styles.label}>group</span>
             <input className={styles.input} value={executorForm.group} onChange={(event) => setExecutorForm((v) => ({ ...v, group: event.target.value }))} />
           </label>
-          <label className={styles.field}>
-            <span className={styles.label}>channelMode</span>
-            <select className={styles.select} value={executorForm.channelMode ?? "direct"} onChange={(event) => setExecutorForm((v) => ({ ...v, channelMode: event.target.value as "direct" | "agent_relay" }))}>
-              <option value="direct">direct</option>
-              <option value="agent_relay">agent_relay</option>
-            </select>
-          </label>
-          {executorForm.channelMode === "agent_relay" ? (
-            <>
-              <label className={styles.field}>
-                <span className={styles.label}>relayAgentId</span>
-                <input className={styles.input} value={executorForm.relayAgentId ?? ""} onChange={(event) => setExecutorForm((v) => ({ ...v, relayAgentId: event.target.value }))} />
-              </label>
-              <label className={styles.field}>
-                <span className={styles.label}>relayRoutingKey</span>
-                <input className={styles.input} value={executorForm.relayRoutingKey ?? ""} onChange={(event) => setExecutorForm((v) => ({ ...v, relayRoutingKey: event.target.value }))} />
-              </label>
-            </>
-          ) : null}
           <label className={styles.field}>
             <span className={styles.label}>liveSlot (0/1/2)</span>
             <input className={styles.input} type="number" value={executorForm.liveSlot ?? 0} onChange={(event) => setExecutorForm((v) => ({ ...v, liveSlot: Number(event.target.value) || 0 }))} />

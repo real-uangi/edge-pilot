@@ -180,17 +180,6 @@ func (s *Service) CreateExecutor(req dto.UpsertSchedulerExecutorRequest) (*dto.S
 	if strings.TrimSpace(req.Group) == "" {
 		return nil, business.NewBadRequest("group required")
 	}
-	channelMode, err := parseExecutorChannelMode(req.ChannelMode)
-	if err != nil {
-		return nil, err
-	}
-	relayAgentID := strings.TrimSpace(req.RelayAgentID)
-	relayRoutingKey := strings.TrimSpace(req.RelayRoutingKey)
-	if channelMode == model.SchedulerExecutorChannelModeAgentRelay {
-		if relayAgentID == "" || relayRoutingKey == "" {
-			return nil, business.NewBadRequest("relayAgentId and relayRoutingKey required for agent_relay mode")
-		}
-	}
 	token, hash, err := s.auth.GenerateToken()
 	if err != nil {
 		return nil, err
@@ -203,9 +192,9 @@ func (s *Service) CreateExecutor(req dto.UpsertSchedulerExecutorRequest) (*dto.S
 		ID:              req.ExecutorID,
 		TokenHash:       hash,
 		Group:           req.Group,
-		ChannelMode:     channelMode,
-		RelayAgentID:    relayAgentID,
-		RelayRoutingKey: relayRoutingKey,
+		ChannelMode:     model.SchedulerExecutorChannelModeDirect,
+		RelayAgentID:    "",
+		RelayRoutingKey: "",
 		Enabled:         boolPtr(enabled),
 		LiveSlot:        model.Slot(req.LiveSlot),
 		InstanceMeta:    commondb.NewJSONB(copyStringMap(req.Metadata)),
@@ -292,22 +281,16 @@ func (s *Service) AuthenticateExecutor(executorID string, token string, group st
 	if strings.TrimSpace(group) != "" && strings.TrimSpace(group) != executor.Group {
 		return nil, business.ErrUnauthorized
 	}
-	if relayAgentID == "" {
-		if executor.ChannelMode == model.SchedulerExecutorChannelModeAgentRelay {
-			return nil, business.ErrUnauthorized
-		}
-	} else {
-		if executor.ChannelMode != model.SchedulerExecutorChannelModeAgentRelay {
-			return nil, business.ErrUnauthorized
-		}
-		if strings.TrimSpace(executor.RelayAgentID) != strings.TrimSpace(relayAgentID) {
-			return nil, business.ErrUnauthorized
-		}
-		if strings.TrimSpace(executor.RelayRoutingKey) != strings.TrimSpace(relayRoutingKey) {
-			return nil, business.ErrUnauthorized
-		}
-	}
 	now := time.Now().UTC()
+	if strings.TrimSpace(relayAgentID) == "" {
+		executor.ChannelMode = model.SchedulerExecutorChannelModeDirect
+		executor.RelayAgentID = ""
+		executor.RelayRoutingKey = ""
+	} else {
+		executor.ChannelMode = model.SchedulerExecutorChannelModeAgentRelay
+		executor.RelayAgentID = strings.TrimSpace(relayAgentID)
+		executor.RelayRoutingKey = strings.TrimSpace(relayRoutingKey)
+	}
 	if liveSlot != 0 {
 		executor.LiveSlot = liveSlot
 	}
@@ -675,17 +658,6 @@ func parseDispatchPolicy(raw string) (model.SchedulerDispatchPolicy, error) {
 		return model.SchedulerDispatchPolicyFixedLiveSlot, nil
 	default:
 		return 0, business.NewBadRequest("dispatchPolicy must be round_robin or fixed_live_slot")
-	}
-}
-
-func parseExecutorChannelMode(raw string) (model.SchedulerExecutorChannelMode, error) {
-	switch strings.ToLower(strings.TrimSpace(raw)) {
-	case "", "direct":
-		return model.SchedulerExecutorChannelModeDirect, nil
-	case "agent_relay", "relay":
-		return model.SchedulerExecutorChannelModeAgentRelay, nil
-	default:
-		return 0, business.NewBadRequest("channelMode must be direct or agent_relay")
 	}
 }
 

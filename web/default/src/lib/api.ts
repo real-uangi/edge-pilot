@@ -196,9 +196,6 @@ export interface UpsertSchedulerJobInput {
 export interface UpsertSchedulerExecutorInput {
   executorId: string;
   group: string;
-  channelMode?: "direct" | "agent_relay";
-  relayAgentId?: string;
-  relayRoutingKey?: string;
   enabled?: boolean;
   liveSlot?: number;
   metadata?: Record<string, string>;
