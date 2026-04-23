@@ -1,0 +1,67 @@
+syntax = "proto3";
+
+package edgepilot.grpcapi;
+
+option go_package = "edge-pilot/internal/shared/grpcapi;grpcapi";
+
+import "internal/shared/grpcapi/agent_control.proto";
+
+service SchedulerControl {
+  rpc Connect(stream ExecutorMessage) returns (stream SchedulerMessage);
+}
+
+message ExecutorMessage {
+  oneof payload {
+    ExecutorHello hello = 1;
+    ExecutorHeartbeat heartbeat = 2;
+    SchedulerRunUpdate run_update = 3;
+    SchedulerRunLeaseRenew lease_renew = 4;
+  }
+}
+
+message SchedulerMessage {
+  oneof payload {
+    SchedulerAck ack = 1;
+    SchedulerRunCommand run = 2;
+  }
+}
+
+message ExecutorHello {
+  string executor_id = 1;
+  string token = 2;
+  string group = 3;
+  Slot live_slot = 4;
+  map<string, string> metadata = 5;
+  string relay = 6;
+  string routing_key = 7;
+}
+
+message ExecutorHeartbeat {
+  string executor_id = 1;
+  repeated string running_run_ids = 2;
+}
+
+message SchedulerAck {
+  string message = 1;
+}
+
+message SchedulerRunCommand {
+  string run_id = 1;
+  string job_id = 2;
+  string task_type = 3;
+  string idempotency_key = 4;
+  int32 attempt = 5;
+  string payload_json = 6;
+}
+
+message SchedulerRunUpdate {
+  string run_id = 1;
+  bool success = 2;
+  bool retryable = 3;
+  string error_message = 4;
+  bool running = 5;
+}
+
+message SchedulerRunLeaseRenew {
+  string run_id = 1;
+}

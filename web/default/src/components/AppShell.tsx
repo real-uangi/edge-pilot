@@ -11,6 +11,7 @@ const navItems = [
   { to: "/registry-credentials", label: "镜像仓库" },
   { to: "/agents", label: "节点" },
   { to: "/releases", label: "发布" },
+  { to: "/scheduler", label: "调度中心" },
 ];
 
 interface AppShellProps extends PropsWithChildren {

@@ -124,6 +124,80 @@ export interface ReleaseDetail {
   tasks: TaskSnapshot[];
 }
 
+export interface SchedulerJobRecord {
+  id: string;
+  name: string;
+  taskType: string;
+  payload: Record<string, unknown>;
+  scheduleKind: number;
+  cronExpr: string;
+  runAt: string | null;
+  nextRunAt: string | null;
+  enabled: boolean | null;
+  dispatchPolicy: number;
+  executorGroup: string;
+  leaseTimeoutSec: number;
+  maxRetries: number;
+  metadata: Record<string, string>;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface SchedulerRunRecord {
+  id: string;
+  jobId: string;
+  taskType: string;
+  payload: Record<string, unknown>;
+  status: number;
+  attempt: number;
+  maxRetries: number;
+  scheduledAt: string;
+  dispatchedAt: string | null;
+  startedAt: string | null;
+  completedAt: string | null;
+  leaseExpiresAt: string | null;
+  leasedBy: string;
+  nextRetryAt: string | null;
+  errorMessage: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface SchedulerExecutorRecord {
+  id: string;
+  group: string;
+  enabled: boolean | null;
+  lastSeenAt: string | null;
+  liveSlot: number;
+  instanceMeta: Record<string, string>;
+  token?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface UpsertSchedulerJobInput {
+  name: string;
+  taskType: string;
+  payload: Record<string, unknown>;
+  scheduleKind: "one_time" | "cron";
+  cronExpr?: string;
+  runAt?: string | null;
+  enabled?: boolean;
+  dispatchPolicy?: "round_robin" | "fixed_live_slot";
+  executorGroup: string;
+  leaseTimeoutSec?: number;
+  maxRetries?: number;
+  metadata?: Record<string, string>;
+}
+
+export interface UpsertSchedulerExecutorInput {
+  executorId: string;
+  group: string;
+  enabled?: boolean;
+  liveSlot?: number;
+  metadata?: Record<string, string>;
+}
+
 export interface AgentOverview {
   id: string;
   enabled: boolean | null;
@@ -414,6 +488,65 @@ export const api = {
       method: "POST",
       body: "{}",
     });
+  },
+  listSchedulerJobs() {
+    return request<SchedulerJobRecord[]>("/api/admin/scheduler/jobs");
+  },
+  createSchedulerJob(input: UpsertSchedulerJobInput) {
+    return request<SchedulerJobRecord>("/api/admin/scheduler/jobs", {
+      method: "POST",
+      body: JSON.stringify(input),
+    });
+  },
+  updateSchedulerJob(id: string, input: UpsertSchedulerJobInput) {
+    return request<SchedulerJobRecord>(`/api/admin/scheduler/jobs/${id}`, {
+      method: "PUT",
+      body: JSON.stringify(input),
+    });
+  },
+  deleteSchedulerJob(id: string) {
+    return request<{ deleted: boolean }>(`/api/admin/scheduler/jobs/${id}`, {
+      method: "DELETE",
+    });
+  },
+  enableSchedulerJob(id: string) {
+    return request<SchedulerJobRecord>(`/api/admin/scheduler/jobs/${id}/enable`, { method: "POST", body: "{}" });
+  },
+  disableSchedulerJob(id: string) {
+    return request<SchedulerJobRecord>(`/api/admin/scheduler/jobs/${id}/disable`, { method: "POST", body: "{}" });
+  },
+  triggerSchedulerJob(id: string, overridePayload?: Record<string, unknown>) {
+    return request<SchedulerRunRecord>(`/api/admin/scheduler/jobs/${id}/trigger`, {
+      method: "POST",
+      body: JSON.stringify({ overridePayload: overridePayload ?? {} }),
+    });
+  },
+  listSchedulerRuns(id: string) {
+    return request<SchedulerRunRecord[]>(`/api/admin/scheduler/jobs/${id}/runs`);
+  },
+  listSchedulerExecutors() {
+    return request<SchedulerExecutorRecord[]>("/api/admin/scheduler/executors");
+  },
+  createSchedulerExecutor(input: UpsertSchedulerExecutorInput) {
+    return request<SchedulerExecutorRecord>("/api/admin/scheduler/executors", {
+      method: "POST",
+      body: JSON.stringify(input),
+    });
+  },
+  resetSchedulerExecutorToken(id: string) {
+    return request<SchedulerExecutorRecord>(`/api/admin/scheduler/executors/${id}/reset-token`, {
+      method: "POST",
+      body: "{}",
+    });
+  },
+  enableSchedulerExecutor(id: string) {
+    return request<SchedulerExecutorRecord>(`/api/admin/scheduler/executors/${id}/enable`, { method: "POST", body: "{}" });
+  },
+  disableSchedulerExecutor(id: string) {
+    return request<SchedulerExecutorRecord>(`/api/admin/scheduler/executors/${id}/disable`, { method: "POST", body: "{}" });
+  },
+  deleteSchedulerExecutor(id: string) {
+    return request<{ deleted: boolean }>(`/api/admin/scheduler/executors/${id}`, { method: "DELETE" });
   },
 };
 

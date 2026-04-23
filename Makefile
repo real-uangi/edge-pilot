@@ -1,4 +1,4 @@
-PROTO_FILE := internal/shared/grpcapi/agent_control.proto
+PROTO_FILES := internal/shared/grpcapi/agent_control.proto internal/shared/grpcapi/scheduler_control.proto
 VERSION ?= dev
 COMMIT ?= $(shell git rev-parse --short HEAD 2>/dev/null || echo unknown)
 BUILD_TIME ?= $(shell date -u +"%Y-%m-%dT%H:%M:%SZ")
@@ -19,7 +19,7 @@ proto:
 		--go-grpc_out=. \
 		--go-grpc_opt=paths=source_relative \
 		--go-grpc_opt=require_unimplemented_servers=false \
-		$(PROTO_FILE)
+		$(PROTO_FILES)
 
 build: build-control-plane build-agent
 

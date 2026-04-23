@@ -9,6 +9,7 @@ import (
 	"edge-pilot/internal/observability"
 	"edge-pilot/internal/registrycredential"
 	"edge-pilot/internal/release"
+	"edge-pilot/internal/scheduler"
 	"edge-pilot/internal/servicecatalog"
 	"edge-pilot/internal/shared/model"
 	"edge-pilot/internal/shared/secret"
@@ -33,6 +34,7 @@ func RunControlPlane() {
 	app.Current().Option(adminauth.ControlPlaneModule)
 	app.Current().Option(registrycredential.ControlPlaneModule)
 	app.Current().Option(release.ControlPlaneModule)
+	app.Current().Option(scheduler.ControlPlaneModule)
 	app.Current().Option(observability.ControlPlaneModule)
 	app.Current().Option(controlgrpc.Module)
 	app.Current().Option(controlhttp.Module)

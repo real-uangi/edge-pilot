@@ -61,6 +61,11 @@ const ReleaseDetailPage = lazy(async () => {
   return { default: module.ReleaseDetailPage };
 });
 
+const SchedulerPage = lazy(async () => {
+  const module = await import("./pages/SchedulerPage");
+  return { default: module.SchedulerPage };
+});
+
 function RouteSuspense({
   children,
   title,
@@ -161,6 +166,7 @@ export const router = createBrowserRouter([
       { path: "agents/:id", element: <AgentDetailPage /> },
       { path: "releases", element: <ReleasesPage /> },
       { path: "releases/:id", element: <ReleaseDetailPage /> },
+      { path: "scheduler", element: <SchedulerPage /> },
     ],
   },
 ]);

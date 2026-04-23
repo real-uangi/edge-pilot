@@ -96,6 +96,35 @@ func (s TaskStatus) IsTerminal() bool {
 	}
 }
 
+type SchedulerScheduleKind int
+
+const (
+	SchedulerScheduleKindOneTime SchedulerScheduleKind = iota + 1
+	SchedulerScheduleKindCron
+)
+
+type SchedulerDispatchPolicy int
+
+const (
+	SchedulerDispatchPolicyRoundRobin SchedulerDispatchPolicy = iota + 1
+	SchedulerDispatchPolicyFixedLiveSlot
+)
+
+type SchedulerJobRunStatus int
+
+const (
+	SchedulerJobRunStatusPending SchedulerJobRunStatus = iota + 1
+	SchedulerJobRunStatusDispatched
+	SchedulerJobRunStatusRunning
+	SchedulerJobRunStatusSucceeded
+	SchedulerJobRunStatusRetryWaiting
+	SchedulerJobRunStatusFailed
+)
+
+func (s SchedulerJobRunStatus) IsTerminal() bool {
+	return s == SchedulerJobRunStatusSucceeded || s == SchedulerJobRunStatusFailed
+}
+
 type Service struct {
 	ID uuid.UUID `json:"id" gorm:"type:uuid;primaryKey"`
 	commondb.Model
@@ -322,4 +351,80 @@ type BackendStatSnapshot struct {
 
 func (BackendStatSnapshot) TableName() string {
 	return "ep_backend_stat_snapshot"
+}
+
+type SchedulerJob struct {
+	ID uuid.UUID `json:"id" gorm:"type:uuid;primaryKey"`
+	commondb.Model
+	Name              string                             `json:"name" gorm:"size:255;not null"`
+	TaskType          string                             `json:"taskType" gorm:"size:128;index;not null"`
+	Payload           *commondb.JSONB[map[string]any]    `json:"payload" gorm:"type:jsonb"`
+	ScheduleKind      SchedulerScheduleKind              `json:"scheduleKind" gorm:"index;not null"`
+	CronExpr          string                             `json:"cronExpr" gorm:"size:255"`
+	RunAt             *time.Time                         `json:"runAt" gorm:"type:timestamptz"`
+	NextRunAt         *time.Time                         `json:"nextRunAt" gorm:"index;type:timestamptz"`
+	Enabled           *bool                              `json:"enabled" gorm:"not null"`
+	DispatchPolicy    SchedulerDispatchPolicy            `json:"dispatchPolicy" gorm:"index;not null"`
+	ExecutorGroup     string                             `json:"executorGroup" gorm:"size:128;index;not null"`
+	LeaseTimeoutSec   int                                `json:"leaseTimeoutSec"`
+	MaxRetries        int                                `json:"maxRetries"`
+	LastDispatchedSeq int64                              `json:"lastDispatchedSeq"`
+	Metadata          *commondb.JSONB[map[string]string] `json:"metadata" gorm:"type:jsonb"`
+}
+
+func (SchedulerJob) TableName() string {
+	return "ep_scheduler_job"
+}
+
+type SchedulerJobRun struct {
+	ID uuid.UUID `json:"id" gorm:"type:uuid;primaryKey"`
+	commondb.Model
+	JobID          uuid.UUID                       `json:"jobId" gorm:"type:uuid;index;not null"`
+	TaskType       string                          `json:"taskType" gorm:"size:128;index;not null"`
+	Payload        *commondb.JSONB[map[string]any] `json:"payload" gorm:"type:jsonb"`
+	Status         SchedulerJobRunStatus           `json:"status" gorm:"index;not null"`
+	Attempt        int                             `json:"attempt"`
+	MaxRetries     int                             `json:"maxRetries"`
+	ScheduledAt    time.Time                       `json:"scheduledAt" gorm:"index;type:timestamptz;not null"`
+	DispatchedAt   *time.Time                      `json:"dispatchedAt" gorm:"type:timestamptz"`
+	StartedAt      *time.Time                      `json:"startedAt" gorm:"type:timestamptz"`
+	CompletedAt    *time.Time                      `json:"completedAt" gorm:"type:timestamptz"`
+	LeaseExpiresAt *time.Time                      `json:"leaseExpiresAt" gorm:"index;type:timestamptz"`
+	LeasedBy       string                          `json:"leasedBy" gorm:"size:255;index"`
+	NextRetryAt    *time.Time                      `json:"nextRetryAt" gorm:"index;type:timestamptz"`
+	ErrorMessage   string                          `json:"errorMessage" gorm:"type:text"`
+	IdempotencyKey string                          `json:"idempotencyKey" gorm:"size:128;uniqueIndex;not null"`
+	DispatchPolicy SchedulerDispatchPolicy         `json:"dispatchPolicy" gorm:"index;not null"`
+	ExecutorGroup  string                          `json:"executorGroup" gorm:"size:128;index;not null"`
+}
+
+func (SchedulerJobRun) TableName() string {
+	return "ep_scheduler_job_run"
+}
+
+type SchedulerExecutor struct {
+	ID string `json:"id" gorm:"size:128;primaryKey"`
+	commondb.Model
+	TokenHash    string                             `json:"tokenHash" gorm:"size:128;not null"`
+	Group        string                             `json:"group" gorm:"size:128;index;not null"`
+	Enabled      *bool                              `json:"enabled" gorm:"not null"`
+	LastSeenAt   *time.Time                         `json:"lastSeenAt" gorm:"index;type:timestamptz"`
+	LiveSlot     Slot                               `json:"liveSlot"`
+	InstanceMeta *commondb.JSONB[map[string]string] `json:"instanceMeta" gorm:"type:jsonb"`
+}
+
+func (SchedulerExecutor) TableName() string {
+	return "ep_scheduler_executor"
+}
+
+type SchedulerDispatchCursor struct {
+	ID uuid.UUID `json:"id" gorm:"type:uuid;primaryKey"`
+	commondb.Model
+	JobID          uuid.UUID `json:"jobId" gorm:"type:uuid;index;not null"`
+	ExecutorGroup  string    `json:"executorGroup" gorm:"size:128;index;not null"`
+	LastExecutorID string    `json:"lastExecutorId" gorm:"size:128"`
+}
+
+func (SchedulerDispatchCursor) TableName() string {
+	return "ep_scheduler_dispatch_cursor"
 }

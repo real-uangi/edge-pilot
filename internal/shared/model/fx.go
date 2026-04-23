@@ -23,6 +23,10 @@ func autoMigrate(manager *db.Manager) error {
 		&RuntimeInstance{},
 		&AuditLog{},
 		&BackendStatSnapshot{},
+		&SchedulerJob{},
+		&SchedulerJobRun{},
+		&SchedulerExecutor{},
+		&SchedulerDispatchCursor{},
 	); err != nil {
 		return err
 	}
@@ -69,6 +73,31 @@ func backfillServiceHealthConfig(conn *gorm.DB) error {
 	if err := conn.Model(&Release{}).
 		Where("status NOT IN ?", []ReleaseStatus{ReleaseStatusSwitched, ReleaseStatusCompleted}).
 		Update("traffic_percent", 0).Error; err != nil {
+		return err
+	}
+	if err := conn.Model(&SchedulerJob{}).
+		Where("enabled IS NULL").
+		Update("enabled", true).Error; err != nil {
+		return err
+	}
+	if err := conn.Model(&SchedulerJob{}).
+		Where("dispatch_policy = ?", 0).
+		Update("dispatch_policy", SchedulerDispatchPolicyRoundRobin).Error; err != nil {
+		return err
+	}
+	if err := conn.Model(&SchedulerJob{}).
+		Where("lease_timeout_sec <= 0").
+		Update("lease_timeout_sec", 60).Error; err != nil {
+		return err
+	}
+	if err := conn.Model(&SchedulerJob{}).
+		Where("max_retries < 0").
+		Update("max_retries", 0).Error; err != nil {
+		return err
+	}
+	if err := conn.Model(&SchedulerJobRun{}).
+		Where("max_retries < 0").
+		Update("max_retries", 0).Error; err != nil {
 		return err
 	}
 	return nil

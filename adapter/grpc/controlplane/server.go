@@ -332,13 +332,16 @@ func (h *sessionHub) failPendingByAgent(agentID string) {
 	}
 }
 
-func startGRPCServer(lc fx.Lifecycle, server *Server) {
+func startGRPCServer(lc fx.Lifecycle, server *Server, schedulerServer *SchedulerServer) {
 	port := os.Getenv("GRPC_PORT")
 	if port == "" {
 		port = "9090"
 	}
 	grpcServer := grpc.NewServer()
 	grpcapi.RegisterAgentControlServer(grpcServer, server)
+	if schedulerServer != nil {
+		grpcapi.RegisterSchedulerControlServer(grpcServer, schedulerServer)
+	}
 
 	lc.Append(fx.Hook{
 		OnStart: func(ctx context.Context) error {

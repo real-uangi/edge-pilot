@@ -236,6 +236,11 @@
   color: var(--ep-text-dim);
 }
 
+.inlineError {
+  color: var(--ep-danger);
+  font-size: 12px;
+}
+
 .input,
 .textarea,
 .select {

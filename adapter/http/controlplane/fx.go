@@ -20,6 +20,7 @@ var Module = fx.Module(
 		routes.SetAdminRegistryCredentialRoutes,
 		routes.SetAdminServiceRoutes,
 		routes.SetAdminReleaseRoutes,
+		routes.SetSchedulerRoutes,
 		routes.SetObservabilityRoutes,
 		routes.SetIntegrationRoutes,
 		static.SetStaticWebHandler,
