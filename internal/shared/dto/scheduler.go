@@ -62,23 +62,29 @@ type SchedulerRunOutput struct {
 }
 
 type SchedulerExecutorOutput struct {
-	ID           string            `json:"id"`
-	Group        string            `json:"group"`
-	Enabled      *bool             `json:"enabled"`
-	LastSeenAt   *time.Time        `json:"lastSeenAt"`
-	LiveSlot     model.Slot        `json:"liveSlot"`
-	InstanceMeta map[string]string `json:"instanceMeta"`
-	Token        string            `json:"token,omitempty"`
-	CreatedAt    time.Time         `json:"createdAt"`
-	UpdatedAt    time.Time         `json:"updatedAt"`
+	ID              string                             `json:"id"`
+	Group           string                             `json:"group"`
+	ChannelMode     model.SchedulerExecutorChannelMode `json:"channelMode"`
+	RelayAgentID    string                             `json:"relayAgentId"`
+	RelayRoutingKey string                             `json:"relayRoutingKey"`
+	Enabled         *bool                              `json:"enabled"`
+	LastSeenAt      *time.Time                         `json:"lastSeenAt"`
+	LiveSlot        model.Slot                         `json:"liveSlot"`
+	InstanceMeta    map[string]string                  `json:"instanceMeta"`
+	Token           string                             `json:"token,omitempty"`
+	CreatedAt       time.Time                          `json:"createdAt"`
+	UpdatedAt       time.Time                          `json:"updatedAt"`
 }
 
 type UpsertSchedulerExecutorRequest struct {
-	ExecutorID string            `json:"executorId" binding:"required"`
-	Group      string            `json:"group" binding:"required"`
-	Enabled    *bool             `json:"enabled"`
-	LiveSlot   int               `json:"liveSlot"`
-	Metadata   map[string]string `json:"metadata"`
+	ExecutorID      string            `json:"executorId" binding:"required"`
+	Group           string            `json:"group" binding:"required"`
+	ChannelMode     string            `json:"channelMode"`
+	RelayAgentID    string            `json:"relayAgentId"`
+	RelayRoutingKey string            `json:"relayRoutingKey"`
+	Enabled         *bool             `json:"enabled"`
+	LiveSlot        int               `json:"liveSlot"`
+	Metadata        map[string]string `json:"metadata"`
 }
 
 type TriggerSchedulerJobRequest struct {

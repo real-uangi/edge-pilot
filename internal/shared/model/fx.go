@@ -105,5 +105,10 @@ func backfillServiceHealthConfig(conn *gorm.DB) error {
 		Update("lease_timeout_sec", 60).Error; err != nil {
 		return err
 	}
+	if err := conn.Model(&SchedulerExecutor{}).
+		Where("channel_mode = ?", 0).
+		Update("channel_mode", SchedulerExecutorChannelModeDirect).Error; err != nil {
+		return err
+	}
 	return nil
 }

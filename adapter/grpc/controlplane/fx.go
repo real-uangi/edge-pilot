@@ -20,5 +20,12 @@ var Module = fx.Module(
 		NewServer,
 		NewSchedulerServer,
 	),
-	fx.Invoke(startGRPCServer),
+	fx.Invoke(
+		wireSchedulerRelay,
+		startGRPCServer,
+	),
 )
+
+func wireSchedulerRelay(server *Server, relay *SchedulerServer) {
+	server.schedulerRelay = relay
+}

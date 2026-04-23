@@ -180,6 +180,17 @@ func (s *Service) CreateExecutor(req dto.UpsertSchedulerExecutorRequest) (*dto.S
 	if strings.TrimSpace(req.Group) == "" {
 		return nil, business.NewBadRequest("group required")
 	}
+	channelMode, err := parseExecutorChannelMode(req.ChannelMode)
+	if err != nil {
+		return nil, err
+	}
+	relayAgentID := strings.TrimSpace(req.RelayAgentID)
+	relayRoutingKey := strings.TrimSpace(req.RelayRoutingKey)
+	if channelMode == model.SchedulerExecutorChannelModeAgentRelay {
+		if relayAgentID == "" || relayRoutingKey == "" {
+			return nil, business.NewBadRequest("relayAgentId and relayRoutingKey required for agent_relay mode")
+		}
+	}
 	token, hash, err := s.auth.GenerateToken()
 	if err != nil {
 		return nil, err
@@ -189,12 +200,15 @@ func (s *Service) CreateExecutor(req dto.UpsertSchedulerExecutorRequest) (*dto.S
 		enabled = *req.Enabled
 	}
 	executor := &model.SchedulerExecutor{
-		ID:           req.ExecutorID,
-		TokenHash:    hash,
-		Group:        req.Group,
-		Enabled:      boolPtr(enabled),
-		LiveSlot:     model.Slot(req.LiveSlot),
-		InstanceMeta: commondb.NewJSONB(copyStringMap(req.Metadata)),
+		ID:              req.ExecutorID,
+		TokenHash:       hash,
+		Group:           req.Group,
+		ChannelMode:     channelMode,
+		RelayAgentID:    relayAgentID,
+		RelayRoutingKey: relayRoutingKey,
+		Enabled:         boolPtr(enabled),
+		LiveSlot:        model.Slot(req.LiveSlot),
+		InstanceMeta:    commondb.NewJSONB(copyStringMap(req.Metadata)),
 	}
 	if err := s.repo.UpsertExecutor(executor); err != nil {
 		return nil, err
@@ -264,7 +278,7 @@ func (s *Service) DeleteExecutor(executorID string) error {
 	return s.repo.DeleteExecutor(executorID)
 }
 
-func (s *Service) AuthenticateExecutor(executorID string, token string, group string, liveSlot model.Slot, metadata map[string]string) (*model.SchedulerExecutor, error) {
+func (s *Service) AuthenticateExecutor(executorID string, token string, group string, liveSlot model.Slot, metadata map[string]string, relayAgentID string, relayRoutingKey string) (*model.SchedulerExecutor, error) {
 	executor, err := s.repo.GetExecutor(executorID)
 	if err != nil {
 		return nil, err
@@ -277,6 +291,21 @@ func (s *Service) AuthenticateExecutor(executorID string, token string, group st
 	}
 	if strings.TrimSpace(group) != "" && strings.TrimSpace(group) != executor.Group {
 		return nil, business.ErrUnauthorized
+	}
+	if relayAgentID == "" {
+		if executor.ChannelMode == model.SchedulerExecutorChannelModeAgentRelay {
+			return nil, business.ErrUnauthorized
+		}
+	} else {
+		if executor.ChannelMode != model.SchedulerExecutorChannelModeAgentRelay {
+			return nil, business.ErrUnauthorized
+		}
+		if strings.TrimSpace(executor.RelayAgentID) != strings.TrimSpace(relayAgentID) {
+			return nil, business.ErrUnauthorized
+		}
+		if strings.TrimSpace(executor.RelayRoutingKey) != strings.TrimSpace(relayRoutingKey) {
+			return nil, business.ErrUnauthorized
+		}
 	}
 	now := time.Now().UTC()
 	if liveSlot != 0 {
@@ -421,6 +450,11 @@ func (s *Service) DispatchDueRuns(now time.Time, dispatcher RunDispatcher) error
 		run := runs[i]
 		executorID, leaseExpiresAt, err := s.pickExecutorAndClaim(&run, now.UTC(), dispatcher)
 		if err != nil {
+			stored, getErr := s.repo.GetRun(run.ID)
+			if getErr == nil && stored != nil {
+				stored.ErrorMessage = err.Error()
+				_ = s.repo.UpdateRun(stored)
+			}
 			continue
 		}
 		if executorID == "" {
@@ -644,6 +678,17 @@ func parseDispatchPolicy(raw string) (model.SchedulerDispatchPolicy, error) {
 	}
 }
 
+func parseExecutorChannelMode(raw string) (model.SchedulerExecutorChannelMode, error) {
+	switch strings.ToLower(strings.TrimSpace(raw)) {
+	case "", "direct":
+		return model.SchedulerExecutorChannelModeDirect, nil
+	case "agent_relay", "relay":
+		return model.SchedulerExecutorChannelModeAgentRelay, nil
+	default:
+		return 0, business.NewBadRequest("channelMode must be direct or agent_relay")
+	}
+}
+
 func calcInitialNextRun(kind model.SchedulerScheduleKind, cronExpr string, runAt *time.Time, now time.Time) (*time.Time, error) {
 	switch kind {
 	case model.SchedulerScheduleKindOneTime:
@@ -824,14 +869,17 @@ func toSchedulerExecutorOutput(executor *model.SchedulerExecutor) dto.SchedulerE
 		meta = copyStringMap(executor.InstanceMeta.Get())
 	}
 	return dto.SchedulerExecutorOutput{
-		ID:           executor.ID,
-		Group:        executor.Group,
-		Enabled:      executor.Enabled,
-		LastSeenAt:   executor.LastSeenAt,
-		LiveSlot:     executor.LiveSlot,
-		InstanceMeta: meta,
-		CreatedAt:    executor.CreatedAt,
-		UpdatedAt:    executor.UpdatedAt,
+		ID:              executor.ID,
+		Group:           executor.Group,
+		ChannelMode:     executor.ChannelMode,
+		RelayAgentID:    executor.RelayAgentID,
+		RelayRoutingKey: executor.RelayRoutingKey,
+		Enabled:         executor.Enabled,
+		LastSeenAt:      executor.LastSeenAt,
+		LiveSlot:        executor.LiveSlot,
+		InstanceMeta:    meta,
+		CreatedAt:       executor.CreatedAt,
+		UpdatedAt:       executor.UpdatedAt,
 	}
 }
 

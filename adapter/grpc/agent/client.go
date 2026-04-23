@@ -23,6 +23,7 @@ type Client struct {
 	proxy     agentdomain.ProxyRuntime
 	state     *taskexec.RuntimeState
 	collector perf.Collector
+	relay     *schedulerRelayBridge
 	logger    *log.StdLogger
 }
 
@@ -33,6 +34,7 @@ func NewClient(cfg *config.AgentRuntimeConfig, executor *taskexec.Executor, prox
 		proxy:     proxy,
 		state:     state,
 		collector: collector,
+		relay:     newSchedulerRelayBridge(cfg),
 		logger:    log.NewStdLogger("agent.grpc-client"),
 	}
 }
@@ -41,11 +43,15 @@ func startClient(lc fx.Lifecycle, client *Client) {
 	ctx, cancel := context.WithCancel(context.Background())
 	lc.Append(fx.Hook{
 		OnStart: func(context.Context) error {
+			if err := client.relay.Start(); err != nil {
+				return err
+			}
 			client.logger.Infof("starting grpc client after proxy stack preparation: agentId=%s addr=%s", client.cfg.AgentID, client.cfg.ControlPlaneAddr)
 			go client.run(ctx)
 			return nil
 		},
 		OnStop: func(context.Context) error {
+			client.relay.Stop(context.Background())
 			cancel()
 			return nil
 		},
@@ -86,6 +92,8 @@ func (c *Client) connectOnce(ctx context.Context) error {
 	}
 	c.logger.Infof("opening grpc stream: agentId=%s addr=%s", c.cfg.AgentID, c.cfg.ControlPlaneAddr)
 	outbound := make(chan *grpcapi.AgentMessage, 32)
+	c.relay.SetOutbound(outbound)
+	defer c.relay.clearOutbound()
 	var sendMu sync.Mutex
 	go func() {
 		for msg := range outbound {
@@ -196,6 +204,9 @@ func (c *Client) connectOnce(ctx context.Context) error {
 		}
 		if msg.GetHaproxyConfigRequest() != nil {
 			go c.handleHAProxyConfigRequest(ctx, msg.GetHaproxyConfigRequest(), outbound)
+		}
+		if msg.GetSchedulerEnvelope() != nil {
+			c.relay.HandleControlEnvelope(msg.GetSchedulerEnvelope())
 		}
 	}
 }

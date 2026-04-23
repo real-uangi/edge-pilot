@@ -36,6 +36,7 @@ message AgentMessage {
     TaskUpdate task_update = 3;
     StatsReport stats = 4;
     HAProxyConfigResponse haproxy_config_response = 5;
+    SchedulerRelayEnvelope scheduler_envelope = 6;
   }
 }
 
@@ -45,7 +46,34 @@ message ControlMessage {
     TaskCommand task = 2;
     ProxyConfigSnapshot proxy_config = 3;
     HAProxyConfigRequest haproxy_config_request = 4;
+    SchedulerRelayEnvelope scheduler_envelope = 5;
   }
+}
+
+enum SchedulerRelayDirection {
+  SCHEDULER_RELAY_DIRECTION_UNSPECIFIED = 0;
+  SCHEDULER_RELAY_DIRECTION_UPSTREAM = 1;
+  SCHEDULER_RELAY_DIRECTION_DOWNSTREAM = 2;
+  SCHEDULER_RELAY_DIRECTION_CONTROL = 3;
+}
+
+enum SchedulerRelayPayloadType {
+  SCHEDULER_RELAY_PAYLOAD_TYPE_UNSPECIFIED = 0;
+  SCHEDULER_RELAY_PAYLOAD_TYPE_EXECUTOR_MESSAGE = 1;
+  SCHEDULER_RELAY_PAYLOAD_TYPE_SCHEDULER_MESSAGE = 2;
+  SCHEDULER_RELAY_PAYLOAD_TYPE_SESSION_CLOSED = 3;
+  SCHEDULER_RELAY_PAYLOAD_TYPE_SESSION_ERROR = 4;
+}
+
+message SchedulerRelayEnvelope {
+  string relay_session_id = 1;
+  string executor_id = 2;
+  string routing_key = 3;
+  string agent_id = 4;
+  SchedulerRelayDirection direction = 5;
+  SchedulerRelayPayloadType payload_type = 6;
+  bytes payload_bytes = 7;
+  string error_message = 8;
 }
 
 message HelloMessage {

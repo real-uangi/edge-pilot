@@ -177,6 +177,113 @@ func (TaskStatus) EnumDescriptor() ([]byte, []int) {
 	return file_internal_shared_grpcapi_agent_control_proto_rawDescGZIP(), []int{2}
 }
 
+type SchedulerRelayDirection int32
+
+const (
+	SchedulerRelayDirection_SCHEDULER_RELAY_DIRECTION_UNSPECIFIED SchedulerRelayDirection = 0
+	SchedulerRelayDirection_SCHEDULER_RELAY_DIRECTION_UPSTREAM    SchedulerRelayDirection = 1
+	SchedulerRelayDirection_SCHEDULER_RELAY_DIRECTION_DOWNSTREAM  SchedulerRelayDirection = 2
+	SchedulerRelayDirection_SCHEDULER_RELAY_DIRECTION_CONTROL     SchedulerRelayDirection = 3
+)
+
+// Enum value maps for SchedulerRelayDirection.
+var (
+	SchedulerRelayDirection_name = map[int32]string{
+		0: "SCHEDULER_RELAY_DIRECTION_UNSPECIFIED",
+		1: "SCHEDULER_RELAY_DIRECTION_UPSTREAM",
+		2: "SCHEDULER_RELAY_DIRECTION_DOWNSTREAM",
+		3: "SCHEDULER_RELAY_DIRECTION_CONTROL",
+	}
+	SchedulerRelayDirection_value = map[string]int32{
+		"SCHEDULER_RELAY_DIRECTION_UNSPECIFIED": 0,
+		"SCHEDULER_RELAY_DIRECTION_UPSTREAM":    1,
+		"SCHEDULER_RELAY_DIRECTION_DOWNSTREAM":  2,
+		"SCHEDULER_RELAY_DIRECTION_CONTROL":     3,
+	}
+)
+
+func (x SchedulerRelayDirection) Enum() *SchedulerRelayDirection {
+	p := new(SchedulerRelayDirection)
+	*p = x
+	return p
+}
+
+func (x SchedulerRelayDirection) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (SchedulerRelayDirection) Descriptor() protoreflect.EnumDescriptor {
+	return file_internal_shared_grpcapi_agent_control_proto_enumTypes[3].Descriptor()
+}
+
+func (SchedulerRelayDirection) Type() protoreflect.EnumType {
+	return &file_internal_shared_grpcapi_agent_control_proto_enumTypes[3]
+}
+
+func (x SchedulerRelayDirection) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use SchedulerRelayDirection.Descriptor instead.
+func (SchedulerRelayDirection) EnumDescriptor() ([]byte, []int) {
+	return file_internal_shared_grpcapi_agent_control_proto_rawDescGZIP(), []int{3}
+}
+
+type SchedulerRelayPayloadType int32
+
+const (
+	SchedulerRelayPayloadType_SCHEDULER_RELAY_PAYLOAD_TYPE_UNSPECIFIED       SchedulerRelayPayloadType = 0
+	SchedulerRelayPayloadType_SCHEDULER_RELAY_PAYLOAD_TYPE_EXECUTOR_MESSAGE  SchedulerRelayPayloadType = 1
+	SchedulerRelayPayloadType_SCHEDULER_RELAY_PAYLOAD_TYPE_SCHEDULER_MESSAGE SchedulerRelayPayloadType = 2
+	SchedulerRelayPayloadType_SCHEDULER_RELAY_PAYLOAD_TYPE_SESSION_CLOSED    SchedulerRelayPayloadType = 3
+	SchedulerRelayPayloadType_SCHEDULER_RELAY_PAYLOAD_TYPE_SESSION_ERROR     SchedulerRelayPayloadType = 4
+)
+
+// Enum value maps for SchedulerRelayPayloadType.
+var (
+	SchedulerRelayPayloadType_name = map[int32]string{
+		0: "SCHEDULER_RELAY_PAYLOAD_TYPE_UNSPECIFIED",
+		1: "SCHEDULER_RELAY_PAYLOAD_TYPE_EXECUTOR_MESSAGE",
+		2: "SCHEDULER_RELAY_PAYLOAD_TYPE_SCHEDULER_MESSAGE",
+		3: "SCHEDULER_RELAY_PAYLOAD_TYPE_SESSION_CLOSED",
+		4: "SCHEDULER_RELAY_PAYLOAD_TYPE_SESSION_ERROR",
+	}
+	SchedulerRelayPayloadType_value = map[string]int32{
+		"SCHEDULER_RELAY_PAYLOAD_TYPE_UNSPECIFIED":       0,
+		"SCHEDULER_RELAY_PAYLOAD_TYPE_EXECUTOR_MESSAGE":  1,
+		"SCHEDULER_RELAY_PAYLOAD_TYPE_SCHEDULER_MESSAGE": 2,
+		"SCHEDULER_RELAY_PAYLOAD_TYPE_SESSION_CLOSED":    3,
+		"SCHEDULER_RELAY_PAYLOAD_TYPE_SESSION_ERROR":     4,
+	}
+)
+
+func (x SchedulerRelayPayloadType) Enum() *SchedulerRelayPayloadType {
+	p := new(SchedulerRelayPayloadType)
+	*p = x
+	return p
+}
+
+func (x SchedulerRelayPayloadType) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (SchedulerRelayPayloadType) Descriptor() protoreflect.EnumDescriptor {
+	return file_internal_shared_grpcapi_agent_control_proto_enumTypes[4].Descriptor()
+}
+
+func (SchedulerRelayPayloadType) Type() protoreflect.EnumType {
+	return &file_internal_shared_grpcapi_agent_control_proto_enumTypes[4]
+}
+
+func (x SchedulerRelayPayloadType) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use SchedulerRelayPayloadType.Descriptor instead.
+func (SchedulerRelayPayloadType) EnumDescriptor() ([]byte, []int) {
+	return file_internal_shared_grpcapi_agent_control_proto_rawDescGZIP(), []int{4}
+}
+
 type AgentMessage struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// Types that are valid to be assigned to Payload:
@@ -186,6 +293,7 @@ type AgentMessage struct {
 	//	*AgentMessage_TaskUpdate
 	//	*AgentMessage_Stats
 	//	*AgentMessage_HaproxyConfigResponse
+	//	*AgentMessage_SchedulerEnvelope
 	Payload       isAgentMessage_Payload `protobuf_oneof:"payload"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -273,6 +381,15 @@ func (x *AgentMessage) GetHaproxyConfigResponse() *HAProxyConfigResponse {
 	return nil
 }
 
+func (x *AgentMessage) GetSchedulerEnvelope() *SchedulerRelayEnvelope {
+	if x != nil {
+		if x, ok := x.Payload.(*AgentMessage_SchedulerEnvelope); ok {
+			return x.SchedulerEnvelope
+		}
+	}
+	return nil
+}
+
 type isAgentMessage_Payload interface {
 	isAgentMessage_Payload()
 }
@@ -297,6 +414,10 @@ type AgentMessage_HaproxyConfigResponse struct {
 	HaproxyConfigResponse *HAProxyConfigResponse `protobuf:"bytes,5,opt,name=haproxy_config_response,json=haproxyConfigResponse,proto3,oneof"`
 }
 
+type AgentMessage_SchedulerEnvelope struct {
+	SchedulerEnvelope *SchedulerRelayEnvelope `protobuf:"bytes,6,opt,name=scheduler_envelope,json=schedulerEnvelope,proto3,oneof"`
+}
+
 func (*AgentMessage_Hello) isAgentMessage_Payload() {}
 
 func (*AgentMessage_Heartbeat) isAgentMessage_Payload() {}
@@ -307,6 +428,8 @@ func (*AgentMessage_Stats) isAgentMessage_Payload() {}
 
 func (*AgentMessage_HaproxyConfigResponse) isAgentMessage_Payload() {}
 
+func (*AgentMessage_SchedulerEnvelope) isAgentMessage_Payload() {}
+
 type ControlMessage struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// Types that are valid to be assigned to Payload:
@@ -315,6 +438,7 @@ type ControlMessage struct {
 	//	*ControlMessage_Task
 	//	*ControlMessage_ProxyConfig
 	//	*ControlMessage_HaproxyConfigRequest
+	//	*ControlMessage_SchedulerEnvelope
 	Payload       isControlMessage_Payload `protobuf_oneof:"payload"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -393,6 +517,15 @@ func (x *ControlMessage) GetHaproxyConfigRequest() *HAProxyConfigRequest {
 	return nil
 }
 
+func (x *ControlMessage) GetSchedulerEnvelope() *SchedulerRelayEnvelope {
+	if x != nil {
+		if x, ok := x.Payload.(*ControlMessage_SchedulerEnvelope); ok {
+			return x.SchedulerEnvelope
+		}
+	}
+	return nil
+}
+
 type isControlMessage_Payload interface {
 	isControlMessage_Payload()
 }
@@ -413,6 +546,10 @@ type ControlMessage_HaproxyConfigRequest struct {
 	HaproxyConfigRequest *HAProxyConfigRequest `protobuf:"bytes,4,opt,name=haproxy_config_request,json=haproxyConfigRequest,proto3,oneof"`
 }
 
+type ControlMessage_SchedulerEnvelope struct {
+	SchedulerEnvelope *SchedulerRelayEnvelope `protobuf:"bytes,5,opt,name=scheduler_envelope,json=schedulerEnvelope,proto3,oneof"`
+}
+
 func (*ControlMessage_Ack) isControlMessage_Payload() {}
 
 func (*ControlMessage_Task) isControlMessage_Payload() {}
@@ -420,6 +557,108 @@ func (*ControlMessage_Task) isControlMessage_Payload() {}
 func (*ControlMessage_ProxyConfig) isControlMessage_Payload() {}
 
 func (*ControlMessage_HaproxyConfigRequest) isControlMessage_Payload() {}
+
+func (*ControlMessage_SchedulerEnvelope) isControlMessage_Payload() {}
+
+type SchedulerRelayEnvelope struct {
+	state          protoimpl.MessageState    `protogen:"open.v1"`
+	RelaySessionId string                    `protobuf:"bytes,1,opt,name=relay_session_id,json=relaySessionId,proto3" json:"relay_session_id,omitempty"`
+	ExecutorId     string                    `protobuf:"bytes,2,opt,name=executor_id,json=executorId,proto3" json:"executor_id,omitempty"`
+	RoutingKey     string                    `protobuf:"bytes,3,opt,name=routing_key,json=routingKey,proto3" json:"routing_key,omitempty"`
+	AgentId        string                    `protobuf:"bytes,4,opt,name=agent_id,json=agentId,proto3" json:"agent_id,omitempty"`
+	Direction      SchedulerRelayDirection   `protobuf:"varint,5,opt,name=direction,proto3,enum=edgepilot.grpcapi.SchedulerRelayDirection" json:"direction,omitempty"`
+	PayloadType    SchedulerRelayPayloadType `protobuf:"varint,6,opt,name=payload_type,json=payloadType,proto3,enum=edgepilot.grpcapi.SchedulerRelayPayloadType" json:"payload_type,omitempty"`
+	PayloadBytes   []byte                    `protobuf:"bytes,7,opt,name=payload_bytes,json=payloadBytes,proto3" json:"payload_bytes,omitempty"`
+	ErrorMessage   string                    `protobuf:"bytes,8,opt,name=error_message,json=errorMessage,proto3" json:"error_message,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
+}
+
+func (x *SchedulerRelayEnvelope) Reset() {
+	*x = SchedulerRelayEnvelope{}
+	mi := &file_internal_shared_grpcapi_agent_control_proto_msgTypes[2]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SchedulerRelayEnvelope) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SchedulerRelayEnvelope) ProtoMessage() {}
+
+func (x *SchedulerRelayEnvelope) ProtoReflect() protoreflect.Message {
+	mi := &file_internal_shared_grpcapi_agent_control_proto_msgTypes[2]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SchedulerRelayEnvelope.ProtoReflect.Descriptor instead.
+func (*SchedulerRelayEnvelope) Descriptor() ([]byte, []int) {
+	return file_internal_shared_grpcapi_agent_control_proto_rawDescGZIP(), []int{2}
+}
+
+func (x *SchedulerRelayEnvelope) GetRelaySessionId() string {
+	if x != nil {
+		return x.RelaySessionId
+	}
+	return ""
+}
+
+func (x *SchedulerRelayEnvelope) GetExecutorId() string {
+	if x != nil {
+		return x.ExecutorId
+	}
+	return ""
+}
+
+func (x *SchedulerRelayEnvelope) GetRoutingKey() string {
+	if x != nil {
+		return x.RoutingKey
+	}
+	return ""
+}
+
+func (x *SchedulerRelayEnvelope) GetAgentId() string {
+	if x != nil {
+		return x.AgentId
+	}
+	return ""
+}
+
+func (x *SchedulerRelayEnvelope) GetDirection() SchedulerRelayDirection {
+	if x != nil {
+		return x.Direction
+	}
+	return SchedulerRelayDirection_SCHEDULER_RELAY_DIRECTION_UNSPECIFIED
+}
+
+func (x *SchedulerRelayEnvelope) GetPayloadType() SchedulerRelayPayloadType {
+	if x != nil {
+		return x.PayloadType
+	}
+	return SchedulerRelayPayloadType_SCHEDULER_RELAY_PAYLOAD_TYPE_UNSPECIFIED
+}
+
+func (x *SchedulerRelayEnvelope) GetPayloadBytes() []byte {
+	if x != nil {
+		return x.PayloadBytes
+	}
+	return nil
+}
+
+func (x *SchedulerRelayEnvelope) GetErrorMessage() string {
+	if x != nil {
+		return x.ErrorMessage
+	}
+	return ""
+}
 
 type HelloMessage struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
@@ -435,7 +674,7 @@ type HelloMessage struct {
 
 func (x *HelloMessage) Reset() {
 	*x = HelloMessage{}
-	mi := &file_internal_shared_grpcapi_agent_control_proto_msgTypes[2]
+	mi := &file_internal_shared_grpcapi_agent_control_proto_msgTypes[3]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -447,7 +686,7 @@ func (x *HelloMessage) String() string {
 func (*HelloMessage) ProtoMessage() {}
 
 func (x *HelloMessage) ProtoReflect() protoreflect.Message {
-	mi := &file_internal_shared_grpcapi_agent_control_proto_msgTypes[2]
+	mi := &file_internal_shared_grpcapi_agent_control_proto_msgTypes[3]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -460,7 +699,7 @@ func (x *HelloMessage) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use HelloMessage.ProtoReflect.Descriptor instead.
 func (*HelloMessage) Descriptor() ([]byte, []int) {
-	return file_internal_shared_grpcapi_agent_control_proto_rawDescGZIP(), []int{2}
+	return file_internal_shared_grpcapi_agent_control_proto_rawDescGZIP(), []int{3}
 }
 
 func (x *HelloMessage) GetAgentId() string {
@@ -515,7 +754,7 @@ type HeartbeatMessage struct {
 
 func (x *HeartbeatMessage) Reset() {
 	*x = HeartbeatMessage{}
-	mi := &file_internal_shared_grpcapi_agent_control_proto_msgTypes[3]
+	mi := &file_internal_shared_grpcapi_agent_control_proto_msgTypes[4]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -527,7 +766,7 @@ func (x *HeartbeatMessage) String() string {
 func (*HeartbeatMessage) ProtoMessage() {}
 
 func (x *HeartbeatMessage) ProtoReflect() protoreflect.Message {
-	mi := &file_internal_shared_grpcapi_agent_control_proto_msgTypes[3]
+	mi := &file_internal_shared_grpcapi_agent_control_proto_msgTypes[4]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -540,7 +779,7 @@ func (x *HeartbeatMessage) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use HeartbeatMessage.ProtoReflect.Descriptor instead.
 func (*HeartbeatMessage) Descriptor() ([]byte, []int) {
-	return file_internal_shared_grpcapi_agent_control_proto_rawDescGZIP(), []int{3}
+	return file_internal_shared_grpcapi_agent_control_proto_rawDescGZIP(), []int{4}
 }
 
 func (x *HeartbeatMessage) GetAgentId() string {
@@ -566,7 +805,7 @@ type AckMessage struct {
 
 func (x *AckMessage) Reset() {
 	*x = AckMessage{}
-	mi := &file_internal_shared_grpcapi_agent_control_proto_msgTypes[4]
+	mi := &file_internal_shared_grpcapi_agent_control_proto_msgTypes[5]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -578,7 +817,7 @@ func (x *AckMessage) String() string {
 func (*AckMessage) ProtoMessage() {}
 
 func (x *AckMessage) ProtoReflect() protoreflect.Message {
-	mi := &file_internal_shared_grpcapi_agent_control_proto_msgTypes[4]
+	mi := &file_internal_shared_grpcapi_agent_control_proto_msgTypes[5]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -591,7 +830,7 @@ func (x *AckMessage) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AckMessage.ProtoReflect.Descriptor instead.
 func (*AckMessage) Descriptor() ([]byte, []int) {
-	return file_internal_shared_grpcapi_agent_control_proto_rawDescGZIP(), []int{4}
+	return file_internal_shared_grpcapi_agent_control_proto_rawDescGZIP(), []int{5}
 }
 
 func (x *AckMessage) GetMessage() string {
@@ -612,7 +851,7 @@ type VolumeMount struct {
 
 func (x *VolumeMount) Reset() {
 	*x = VolumeMount{}
-	mi := &file_internal_shared_grpcapi_agent_control_proto_msgTypes[5]
+	mi := &file_internal_shared_grpcapi_agent_control_proto_msgTypes[6]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -624,7 +863,7 @@ func (x *VolumeMount) String() string {
 func (*VolumeMount) ProtoMessage() {}
 
 func (x *VolumeMount) ProtoReflect() protoreflect.Message {
-	mi := &file_internal_shared_grpcapi_agent_control_proto_msgTypes[5]
+	mi := &file_internal_shared_grpcapi_agent_control_proto_msgTypes[6]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -637,7 +876,7 @@ func (x *VolumeMount) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use VolumeMount.ProtoReflect.Descriptor instead.
 func (*VolumeMount) Descriptor() ([]byte, []int) {
-	return file_internal_shared_grpcapi_agent_control_proto_rawDescGZIP(), []int{5}
+	return file_internal_shared_grpcapi_agent_control_proto_rawDescGZIP(), []int{6}
 }
 
 func (x *VolumeMount) GetSource() string {
@@ -671,7 +910,7 @@ type PublishedPort struct {
 
 func (x *PublishedPort) Reset() {
 	*x = PublishedPort{}
-	mi := &file_internal_shared_grpcapi_agent_control_proto_msgTypes[6]
+	mi := &file_internal_shared_grpcapi_agent_control_proto_msgTypes[7]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -683,7 +922,7 @@ func (x *PublishedPort) String() string {
 func (*PublishedPort) ProtoMessage() {}
 
 func (x *PublishedPort) ProtoReflect() protoreflect.Message {
-	mi := &file_internal_shared_grpcapi_agent_control_proto_msgTypes[6]
+	mi := &file_internal_shared_grpcapi_agent_control_proto_msgTypes[7]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -696,7 +935,7 @@ func (x *PublishedPort) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PublishedPort.ProtoReflect.Descriptor instead.
 func (*PublishedPort) Descriptor() ([]byte, []int) {
-	return file_internal_shared_grpcapi_agent_control_proto_rawDescGZIP(), []int{6}
+	return file_internal_shared_grpcapi_agent_control_proto_rawDescGZIP(), []int{7}
 }
 
 func (x *PublishedPort) GetHostPort() int32 {
@@ -754,7 +993,7 @@ type TaskCommand struct {
 
 func (x *TaskCommand) Reset() {
 	*x = TaskCommand{}
-	mi := &file_internal_shared_grpcapi_agent_control_proto_msgTypes[7]
+	mi := &file_internal_shared_grpcapi_agent_control_proto_msgTypes[8]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -766,7 +1005,7 @@ func (x *TaskCommand) String() string {
 func (*TaskCommand) ProtoMessage() {}
 
 func (x *TaskCommand) ProtoReflect() protoreflect.Message {
-	mi := &file_internal_shared_grpcapi_agent_control_proto_msgTypes[7]
+	mi := &file_internal_shared_grpcapi_agent_control_proto_msgTypes[8]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -779,7 +1018,7 @@ func (x *TaskCommand) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TaskCommand.ProtoReflect.Descriptor instead.
 func (*TaskCommand) Descriptor() ([]byte, []int) {
-	return file_internal_shared_grpcapi_agent_control_proto_rawDescGZIP(), []int{7}
+	return file_internal_shared_grpcapi_agent_control_proto_rawDescGZIP(), []int{8}
 }
 
 func (x *TaskCommand) GetTaskId() string {
@@ -1033,7 +1272,7 @@ type TaskUpdate struct {
 
 func (x *TaskUpdate) Reset() {
 	*x = TaskUpdate{}
-	mi := &file_internal_shared_grpcapi_agent_control_proto_msgTypes[8]
+	mi := &file_internal_shared_grpcapi_agent_control_proto_msgTypes[9]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1045,7 +1284,7 @@ func (x *TaskUpdate) String() string {
 func (*TaskUpdate) ProtoMessage() {}
 
 func (x *TaskUpdate) ProtoReflect() protoreflect.Message {
-	mi := &file_internal_shared_grpcapi_agent_control_proto_msgTypes[8]
+	mi := &file_internal_shared_grpcapi_agent_control_proto_msgTypes[9]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1058,7 +1297,7 @@ func (x *TaskUpdate) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TaskUpdate.ProtoReflect.Descriptor instead.
 func (*TaskUpdate) Descriptor() ([]byte, []int) {
-	return file_internal_shared_grpcapi_agent_control_proto_rawDescGZIP(), []int{8}
+	return file_internal_shared_grpcapi_agent_control_proto_rawDescGZIP(), []int{9}
 }
 
 func (x *TaskUpdate) GetTaskId() string {
@@ -1165,7 +1404,7 @@ type ProxyServiceConfig struct {
 
 func (x *ProxyServiceConfig) Reset() {
 	*x = ProxyServiceConfig{}
-	mi := &file_internal_shared_grpcapi_agent_control_proto_msgTypes[9]
+	mi := &file_internal_shared_grpcapi_agent_control_proto_msgTypes[10]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1177,7 +1416,7 @@ func (x *ProxyServiceConfig) String() string {
 func (*ProxyServiceConfig) ProtoMessage() {}
 
 func (x *ProxyServiceConfig) ProtoReflect() protoreflect.Message {
-	mi := &file_internal_shared_grpcapi_agent_control_proto_msgTypes[9]
+	mi := &file_internal_shared_grpcapi_agent_control_proto_msgTypes[10]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1190,7 +1429,7 @@ func (x *ProxyServiceConfig) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ProxyServiceConfig.ProtoReflect.Descriptor instead.
 func (*ProxyServiceConfig) Descriptor() ([]byte, []int) {
-	return file_internal_shared_grpcapi_agent_control_proto_rawDescGZIP(), []int{9}
+	return file_internal_shared_grpcapi_agent_control_proto_rawDescGZIP(), []int{10}
 }
 
 func (x *ProxyServiceConfig) GetServiceId() string {
@@ -1290,7 +1529,7 @@ type ProxyConfigSnapshot struct {
 
 func (x *ProxyConfigSnapshot) Reset() {
 	*x = ProxyConfigSnapshot{}
-	mi := &file_internal_shared_grpcapi_agent_control_proto_msgTypes[10]
+	mi := &file_internal_shared_grpcapi_agent_control_proto_msgTypes[11]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1302,7 +1541,7 @@ func (x *ProxyConfigSnapshot) String() string {
 func (*ProxyConfigSnapshot) ProtoMessage() {}
 
 func (x *ProxyConfigSnapshot) ProtoReflect() protoreflect.Message {
-	mi := &file_internal_shared_grpcapi_agent_control_proto_msgTypes[10]
+	mi := &file_internal_shared_grpcapi_agent_control_proto_msgTypes[11]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1315,7 +1554,7 @@ func (x *ProxyConfigSnapshot) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ProxyConfigSnapshot.ProtoReflect.Descriptor instead.
 func (*ProxyConfigSnapshot) Descriptor() ([]byte, []int) {
-	return file_internal_shared_grpcapi_agent_control_proto_rawDescGZIP(), []int{10}
+	return file_internal_shared_grpcapi_agent_control_proto_rawDescGZIP(), []int{11}
 }
 
 func (x *ProxyConfigSnapshot) GetAgentId() string {
@@ -1367,7 +1606,7 @@ type BackendStatPoint struct {
 
 func (x *BackendStatPoint) Reset() {
 	*x = BackendStatPoint{}
-	mi := &file_internal_shared_grpcapi_agent_control_proto_msgTypes[11]
+	mi := &file_internal_shared_grpcapi_agent_control_proto_msgTypes[12]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1379,7 +1618,7 @@ func (x *BackendStatPoint) String() string {
 func (*BackendStatPoint) ProtoMessage() {}
 
 func (x *BackendStatPoint) ProtoReflect() protoreflect.Message {
-	mi := &file_internal_shared_grpcapi_agent_control_proto_msgTypes[11]
+	mi := &file_internal_shared_grpcapi_agent_control_proto_msgTypes[12]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1392,7 +1631,7 @@ func (x *BackendStatPoint) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use BackendStatPoint.ProtoReflect.Descriptor instead.
 func (*BackendStatPoint) Descriptor() ([]byte, []int) {
-	return file_internal_shared_grpcapi_agent_control_proto_rawDescGZIP(), []int{11}
+	return file_internal_shared_grpcapi_agent_control_proto_rawDescGZIP(), []int{12}
 }
 
 func (x *BackendStatPoint) GetServiceId() string {
@@ -1448,7 +1687,7 @@ type StatsReport struct {
 
 func (x *StatsReport) Reset() {
 	*x = StatsReport{}
-	mi := &file_internal_shared_grpcapi_agent_control_proto_msgTypes[12]
+	mi := &file_internal_shared_grpcapi_agent_control_proto_msgTypes[13]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1460,7 +1699,7 @@ func (x *StatsReport) String() string {
 func (*StatsReport) ProtoMessage() {}
 
 func (x *StatsReport) ProtoReflect() protoreflect.Message {
-	mi := &file_internal_shared_grpcapi_agent_control_proto_msgTypes[12]
+	mi := &file_internal_shared_grpcapi_agent_control_proto_msgTypes[13]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1473,7 +1712,7 @@ func (x *StatsReport) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use StatsReport.ProtoReflect.Descriptor instead.
 func (*StatsReport) Descriptor() ([]byte, []int) {
-	return file_internal_shared_grpcapi_agent_control_proto_rawDescGZIP(), []int{12}
+	return file_internal_shared_grpcapi_agent_control_proto_rawDescGZIP(), []int{13}
 }
 
 func (x *StatsReport) GetAgentId() string {
@@ -1510,7 +1749,7 @@ type PerformanceSnapshot struct {
 
 func (x *PerformanceSnapshot) Reset() {
 	*x = PerformanceSnapshot{}
-	mi := &file_internal_shared_grpcapi_agent_control_proto_msgTypes[13]
+	mi := &file_internal_shared_grpcapi_agent_control_proto_msgTypes[14]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1522,7 +1761,7 @@ func (x *PerformanceSnapshot) String() string {
 func (*PerformanceSnapshot) ProtoMessage() {}
 
 func (x *PerformanceSnapshot) ProtoReflect() protoreflect.Message {
-	mi := &file_internal_shared_grpcapi_agent_control_proto_msgTypes[13]
+	mi := &file_internal_shared_grpcapi_agent_control_proto_msgTypes[14]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1535,7 +1774,7 @@ func (x *PerformanceSnapshot) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PerformanceSnapshot.ProtoReflect.Descriptor instead.
 func (*PerformanceSnapshot) Descriptor() ([]byte, []int) {
-	return file_internal_shared_grpcapi_agent_control_proto_rawDescGZIP(), []int{13}
+	return file_internal_shared_grpcapi_agent_control_proto_rawDescGZIP(), []int{14}
 }
 
 func (x *PerformanceSnapshot) GetCpuPercent() float64 {
@@ -1583,7 +1822,7 @@ type HAProxyConfigRequest struct {
 
 func (x *HAProxyConfigRequest) Reset() {
 	*x = HAProxyConfigRequest{}
-	mi := &file_internal_shared_grpcapi_agent_control_proto_msgTypes[14]
+	mi := &file_internal_shared_grpcapi_agent_control_proto_msgTypes[15]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1595,7 +1834,7 @@ func (x *HAProxyConfigRequest) String() string {
 func (*HAProxyConfigRequest) ProtoMessage() {}
 
 func (x *HAProxyConfigRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_internal_shared_grpcapi_agent_control_proto_msgTypes[14]
+	mi := &file_internal_shared_grpcapi_agent_control_proto_msgTypes[15]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1608,7 +1847,7 @@ func (x *HAProxyConfigRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use HAProxyConfigRequest.ProtoReflect.Descriptor instead.
 func (*HAProxyConfigRequest) Descriptor() ([]byte, []int) {
-	return file_internal_shared_grpcapi_agent_control_proto_rawDescGZIP(), []int{14}
+	return file_internal_shared_grpcapi_agent_control_proto_rawDescGZIP(), []int{15}
 }
 
 func (x *HAProxyConfigRequest) GetRequestId() string {
@@ -1637,7 +1876,7 @@ type HAProxyConfigResponse struct {
 
 func (x *HAProxyConfigResponse) Reset() {
 	*x = HAProxyConfigResponse{}
-	mi := &file_internal_shared_grpcapi_agent_control_proto_msgTypes[15]
+	mi := &file_internal_shared_grpcapi_agent_control_proto_msgTypes[16]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1649,7 +1888,7 @@ func (x *HAProxyConfigResponse) String() string {
 func (*HAProxyConfigResponse) ProtoMessage() {}
 
 func (x *HAProxyConfigResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_internal_shared_grpcapi_agent_control_proto_msgTypes[15]
+	mi := &file_internal_shared_grpcapi_agent_control_proto_msgTypes[16]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1662,7 +1901,7 @@ func (x *HAProxyConfigResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use HAProxyConfigResponse.ProtoReflect.Descriptor instead.
 func (*HAProxyConfigResponse) Descriptor() ([]byte, []int) {
-	return file_internal_shared_grpcapi_agent_control_proto_rawDescGZIP(), []int{15}
+	return file_internal_shared_grpcapi_agent_control_proto_rawDescGZIP(), []int{16}
 }
 
 func (x *HAProxyConfigResponse) GetRequestId() string {
@@ -1697,21 +1936,34 @@ var File_internal_shared_grpcapi_agent_control_proto protoreflect.FileDescriptor
 
 const file_internal_shared_grpcapi_agent_control_proto_rawDesc = "" +
 	"\n" +
-	"+internal/shared/grpcapi/agent_control.proto\x12\x11edgepilot.grpcapi\"\xf5\x02\n" +
+	"+internal/shared/grpcapi/agent_control.proto\x12\x11edgepilot.grpcapi\"\xd1\x03\n" +
 	"\fAgentMessage\x127\n" +
 	"\x05hello\x18\x01 \x01(\v2\x1f.edgepilot.grpcapi.HelloMessageH\x00R\x05hello\x12C\n" +
 	"\theartbeat\x18\x02 \x01(\v2#.edgepilot.grpcapi.HeartbeatMessageH\x00R\theartbeat\x12@\n" +
 	"\vtask_update\x18\x03 \x01(\v2\x1d.edgepilot.grpcapi.TaskUpdateH\x00R\n" +
 	"taskUpdate\x126\n" +
 	"\x05stats\x18\x04 \x01(\v2\x1e.edgepilot.grpcapi.StatsReportH\x00R\x05stats\x12b\n" +
-	"\x17haproxy_config_response\x18\x05 \x01(\v2(.edgepilot.grpcapi.HAProxyConfigResponseH\x00R\x15haproxyConfigResponseB\t\n" +
-	"\apayload\"\xb2\x02\n" +
+	"\x17haproxy_config_response\x18\x05 \x01(\v2(.edgepilot.grpcapi.HAProxyConfigResponseH\x00R\x15haproxyConfigResponse\x12Z\n" +
+	"\x12scheduler_envelope\x18\x06 \x01(\v2).edgepilot.grpcapi.SchedulerRelayEnvelopeH\x00R\x11schedulerEnvelopeB\t\n" +
+	"\apayload\"\x8e\x03\n" +
 	"\x0eControlMessage\x121\n" +
 	"\x03ack\x18\x01 \x01(\v2\x1d.edgepilot.grpcapi.AckMessageH\x00R\x03ack\x124\n" +
 	"\x04task\x18\x02 \x01(\v2\x1e.edgepilot.grpcapi.TaskCommandH\x00R\x04task\x12K\n" +
 	"\fproxy_config\x18\x03 \x01(\v2&.edgepilot.grpcapi.ProxyConfigSnapshotH\x00R\vproxyConfig\x12_\n" +
-	"\x16haproxy_config_request\x18\x04 \x01(\v2'.edgepilot.grpcapi.HAProxyConfigRequestH\x00R\x14haproxyConfigRequestB\t\n" +
-	"\apayload\"\xba\x01\n" +
+	"\x16haproxy_config_request\x18\x04 \x01(\v2'.edgepilot.grpcapi.HAProxyConfigRequestH\x00R\x14haproxyConfigRequest\x12Z\n" +
+	"\x12scheduler_envelope\x18\x05 \x01(\v2).edgepilot.grpcapi.SchedulerRelayEnvelopeH\x00R\x11schedulerEnvelopeB\t\n" +
+	"\apayload\"\x84\x03\n" +
+	"\x16SchedulerRelayEnvelope\x12(\n" +
+	"\x10relay_session_id\x18\x01 \x01(\tR\x0erelaySessionId\x12\x1f\n" +
+	"\vexecutor_id\x18\x02 \x01(\tR\n" +
+	"executorId\x12\x1f\n" +
+	"\vrouting_key\x18\x03 \x01(\tR\n" +
+	"routingKey\x12\x19\n" +
+	"\bagent_id\x18\x04 \x01(\tR\aagentId\x12H\n" +
+	"\tdirection\x18\x05 \x01(\x0e2*.edgepilot.grpcapi.SchedulerRelayDirectionR\tdirection\x12O\n" +
+	"\fpayload_type\x18\x06 \x01(\x0e2,.edgepilot.grpcapi.SchedulerRelayPayloadTypeR\vpayloadType\x12#\n" +
+	"\rpayload_bytes\x18\a \x01(\fR\fpayloadBytes\x12#\n" +
+	"\rerror_message\x18\b \x01(\tR\ferrorMessage\"\xba\x01\n" +
 	"\fHelloMessage\x12\x19\n" +
 	"\bagent_id\x18\x01 \x01(\tR\aagentId\x12\x14\n" +
 	"\x05token\x18\x02 \x01(\tR\x05token\x12\x18\n" +
@@ -1871,7 +2123,18 @@ const file_internal_shared_grpcapi_agent_control_proto_rawDesc = "" +
 	"\x17TASK_STATUS_UNSPECIFIED\x10\x00\x12\x17\n" +
 	"\x13TASK_STATUS_RUNNING\x10\x01\x12\x19\n" +
 	"\x15TASK_STATUS_SUCCEEDED\x10\x02\x12\x16\n" +
-	"\x12TASK_STATUS_FAILED\x10\x032a\n" +
+	"\x12TASK_STATUS_FAILED\x10\x03*\xbd\x01\n" +
+	"\x17SchedulerRelayDirection\x12)\n" +
+	"%SCHEDULER_RELAY_DIRECTION_UNSPECIFIED\x10\x00\x12&\n" +
+	"\"SCHEDULER_RELAY_DIRECTION_UPSTREAM\x10\x01\x12(\n" +
+	"$SCHEDULER_RELAY_DIRECTION_DOWNSTREAM\x10\x02\x12%\n" +
+	"!SCHEDULER_RELAY_DIRECTION_CONTROL\x10\x03*\x91\x02\n" +
+	"\x19SchedulerRelayPayloadType\x12,\n" +
+	"(SCHEDULER_RELAY_PAYLOAD_TYPE_UNSPECIFIED\x10\x00\x121\n" +
+	"-SCHEDULER_RELAY_PAYLOAD_TYPE_EXECUTOR_MESSAGE\x10\x01\x122\n" +
+	".SCHEDULER_RELAY_PAYLOAD_TYPE_SCHEDULER_MESSAGE\x10\x02\x12/\n" +
+	"+SCHEDULER_RELAY_PAYLOAD_TYPE_SESSION_CLOSED\x10\x03\x12.\n" +
+	"*SCHEDULER_RELAY_PAYLOAD_TYPE_SESSION_ERROR\x10\x042a\n" +
 	"\fAgentControl\x12Q\n" +
 	"\aConnect\x12\x1f.edgepilot.grpcapi.AgentMessage\x1a!.edgepilot.grpcapi.ControlMessage(\x010\x01B,Z*edge-pilot/internal/shared/grpcapi;grpcapib\x06proto3"
 
@@ -1887,63 +2150,70 @@ func file_internal_shared_grpcapi_agent_control_proto_rawDescGZIP() []byte {
 	return file_internal_shared_grpcapi_agent_control_proto_rawDescData
 }
 
-var file_internal_shared_grpcapi_agent_control_proto_enumTypes = make([]protoimpl.EnumInfo, 3)
-var file_internal_shared_grpcapi_agent_control_proto_msgTypes = make([]protoimpl.MessageInfo, 19)
+var file_internal_shared_grpcapi_agent_control_proto_enumTypes = make([]protoimpl.EnumInfo, 5)
+var file_internal_shared_grpcapi_agent_control_proto_msgTypes = make([]protoimpl.MessageInfo, 20)
 var file_internal_shared_grpcapi_agent_control_proto_goTypes = []any{
-	(Slot)(0),                     // 0: edgepilot.grpcapi.Slot
-	(TaskType)(0),                 // 1: edgepilot.grpcapi.TaskType
-	(TaskStatus)(0),               // 2: edgepilot.grpcapi.TaskStatus
-	(*AgentMessage)(nil),          // 3: edgepilot.grpcapi.AgentMessage
-	(*ControlMessage)(nil),        // 4: edgepilot.grpcapi.ControlMessage
-	(*HelloMessage)(nil),          // 5: edgepilot.grpcapi.HelloMessage
-	(*HeartbeatMessage)(nil),      // 6: edgepilot.grpcapi.HeartbeatMessage
-	(*AckMessage)(nil),            // 7: edgepilot.grpcapi.AckMessage
-	(*VolumeMount)(nil),           // 8: edgepilot.grpcapi.VolumeMount
-	(*PublishedPort)(nil),         // 9: edgepilot.grpcapi.PublishedPort
-	(*TaskCommand)(nil),           // 10: edgepilot.grpcapi.TaskCommand
-	(*TaskUpdate)(nil),            // 11: edgepilot.grpcapi.TaskUpdate
-	(*ProxyServiceConfig)(nil),    // 12: edgepilot.grpcapi.ProxyServiceConfig
-	(*ProxyConfigSnapshot)(nil),   // 13: edgepilot.grpcapi.ProxyConfigSnapshot
-	(*BackendStatPoint)(nil),      // 14: edgepilot.grpcapi.BackendStatPoint
-	(*StatsReport)(nil),           // 15: edgepilot.grpcapi.StatsReport
-	(*PerformanceSnapshot)(nil),   // 16: edgepilot.grpcapi.PerformanceSnapshot
-	(*HAProxyConfigRequest)(nil),  // 17: edgepilot.grpcapi.HAProxyConfigRequest
-	(*HAProxyConfigResponse)(nil), // 18: edgepilot.grpcapi.HAProxyConfigResponse
-	nil,                           // 19: edgepilot.grpcapi.TaskCommand.EnvEntry
-	nil,                           // 20: edgepilot.grpcapi.TaskCommand.HttpHealthHeadersEntry
-	nil,                           // 21: edgepilot.grpcapi.TaskUpdate.MetricsEntry
+	(Slot)(0),                      // 0: edgepilot.grpcapi.Slot
+	(TaskType)(0),                  // 1: edgepilot.grpcapi.TaskType
+	(TaskStatus)(0),                // 2: edgepilot.grpcapi.TaskStatus
+	(SchedulerRelayDirection)(0),   // 3: edgepilot.grpcapi.SchedulerRelayDirection
+	(SchedulerRelayPayloadType)(0), // 4: edgepilot.grpcapi.SchedulerRelayPayloadType
+	(*AgentMessage)(nil),           // 5: edgepilot.grpcapi.AgentMessage
+	(*ControlMessage)(nil),         // 6: edgepilot.grpcapi.ControlMessage
+	(*SchedulerRelayEnvelope)(nil), // 7: edgepilot.grpcapi.SchedulerRelayEnvelope
+	(*HelloMessage)(nil),           // 8: edgepilot.grpcapi.HelloMessage
+	(*HeartbeatMessage)(nil),       // 9: edgepilot.grpcapi.HeartbeatMessage
+	(*AckMessage)(nil),             // 10: edgepilot.grpcapi.AckMessage
+	(*VolumeMount)(nil),            // 11: edgepilot.grpcapi.VolumeMount
+	(*PublishedPort)(nil),          // 12: edgepilot.grpcapi.PublishedPort
+	(*TaskCommand)(nil),            // 13: edgepilot.grpcapi.TaskCommand
+	(*TaskUpdate)(nil),             // 14: edgepilot.grpcapi.TaskUpdate
+	(*ProxyServiceConfig)(nil),     // 15: edgepilot.grpcapi.ProxyServiceConfig
+	(*ProxyConfigSnapshot)(nil),    // 16: edgepilot.grpcapi.ProxyConfigSnapshot
+	(*BackendStatPoint)(nil),       // 17: edgepilot.grpcapi.BackendStatPoint
+	(*StatsReport)(nil),            // 18: edgepilot.grpcapi.StatsReport
+	(*PerformanceSnapshot)(nil),    // 19: edgepilot.grpcapi.PerformanceSnapshot
+	(*HAProxyConfigRequest)(nil),   // 20: edgepilot.grpcapi.HAProxyConfigRequest
+	(*HAProxyConfigResponse)(nil),  // 21: edgepilot.grpcapi.HAProxyConfigResponse
+	nil,                            // 22: edgepilot.grpcapi.TaskCommand.EnvEntry
+	nil,                            // 23: edgepilot.grpcapi.TaskCommand.HttpHealthHeadersEntry
+	nil,                            // 24: edgepilot.grpcapi.TaskUpdate.MetricsEntry
 }
 var file_internal_shared_grpcapi_agent_control_proto_depIdxs = []int32{
-	5,  // 0: edgepilot.grpcapi.AgentMessage.hello:type_name -> edgepilot.grpcapi.HelloMessage
-	6,  // 1: edgepilot.grpcapi.AgentMessage.heartbeat:type_name -> edgepilot.grpcapi.HeartbeatMessage
-	11, // 2: edgepilot.grpcapi.AgentMessage.task_update:type_name -> edgepilot.grpcapi.TaskUpdate
-	15, // 3: edgepilot.grpcapi.AgentMessage.stats:type_name -> edgepilot.grpcapi.StatsReport
-	18, // 4: edgepilot.grpcapi.AgentMessage.haproxy_config_response:type_name -> edgepilot.grpcapi.HAProxyConfigResponse
-	7,  // 5: edgepilot.grpcapi.ControlMessage.ack:type_name -> edgepilot.grpcapi.AckMessage
-	10, // 6: edgepilot.grpcapi.ControlMessage.task:type_name -> edgepilot.grpcapi.TaskCommand
-	13, // 7: edgepilot.grpcapi.ControlMessage.proxy_config:type_name -> edgepilot.grpcapi.ProxyConfigSnapshot
-	17, // 8: edgepilot.grpcapi.ControlMessage.haproxy_config_request:type_name -> edgepilot.grpcapi.HAProxyConfigRequest
-	1,  // 9: edgepilot.grpcapi.TaskCommand.type:type_name -> edgepilot.grpcapi.TaskType
-	0,  // 10: edgepilot.grpcapi.TaskCommand.target_slot:type_name -> edgepilot.grpcapi.Slot
-	0,  // 11: edgepilot.grpcapi.TaskCommand.current_live_slot:type_name -> edgepilot.grpcapi.Slot
-	19, // 12: edgepilot.grpcapi.TaskCommand.env:type_name -> edgepilot.grpcapi.TaskCommand.EnvEntry
-	8,  // 13: edgepilot.grpcapi.TaskCommand.volumes:type_name -> edgepilot.grpcapi.VolumeMount
-	9,  // 14: edgepilot.grpcapi.TaskCommand.published_ports:type_name -> edgepilot.grpcapi.PublishedPort
-	20, // 15: edgepilot.grpcapi.TaskCommand.http_health_headers:type_name -> edgepilot.grpcapi.TaskCommand.HttpHealthHeadersEntry
-	2,  // 16: edgepilot.grpcapi.TaskUpdate.status:type_name -> edgepilot.grpcapi.TaskStatus
-	0,  // 17: edgepilot.grpcapi.TaskUpdate.slot:type_name -> edgepilot.grpcapi.Slot
-	21, // 18: edgepilot.grpcapi.TaskUpdate.metrics:type_name -> edgepilot.grpcapi.TaskUpdate.MetricsEntry
-	0,  // 19: edgepilot.grpcapi.ProxyServiceConfig.current_live_slot:type_name -> edgepilot.grpcapi.Slot
-	12, // 20: edgepilot.grpcapi.ProxyConfigSnapshot.services:type_name -> edgepilot.grpcapi.ProxyServiceConfig
-	14, // 21: edgepilot.grpcapi.StatsReport.services:type_name -> edgepilot.grpcapi.BackendStatPoint
-	16, // 22: edgepilot.grpcapi.StatsReport.self_performance:type_name -> edgepilot.grpcapi.PerformanceSnapshot
-	3,  // 23: edgepilot.grpcapi.AgentControl.Connect:input_type -> edgepilot.grpcapi.AgentMessage
-	4,  // 24: edgepilot.grpcapi.AgentControl.Connect:output_type -> edgepilot.grpcapi.ControlMessage
-	24, // [24:25] is the sub-list for method output_type
-	23, // [23:24] is the sub-list for method input_type
-	23, // [23:23] is the sub-list for extension type_name
-	23, // [23:23] is the sub-list for extension extendee
-	0,  // [0:23] is the sub-list for field type_name
+	8,  // 0: edgepilot.grpcapi.AgentMessage.hello:type_name -> edgepilot.grpcapi.HelloMessage
+	9,  // 1: edgepilot.grpcapi.AgentMessage.heartbeat:type_name -> edgepilot.grpcapi.HeartbeatMessage
+	14, // 2: edgepilot.grpcapi.AgentMessage.task_update:type_name -> edgepilot.grpcapi.TaskUpdate
+	18, // 3: edgepilot.grpcapi.AgentMessage.stats:type_name -> edgepilot.grpcapi.StatsReport
+	21, // 4: edgepilot.grpcapi.AgentMessage.haproxy_config_response:type_name -> edgepilot.grpcapi.HAProxyConfigResponse
+	7,  // 5: edgepilot.grpcapi.AgentMessage.scheduler_envelope:type_name -> edgepilot.grpcapi.SchedulerRelayEnvelope
+	10, // 6: edgepilot.grpcapi.ControlMessage.ack:type_name -> edgepilot.grpcapi.AckMessage
+	13, // 7: edgepilot.grpcapi.ControlMessage.task:type_name -> edgepilot.grpcapi.TaskCommand
+	16, // 8: edgepilot.grpcapi.ControlMessage.proxy_config:type_name -> edgepilot.grpcapi.ProxyConfigSnapshot
+	20, // 9: edgepilot.grpcapi.ControlMessage.haproxy_config_request:type_name -> edgepilot.grpcapi.HAProxyConfigRequest
+	7,  // 10: edgepilot.grpcapi.ControlMessage.scheduler_envelope:type_name -> edgepilot.grpcapi.SchedulerRelayEnvelope
+	3,  // 11: edgepilot.grpcapi.SchedulerRelayEnvelope.direction:type_name -> edgepilot.grpcapi.SchedulerRelayDirection
+	4,  // 12: edgepilot.grpcapi.SchedulerRelayEnvelope.payload_type:type_name -> edgepilot.grpcapi.SchedulerRelayPayloadType
+	1,  // 13: edgepilot.grpcapi.TaskCommand.type:type_name -> edgepilot.grpcapi.TaskType
+	0,  // 14: edgepilot.grpcapi.TaskCommand.target_slot:type_name -> edgepilot.grpcapi.Slot
+	0,  // 15: edgepilot.grpcapi.TaskCommand.current_live_slot:type_name -> edgepilot.grpcapi.Slot
+	22, // 16: edgepilot.grpcapi.TaskCommand.env:type_name -> edgepilot.grpcapi.TaskCommand.EnvEntry
+	11, // 17: edgepilot.grpcapi.TaskCommand.volumes:type_name -> edgepilot.grpcapi.VolumeMount
+	12, // 18: edgepilot.grpcapi.TaskCommand.published_ports:type_name -> edgepilot.grpcapi.PublishedPort
+	23, // 19: edgepilot.grpcapi.TaskCommand.http_health_headers:type_name -> edgepilot.grpcapi.TaskCommand.HttpHealthHeadersEntry
+	2,  // 20: edgepilot.grpcapi.TaskUpdate.status:type_name -> edgepilot.grpcapi.TaskStatus
+	0,  // 21: edgepilot.grpcapi.TaskUpdate.slot:type_name -> edgepilot.grpcapi.Slot
+	24, // 22: edgepilot.grpcapi.TaskUpdate.metrics:type_name -> edgepilot.grpcapi.TaskUpdate.MetricsEntry
+	0,  // 23: edgepilot.grpcapi.ProxyServiceConfig.current_live_slot:type_name -> edgepilot.grpcapi.Slot
+	15, // 24: edgepilot.grpcapi.ProxyConfigSnapshot.services:type_name -> edgepilot.grpcapi.ProxyServiceConfig
+	17, // 25: edgepilot.grpcapi.StatsReport.services:type_name -> edgepilot.grpcapi.BackendStatPoint
+	19, // 26: edgepilot.grpcapi.StatsReport.self_performance:type_name -> edgepilot.grpcapi.PerformanceSnapshot
+	5,  // 27: edgepilot.grpcapi.AgentControl.Connect:input_type -> edgepilot.grpcapi.AgentMessage
+	6,  // 28: edgepilot.grpcapi.AgentControl.Connect:output_type -> edgepilot.grpcapi.ControlMessage
+	28, // [28:29] is the sub-list for method output_type
+	27, // [27:28] is the sub-list for method input_type
+	27, // [27:27] is the sub-list for extension type_name
+	27, // [27:27] is the sub-list for extension extendee
+	0,  // [0:27] is the sub-list for field type_name
 }
 
 func init() { file_internal_shared_grpcapi_agent_control_proto_init() }
@@ -1957,20 +2227,22 @@ func file_internal_shared_grpcapi_agent_control_proto_init() {
 		(*AgentMessage_TaskUpdate)(nil),
 		(*AgentMessage_Stats)(nil),
 		(*AgentMessage_HaproxyConfigResponse)(nil),
+		(*AgentMessage_SchedulerEnvelope)(nil),
 	}
 	file_internal_shared_grpcapi_agent_control_proto_msgTypes[1].OneofWrappers = []any{
 		(*ControlMessage_Ack)(nil),
 		(*ControlMessage_Task)(nil),
 		(*ControlMessage_ProxyConfig)(nil),
 		(*ControlMessage_HaproxyConfigRequest)(nil),
+		(*ControlMessage_SchedulerEnvelope)(nil),
 	}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_internal_shared_grpcapi_agent_control_proto_rawDesc), len(file_internal_shared_grpcapi_agent_control_proto_rawDesc)),
-			NumEnums:      3,
-			NumMessages:   19,
+			NumEnums:      5,
+			NumMessages:   20,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

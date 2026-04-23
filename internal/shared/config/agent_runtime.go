@@ -12,27 +12,29 @@ import (
 )
 
 type AgentRuntimeConfig struct {
-	AgentID                string
-	AgentToken             string
-	ControlPlaneAddr       string
-	AgentVersion           string
-	Hostname               string
-	ReportedIP             string
-	DockerHost             string
-	DockerSocketPath       string
-	HTTPProbeTimeoutS      int
-	ProxyNetworkName       string
-	ProxyNetworkSubnet     string
-	HAProxyImage           string
-	ProxyHelperImage       string
-	ProxyContainerName     string
-	ProxyIPAddress         string
-	HAProxyConfigVolume    string
-	HAProxyRuntimePort     int
-	DataPlaneAPIPort       int
-	DataPlaneAPIUsername   string
-	DataPlaneAPIPassword   string
-	ProxySelfHealIntervalS int
+	AgentID                   string
+	AgentToken                string
+	ControlPlaneAddr          string
+	AgentVersion              string
+	Hostname                  string
+	ReportedIP                string
+	DockerHost                string
+	DockerSocketPath          string
+	HTTPProbeTimeoutS         int
+	ProxyNetworkName          string
+	ProxyNetworkSubnet        string
+	HAProxyImage              string
+	ProxyHelperImage          string
+	ProxyContainerName        string
+	ProxyIPAddress            string
+	HAProxyConfigVolume       string
+	HAProxyRuntimePort        int
+	DataPlaneAPIPort          int
+	DataPlaneAPIUsername      string
+	DataPlaneAPIPassword      string
+	ProxySelfHealIntervalS    int
+	SchedulerRelayListenAddr  string
+	SchedulerRelaySharedToken string
 }
 
 func LoadAgentRuntimeConfig() (*AgentRuntimeConfig, error) {
@@ -43,27 +45,29 @@ func LoadAgentRuntimeConfig() (*AgentRuntimeConfig, error) {
 		os.Getenv("DOCKER_SOCKET_PATH"),
 	)
 	cfg := &AgentRuntimeConfig{
-		AgentID:                strings.TrimSpace(os.Getenv("AGENT_ID")),
-		AgentToken:             strings.TrimSpace(os.Getenv("AGENT_TOKEN")),
-		ControlPlaneAddr:       defaultString(os.Getenv("CONTROL_PLANE_GRPC_ADDR"), "127.0.0.1:9090"),
-		AgentVersion:           buildinfo.Version,
-		Hostname:               hostname,
-		ReportedIP:             detectReportedIP(defaultString(os.Getenv("CONTROL_PLANE_GRPC_ADDR"), "127.0.0.1:9090"), func(network string, address string) (net.Conn, error) { return net.Dial(network, address) }),
-		DockerHost:             dockerHost,
-		DockerSocketPath:       dockerSocketPath,
-		HTTPProbeTimeoutS:      defaultInt(os.Getenv("HTTP_PROBE_TIMEOUT_SECONDS"), 5),
-		ProxyNetworkName:       defaultString(os.Getenv("PROXY_NETWORK_NAME"), "epNet"),
-		ProxyNetworkSubnet:     defaultString(os.Getenv("PROXY_NETWORK_SUBNET"), "172.29.0.0/24"),
-		HAProxyImage:           haproxyImage,
-		ProxyHelperImage:       defaultString(os.Getenv("PROXY_HELPER_IMAGE"), haproxyImage),
-		ProxyContainerName:     defaultString(os.Getenv("HAPROXY_CONTAINER_NAME"), "edge-pilot-haproxy"),
-		ProxyIPAddress:         defaultString(os.Getenv("HAPROXY_IP"), "172.29.0.233"),
-		HAProxyConfigVolume:    defaultString(os.Getenv("HAPROXY_CONFIG_VOLUME"), "ep_haproxy_cfg"),
-		HAProxyRuntimePort:     defaultInt(os.Getenv("HAPROXY_RUNTIME_PORT"), 19999),
-		DataPlaneAPIPort:       defaultInt(os.Getenv("DATAPLANEAPI_PORT"), 5555),
-		DataPlaneAPIUsername:   defaultString(os.Getenv("HAPROXY_DATAPLANE_USERNAME"), "admin"),
-		DataPlaneAPIPassword:   defaultString(os.Getenv("HAPROXY_DATAPLANE_PASSWORD"), "edge-pilot-internal"),
-		ProxySelfHealIntervalS: defaultInt(os.Getenv("PROXY_SELF_HEAL_INTERVAL_SECONDS"), 10),
+		AgentID:                   strings.TrimSpace(os.Getenv("AGENT_ID")),
+		AgentToken:                strings.TrimSpace(os.Getenv("AGENT_TOKEN")),
+		ControlPlaneAddr:          defaultString(os.Getenv("CONTROL_PLANE_GRPC_ADDR"), "127.0.0.1:9090"),
+		AgentVersion:              buildinfo.Version,
+		Hostname:                  hostname,
+		ReportedIP:                detectReportedIP(defaultString(os.Getenv("CONTROL_PLANE_GRPC_ADDR"), "127.0.0.1:9090"), func(network string, address string) (net.Conn, error) { return net.Dial(network, address) }),
+		DockerHost:                dockerHost,
+		DockerSocketPath:          dockerSocketPath,
+		HTTPProbeTimeoutS:         defaultInt(os.Getenv("HTTP_PROBE_TIMEOUT_SECONDS"), 5),
+		ProxyNetworkName:          defaultString(os.Getenv("PROXY_NETWORK_NAME"), "epNet"),
+		ProxyNetworkSubnet:        defaultString(os.Getenv("PROXY_NETWORK_SUBNET"), "172.29.0.0/24"),
+		HAProxyImage:              haproxyImage,
+		ProxyHelperImage:          defaultString(os.Getenv("PROXY_HELPER_IMAGE"), haproxyImage),
+		ProxyContainerName:        defaultString(os.Getenv("HAPROXY_CONTAINER_NAME"), "edge-pilot-haproxy"),
+		ProxyIPAddress:            defaultString(os.Getenv("HAPROXY_IP"), "172.29.0.233"),
+		HAProxyConfigVolume:       defaultString(os.Getenv("HAPROXY_CONFIG_VOLUME"), "ep_haproxy_cfg"),
+		HAProxyRuntimePort:        defaultInt(os.Getenv("HAPROXY_RUNTIME_PORT"), 19999),
+		DataPlaneAPIPort:          defaultInt(os.Getenv("DATAPLANEAPI_PORT"), 5555),
+		DataPlaneAPIUsername:      defaultString(os.Getenv("HAPROXY_DATAPLANE_USERNAME"), "admin"),
+		DataPlaneAPIPassword:      defaultString(os.Getenv("HAPROXY_DATAPLANE_PASSWORD"), "edge-pilot-internal"),
+		ProxySelfHealIntervalS:    defaultInt(os.Getenv("PROXY_SELF_HEAL_INTERVAL_SECONDS"), 10),
+		SchedulerRelayListenAddr:  defaultString(os.Getenv("SCHEDULER_RELAY_LISTEN_ADDR"), "127.0.0.1:19091"),
+		SchedulerRelaySharedToken: strings.TrimSpace(os.Getenv("SCHEDULER_RELAY_SHARED_TOKEN")),
 	}
 	logger := log.NewStdLogger("agent.config")
 	if cfg.AgentID == "" {

@@ -125,6 +125,13 @@ func (s SchedulerJobRunStatus) IsTerminal() bool {
 	return s == SchedulerJobRunStatusSucceeded || s == SchedulerJobRunStatusFailed
 }
 
+type SchedulerExecutorChannelMode int
+
+const (
+	SchedulerExecutorChannelModeDirect SchedulerExecutorChannelMode = iota + 1
+	SchedulerExecutorChannelModeAgentRelay
+)
+
 type Service struct {
 	ID uuid.UUID `json:"id" gorm:"type:uuid;primaryKey"`
 	commondb.Model
@@ -406,12 +413,15 @@ func (SchedulerJobRun) TableName() string {
 type SchedulerExecutor struct {
 	ID string `json:"id" gorm:"size:128;primaryKey"`
 	commondb.Model
-	TokenHash    string                             `json:"tokenHash" gorm:"size:128;not null"`
-	Group        string                             `json:"group" gorm:"size:128;index;not null"`
-	Enabled      *bool                              `json:"enabled" gorm:"not null"`
-	LastSeenAt   *time.Time                         `json:"lastSeenAt" gorm:"index;type:timestamptz"`
-	LiveSlot     Slot                               `json:"liveSlot"`
-	InstanceMeta *commondb.JSONB[map[string]string] `json:"instanceMeta" gorm:"type:jsonb"`
+	TokenHash       string                             `json:"tokenHash" gorm:"size:128;not null"`
+	Group           string                             `json:"group" gorm:"size:128;index;not null"`
+	ChannelMode     SchedulerExecutorChannelMode       `json:"channelMode" gorm:"index;not null"`
+	RelayAgentID    string                             `json:"relayAgentId" gorm:"size:128;index"`
+	RelayRoutingKey string                             `json:"relayRoutingKey" gorm:"size:255;index"`
+	Enabled         *bool                              `json:"enabled" gorm:"not null"`
+	LastSeenAt      *time.Time                         `json:"lastSeenAt" gorm:"index;type:timestamptz"`
+	LiveSlot        Slot                               `json:"liveSlot"`
+	InstanceMeta    *commondb.JSONB[map[string]string] `json:"instanceMeta" gorm:"type:jsonb"`
 }
 
 func (SchedulerExecutor) TableName() string {

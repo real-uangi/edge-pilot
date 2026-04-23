@@ -130,6 +130,20 @@ func (h *sessionHub) DispatchProxyConfig(agentID string, snapshot *grpcapi.Proxy
 	})
 }
 
+func (h *sessionHub) DispatchSchedulerEnvelope(agentID string, envelope *grpcapi.SchedulerRelayEnvelope) error {
+	h.mu.RLock()
+	session, ok := h.sessions[agentID]
+	h.mu.RUnlock()
+	if !ok {
+		return releasedomain.ErrAgentOffline
+	}
+	return session.send(&grpcapi.ControlMessage{
+		Payload: &grpcapi.ControlMessage_SchedulerEnvelope{
+			SchedulerEnvelope: envelope,
+		},
+	})
+}
+
 func (h *sessionHub) RequestHAProxyConfig(ctx context.Context, agentID string) (string, error) {
 	h.mu.RLock()
 	session, ok := h.sessions[agentID]
@@ -170,12 +184,13 @@ func (h *sessionHub) RequestHAProxyConfig(ctx context.Context, agentID string) (
 
 type Server struct {
 	grpcapi.UnimplementedAgentControlServer
-	hub           *sessionHub
-	agents        *registry.RegistryService
-	releases      *releaseapp.Service
-	observability *observabilityapp.Service
-	proxyConfigs  servicecatalogdomain.ProxyConfigPublisher
-	logger        *log.StdLogger
+	hub            *sessionHub
+	schedulerRelay *SchedulerServer
+	agents         *registry.RegistryService
+	releases       *releaseapp.Service
+	observability  *observabilityapp.Service
+	proxyConfigs   servicecatalogdomain.ProxyConfigPublisher
+	logger         *log.StdLogger
 }
 
 func NewServer(
@@ -186,12 +201,13 @@ func NewServer(
 	proxyConfigs servicecatalogdomain.ProxyConfigPublisher,
 ) *Server {
 	return &Server{
-		hub:           hub,
-		agents:        agents,
-		releases:      releases,
-		observability: observability,
-		proxyConfigs:  proxyConfigs,
-		logger:        log.NewStdLogger("grpc.control-plane"),
+		hub:            hub,
+		schedulerRelay: nil,
+		agents:         agents,
+		releases:       releases,
+		observability:  observability,
+		proxyConfigs:   proxyConfigs,
+		logger:         log.NewStdLogger("grpc.control-plane"),
 	}
 }
 
@@ -277,6 +293,12 @@ func (s *Server) Connect(stream grpcapi.AgentControl_ConnectServer) (err error) 
 			}
 		case message.GetHaproxyConfigResponse() != nil:
 			s.hub.resolveHAProxyConfigResponse(message.GetHaproxyConfigResponse())
+		case message.GetSchedulerEnvelope() != nil:
+			if s.schedulerRelay != nil {
+				if err := s.schedulerRelay.HandleRelayEnvelope(hello.GetAgentId(), message.GetSchedulerEnvelope()); err != nil {
+					return err
+				}
+			}
 		}
 	}
 }

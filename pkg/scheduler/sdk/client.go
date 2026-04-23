@@ -5,6 +5,7 @@ import (
 	"edge-pilot/internal/shared/grpcapi"
 	"encoding/json"
 	"errors"
+	"strings"
 	"sync"
 	"time"
 
@@ -54,6 +55,12 @@ type ExecutorClientOptions struct {
 	InstanceID string
 	LiveSlot   grpcapi.Slot
 	Metadata   map[string]string
+	RelayToken string
+
+	// Deprecated: keep for backward compatibility with old SDK options.
+	Mode string
+	// Deprecated: use Addr instead.
+	RelayAddr string
 }
 
 type ExecutorClient struct {
@@ -63,6 +70,10 @@ type ExecutorClient struct {
 }
 
 func NewExecutorClient(opts ExecutorClientOptions) *ExecutorClient {
+	addr := strings.TrimSpace(opts.Addr)
+	if addr == "" {
+		addr = strings.TrimSpace(opts.RelayAddr)
+	}
 	meta := map[string]string{}
 	for k, v := range opts.Metadata {
 		meta[k] = v
@@ -70,15 +81,21 @@ func NewExecutorClient(opts ExecutorClientOptions) *ExecutorClient {
 	if opts.InstanceID != "" {
 		meta["instanceId"] = opts.InstanceID
 	}
+	if opts.RelayToken != "" {
+		meta["relay_token"] = opts.RelayToken
+	}
 	return &ExecutorClient{
 		opts: ExecutorClientOptions{
-			Addr:       opts.Addr,
+			Addr:       addr,
 			ExecutorID: opts.ExecutorID,
 			Token:      opts.Token,
 			Group:      opts.Group,
 			InstanceID: opts.InstanceID,
 			LiveSlot:   opts.LiveSlot,
 			Metadata:   meta,
+			RelayToken: opts.RelayToken,
+			Mode:       opts.Mode,
+			RelayAddr:  opts.RelayAddr,
 		},
 		handlers: make(map[string]Handler),
 	}
@@ -108,7 +125,11 @@ func (c *ExecutorClient) Run(ctx context.Context) error {
 }
 
 func (c *ExecutorClient) connectOnce(ctx context.Context) error {
-	conn, err := grpc.DialContext(ctx, c.opts.Addr, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	addr := strings.TrimSpace(c.opts.Addr)
+	if addr == "" {
+		return errors.New("scheduler target addr is required")
+	}
+	conn, err := grpc.DialContext(ctx, addr, grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
 		return err
 	}

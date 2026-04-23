@@ -166,6 +166,9 @@ export interface SchedulerRunRecord {
 export interface SchedulerExecutorRecord {
   id: string;
   group: string;
+  channelMode: number;
+  relayAgentId: string;
+  relayRoutingKey: string;
   enabled: boolean | null;
   lastSeenAt: string | null;
   liveSlot: number;
@@ -193,6 +196,9 @@ export interface UpsertSchedulerJobInput {
 export interface UpsertSchedulerExecutorInput {
   executorId: string;
   group: string;
+  channelMode?: "direct" | "agent_relay";
+  relayAgentId?: string;
+  relayRoutingKey?: string;
   enabled?: boolean;
   liveSlot?: number;
   metadata?: Record<string, string>;

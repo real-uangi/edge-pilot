@@ -63,3 +63,15 @@ func TestEffectiveLeaseTimeoutPrefersRunField(t *testing.T) {
 		t.Fatalf("effectiveLeaseTimeout() = %d, want 90", got)
 	}
 }
+
+func TestParseExecutorChannelMode(t *testing.T) {
+	if mode, err := parseExecutorChannelMode("direct"); err != nil || mode != model.SchedulerExecutorChannelModeDirect {
+		t.Fatalf("parseExecutorChannelMode(direct) = (%v, %v)", mode, err)
+	}
+	if mode, err := parseExecutorChannelMode("agent_relay"); err != nil || mode != model.SchedulerExecutorChannelModeAgentRelay {
+		t.Fatalf("parseExecutorChannelMode(agent_relay) = (%v, %v)", mode, err)
+	}
+	if _, err := parseExecutorChannelMode("bad_mode"); err == nil {
+		t.Fatalf("expected parseExecutorChannelMode(bad_mode) to fail")
+	}
+}
