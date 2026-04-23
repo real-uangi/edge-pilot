@@ -40,13 +40,21 @@ const chartTheme = {
   grid: {
     line: { stroke: "rgba(60,73,78,0.2)" },
   },
+  crosshair: {
+    line: {
+      stroke: "#a4e6ff",
+      strokeWidth: 1.5,
+      strokeOpacity: 0.95,
+      strokeDasharray: "4 3",
+    },
+  },
   tooltip: {
     container: {
-      background: "#10131a",
-      color: "#e1e2eb",
-      border: "1px solid rgba(60,73,78,0.35)",
-      borderRadius: "8px",
-      fontSize: "12px",
+      background: "transparent",
+      border: "0",
+      borderRadius: "0",
+      boxShadow: "none",
+      padding: "0",
     },
   },
 } as const;
@@ -69,6 +77,10 @@ export function UnifiedLineChart({
   emptyMessage = "暂无趋势数据",
 }: UnifiedLineChartProps) {
   const normalizedSeries = normalizeSeries({ series, data, id, color, xAxisMode });
+  const seriesMeta = normalizedSeries.map((item, index) => ({
+    id: String(item.id),
+    color: item.color ?? defaultPalette[index % defaultPalette.length],
+  }));
   const hasData = normalizedSeries.some((item) => item.data.length > 0);
   const showLegend = legend ?? normalizedSeries.length > 1;
 
@@ -109,7 +121,7 @@ export function UnifiedLineChart({
                 <span className={styles.legendItem} key={String(item.id)}>
                   <span
                     className={styles.legendSwatch}
-                    style={{ backgroundColor: item.color ?? defaultPalette[index % defaultPalette.length] }}
+                    style={{ backgroundColor: seriesMeta[index].color }}
                   />
                   {String(item.id)}
                 </span>
@@ -123,6 +135,7 @@ export function UnifiedLineChart({
         <ResponsiveLine
           data={normalizedSeries}
           margin={{ top: 12, right: 16, bottom: 28, left: 44 }}
+          curve="monotoneX"
           xScale={
             xAxisMode === "time"
               ? { type: "time", format: "native", precision: "second", useUTC: false }
@@ -147,35 +160,106 @@ export function UnifiedLineChart({
           }}
           enablePoints={false}
           lineWidth={2}
-          colors={normalizedSeries.map((item, index) => item.color ?? defaultPalette[index % defaultPalette.length])}
+          colors={seriesMeta.map((item) => item.color)}
           enableGridX={showGridX}
+          enableSlices="x"
           useMesh
           theme={chartTheme}
-          tooltip={(point) => renderTooltip(point, xAxisMode, formatTooltipY)}
+          sliceTooltip={(slice) => renderSliceTooltip(slice, xAxisMode, formatTooltipY, seriesMeta)}
         />
       </div>
     </div>
   );
 }
 
-function renderTooltip(point: unknown, xAxisMode: "time" | "index", valueFormatter: YFormatter) {
-  const payload = point as {
-    point?: { data?: { x?: unknown; y?: unknown }; serieId?: string | number };
-    serieId?: string | number;
+function renderSliceTooltip(
+  slice: unknown,
+  xAxisMode: "time" | "index",
+  valueFormatter: YFormatter,
+  seriesMeta: Array<{ id: string; color: string }>,
+) {
+  const payload = slice as {
+    points?: Array<{
+      data?: { x?: unknown; xFormatted?: unknown; y?: unknown; yFormatted?: unknown };
+      serieId?: string | number;
+      serie?: { id?: string | number };
+      color?: string;
+    }>;
+    slice?: {
+      points?: Array<{
+        data?: { x?: unknown; xFormatted?: unknown; y?: unknown; yFormatted?: unknown };
+        serieId?: string | number;
+        serie?: { id?: string | number };
+        color?: string;
+      }>;
+    };
   };
-  const rawValue = payload.point?.data?.y;
-  const yValue = typeof rawValue === "number" ? rawValue : Number(rawValue);
-  const yLabel = Number.isFinite(yValue) ? valueFormatter(yValue) : "—";
-  const xLabel = formatXAxisLabel(payload.point?.data?.x, xAxisMode);
-  const seriesLabel = String(payload.point?.serieId ?? payload.serieId ?? "series");
+  const points = payload.slice?.points ?? payload.points ?? [];
+  const xValue = points[0]?.data?.x ?? points[0]?.data?.xFormatted;
+  const xLabel = formatXAxisLabel(xValue, xAxisMode);
+  const rows = points
+    .map((point, index) => {
+      const rawValue = point.data?.y ?? point.data?.yFormatted;
+      const yValue = typeof rawValue === "number" ? rawValue : Number(rawValue);
+      const yLabel = Number.isFinite(yValue) ? valueFormatter(yValue) : "—";
+      const seriesLabel = resolveSeriesLabel(point, index, seriesMeta);
+      const color = resolveSeriesColor(point, index, seriesMeta);
+      return { seriesLabel, color, yLabel };
+    })
+    .sort((a, b) => compareAscii(a.seriesLabel, b.seriesLabel));
 
   return (
-    <div>
-      {seriesLabel} · {xLabel}
-      <br />
-      {yLabel}
+    <div className={styles.tooltipCard}>
+      <div className={styles.tooltipMeta}>{xLabel}</div>
+      <div className={styles.tooltipRows}>
+        {rows.map((row, index) => (
+          <div className={styles.tooltipRow} key={`${row.seriesLabel}-${index}`}>
+            <div className={styles.tooltipHead}>
+              <span className={styles.tooltipDot} style={{ backgroundColor: row.color }} />
+              <span>{row.seriesLabel}</span>
+            </div>
+            <div className={styles.tooltipValue}>{row.yLabel}</div>
+          </div>
+        ))}
+      </div>
     </div>
   );
+}
+
+function resolveSeriesLabel(
+  point: { serieId?: string | number; serie?: { id?: string | number }; color?: string },
+  index: number,
+  seriesMeta: Array<{ id: string; color: string }>,
+): string {
+  const raw = String(point.serieId ?? point.serie?.id ?? "").trim();
+  if (raw && raw !== "series") {
+    return raw;
+  }
+  if (point.color) {
+    const byColor = seriesMeta.find((item) => item.color.toLowerCase() === point.color!.toLowerCase());
+    if (byColor) {
+      return byColor.id;
+    }
+  }
+  return seriesMeta[index]?.id ?? "series";
+}
+
+function resolveSeriesColor(
+  point: { color?: string },
+  index: number,
+  seriesMeta: Array<{ id: string; color: string }>,
+): string {
+  if (point.color) {
+    return point.color;
+  }
+  return seriesMeta[index]?.color ?? defaultPalette[index % defaultPalette.length];
+}
+
+function compareAscii(a: string, b: string): number {
+  if (a === b) {
+    return 0;
+  }
+  return a < b ? -1 : 1;
 }
 
 function formatXAxisLabel(value: unknown, xAxisMode: "time" | "index"): string {

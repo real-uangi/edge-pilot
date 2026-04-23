@@ -101,24 +101,11 @@ export function SystemPerformancePage() {
         <div className={styles.sectionHeader}>
           <div>
             <h2 className={styles.sectionTitle}>ControlPlane 趋势</h2>
-            <p className={styles.sectionCopy}>CPU 与内存趋势图（最近 240 点）。</p>
+            <p className={styles.sectionCopy}>CPU 与内存合并趋势图（最近 240 点）。</p>
           </div>
         </div>
         {controlPlaneHistory.length ? (
-          <div className={styles.split}>
-            <UnifiedLineChart
-              title="CPU 使用率"
-              series={toChartSeries(controlPlaneHistory, (item) => round(item.cpuPercent), "CPU")}
-              yValueFormatter={formatPercentValue}
-              tooltipValueFormatter={formatPercentValue}
-            />
-            <UnifiedLineChart
-              title="内存使用"
-              series={toChartSeries(controlPlaneHistory, (item) => round(item.memoryUsedBytes / 1024 / 1024), "Memory")}
-              yValueFormatter={formatMibValue}
-              tooltipValueFormatter={formatMibValue}
-            />
-          </div>
+          <UnifiedLineChart title="CPU / 内存趋势" series={toCpuMemorySeries(controlPlaneHistory)} />
         ) : (
           <EmptyState title="暂无 ControlPlane 历史数据" message="等待采样后自动展示趋势。" />
         )}
@@ -193,56 +180,38 @@ export function SystemPerformancePage() {
         ) : !agentHistoryQuery.data?.history.length ? (
           <EmptyState title="暂无 Agent 历史数据" message="该节点尚未上报自身性能快照。" />
         ) : (
-          <div className={styles.split}>
-            <UnifiedLineChart
-              title="CPU 使用率"
-              series={toChartSeries(agentHistoryQuery.data.history, (item) => round(item.cpuPercent), "CPU")}
-              yValueFormatter={formatPercentValue}
-              tooltipValueFormatter={formatPercentValue}
-            />
-            <UnifiedLineChart
-              title="内存使用"
-              series={toChartSeries(
-                agentHistoryQuery.data.history,
-                (item) => round(item.memoryUsedBytes / 1024 / 1024),
-                "Memory",
-              )}
-              yValueFormatter={formatMibValue}
-              tooltipValueFormatter={formatMibValue}
-            />
-          </div>
+          <UnifiedLineChart title="CPU / 内存趋势" series={toCpuMemorySeries(agentHistoryQuery.data.history)} />
         )}
       </section>
     </div>
   );
 }
 
-function toChartSeries(
-  history: PerformancePoint[],
-  selector: (value: PerformancePoint) => number,
-  id: string,
-): ChartSeries[] {
+function toChartSeries(history: PerformancePoint[], selector: (value: PerformancePoint) => number, id: string): ChartSeries {
+  return {
+    id,
+    data: history
+      .filter((point) => Boolean(point.collectedAt))
+      .map((point) => ({
+        x: point.collectedAt,
+        y: selector(point),
+      })),
+  };
+}
+
+function toCpuMemorySeries(history: PerformancePoint[]): ChartSeries[] {
   return [
     {
-      id,
-      data: history
-        .filter((point) => Boolean(point.collectedAt))
-        .map((point) => ({
-          x: point.collectedAt,
-          y: selector(point),
-        })),
+      ...toChartSeries(history, (item) => round(item.cpuPercent), "CPU (%)"),
+      color: "#00d1ff",
+    },
+    {
+      ...toChartSeries(history, (item) => round(item.memoryUsedBytes / 1024 / 1024), "Memory (MiB)"),
+      color: "#4edea3",
     },
   ];
 }
 
 function round(value: number): number {
   return Math.round(value * 100) / 100;
-}
-
-function formatPercentValue(value: number): string {
-  return `${round(value)}%`;
-}
-
-function formatMibValue(value: number): string {
-  return `${round(value)} MiB`;
 }

@@ -7,4 +7,12 @@ export default defineConfig({
     outDir: "dist",
     emptyOutDir: true,
   },
+  server: {
+    proxy: {
+      '/api': {
+        target: 'http://localhost:8080', // 后端地址
+        changeOrigin: true,              // 是否更改 origin
+      }
+    }
+  },
 });
