@@ -121,11 +121,16 @@ func (p *ProxyConfigPublisher) resolveReleases(item servicecatalogapp.ProxyServi
 		if getErr != nil {
 			return "", "", 0, getErr
 		}
-		if candidateRelease != nil {
-			candidateTrafficPercent = clampTrafficPercent(candidateRelease.TrafficPercent)
-		}
+		candidateTrafficPercent = candidateTrafficPercentForRelease(candidateRelease)
 	}
 	return liveReleaseID, candidateReleaseID, candidateTrafficPercent, nil
+}
+
+func candidateTrafficPercentForRelease(release *model.Release) int {
+	if release == nil || release.Status != model.ReleaseStatusReadyToSwitch {
+		return 0
+	}
+	return clampTrafficPercent(release.TrafficPercent)
 }
 
 func normalizeLiveSlot(slot model.Slot) model.Slot {

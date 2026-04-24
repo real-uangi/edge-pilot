@@ -361,11 +361,16 @@ func (s *Service) SetTrafficPercent(id uuid.UUID, percent int, operator string) 
 	release.SwitchConfirmed = boolPointer(percent == 100)
 	release.CompletedAt = nil
 	if percent == 100 {
-		release.Status = model.ReleaseStatusSwitched
+		now := time.Now()
+		release.Status = model.ReleaseStatusCompleted
+		release.CompletedAt = &now
 		if err := s.services.UpdateLiveSlot(release.ServiceID, release.TargetSlot); err != nil {
 			return nil, err
 		}
 		if err := s.updateTrafficFlags(release.ServiceID, release.TargetSlot, release.PreviousLiveSlot); err != nil {
+			return nil, err
+		}
+		if err := s.completePreviousLiveRelease(release, operator, now); err != nil {
 			return nil, err
 		}
 	} else {
@@ -814,14 +819,17 @@ func (s *Service) applyTaskSuccess(release *model.Release, task *model.Task, upd
 		}
 		return s.repo.CreateAudit(newAudit("release", release.ID.String(), "ready_to_switch", release.TraceID, update.GetListenAddress()))
 	case model.TaskTypeSwitchTraffic:
-		release.Status = model.ReleaseStatusSwitched
+		release.Status = model.ReleaseStatusCompleted
 		release.TrafficPercent = 100
 		release.SwitchConfirmed = boolPointer(true)
-		release.CompletedAt = nil
+		release.CompletedAt = &now
 		if err := s.services.UpdateLiveSlot(task.ServiceID, payload.TargetSlot); err != nil {
 			return err
 		}
 		if err := s.updateTrafficFlags(task.ServiceID, payload.TargetSlot, release.PreviousLiveSlot); err != nil {
+			return err
+		}
+		if err := s.completePreviousLiveRelease(release, update.GetServerName(), now); err != nil {
 			return err
 		}
 		if err := s.repo.UpdateRelease(release); err != nil {
@@ -1157,6 +1165,43 @@ func (s *Service) completeSupersededRelease(current *model.Release, operator str
 		}
 	}
 	return nil
+}
+
+func (s *Service) completePreviousLiveRelease(current *model.Release, operator string, now time.Time) error {
+	if current == nil || current.ServiceID == uuid.Nil || current.PreviousLiveSlot == 0 {
+		return nil
+	}
+	instance, err := s.repo.GetRuntimeInstanceByServiceAndSlot(current.ServiceID, current.PreviousLiveSlot)
+	if err != nil {
+		return err
+	}
+	if instance == nil || instance.ReleaseID == uuid.Nil || instance.ReleaseID == current.ID {
+		return nil
+	}
+	previous, err := s.repo.GetRelease(instance.ReleaseID)
+	if err != nil {
+		return err
+	}
+	if previous == nil {
+		return nil
+	}
+	switch previous.Status {
+	case model.ReleaseStatusReadyToSwitch, model.ReleaseStatusSwitched, model.ReleaseStatusCompleted:
+	default:
+		return nil
+	}
+	if previous.Status == model.ReleaseStatusCompleted && previous.TrafficPercent == 0 && previous.CompletedAt != nil {
+		return nil
+	}
+	previous.Status = model.ReleaseStatusCompleted
+	previous.TrafficPercent = 0
+	if previous.CompletedAt == nil {
+		previous.CompletedAt = &now
+	}
+	if err := s.repo.UpdateRelease(previous); err != nil {
+		return err
+	}
+	return s.repo.CreateAudit(newAudit("release", previous.ID.String(), "release_superseded", previous.TraceID, operator))
 }
 
 func (s *Service) autoSkipQueuedBeforeStart(current *model.Release, operator string) error {

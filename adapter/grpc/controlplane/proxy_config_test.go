@@ -46,3 +46,29 @@ func TestBuildProxyConfigSnapshotCarriesSortedRoutesAndLiveSlot(t *testing.T) {
 		t.Fatalf("expected current live slot to be preserved")
 	}
 }
+
+func TestCandidateTrafficPercentIgnoresCompletedAndSwitchedReleases(t *testing.T) {
+	for _, status := range []model.ReleaseStatus{
+		model.ReleaseStatusSwitched,
+		model.ReleaseStatusCompleted,
+		model.ReleaseStatusFailed,
+	} {
+		release := &model.Release{
+			Status:         status,
+			TrafficPercent: 100,
+		}
+		if got := candidateTrafficPercentForRelease(release); got != 0 {
+			t.Fatalf("expected status %v to contribute no candidate traffic, got %d", status, got)
+		}
+	}
+}
+
+func TestCandidateTrafficPercentAllowsReadyToSwitchRelease(t *testing.T) {
+	release := &model.Release{
+		Status:         model.ReleaseStatusReadyToSwitch,
+		TrafficPercent: 30,
+	}
+	if got := candidateTrafficPercentForRelease(release); got != 30 {
+		t.Fatalf("expected ready-to-switch traffic percent 30, got %d", got)
+	}
+}

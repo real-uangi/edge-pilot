@@ -1583,7 +1583,7 @@ func TestSetTrafficPercentAdjustsLiveSlotAndStatus(t *testing.T) {
 	}
 }
 
-func TestConfirmSwitchSetsTrafficToHundred(t *testing.T) {
+func TestConfirmSwitchCompletesReleaseAndClearsPreviousTraffic(t *testing.T) {
 	serviceRepo := &fakeServiceRepo{}
 	agentRepo := &fakeAgentRepo{}
 	releaseRepo := newFakeReleaseRepo()
@@ -1608,6 +1608,21 @@ func TestConfirmSwitchSetsTrafficToHundred(t *testing.T) {
 	serviceRepo.ensure()
 	serviceRepo.byID[service.ID] = service
 	serviceRepo.byKey[service.ServiceKey] = service
+	previous := &model.Release{
+		ID:               uuid.New(),
+		ServiceID:        service.ID,
+		AgentID:          "agent-a",
+		ImageRepo:        "repo/app",
+		ImageTag:         "v0.9.0",
+		Status:           model.ReleaseStatusSwitched,
+		TargetSlot:       model.SlotBlue,
+		PreviousLiveSlot: model.SlotGreen,
+		SwitchConfirmed:  boolPointer(true),
+		TrafficPercent:   100,
+	}
+	if err := releaseRepo.CreateRelease(previous); err != nil {
+		t.Fatalf("CreateRelease(previous) error = %v", err)
+	}
 	release := &model.Release{
 		ID:               uuid.New(),
 		ServiceID:        service.ID,
@@ -1623,16 +1638,36 @@ func TestConfirmSwitchSetsTrafficToHundred(t *testing.T) {
 	if err := releaseRepo.CreateRelease(release); err != nil {
 		t.Fatalf("CreateRelease() error = %v", err)
 	}
+	if err := releaseRepo.UpsertRuntimeInstance(&model.RuntimeInstance{
+		ID:        uuid.New(),
+		ServiceID: service.ID,
+		ReleaseID: previous.ID,
+		Slot:      model.SlotBlue,
+	}); err != nil {
+		t.Fatalf("UpsertRuntimeInstance(previous) error = %v", err)
+	}
+	if err := releaseRepo.UpsertRuntimeInstance(&model.RuntimeInstance{
+		ID:        uuid.New(),
+		ServiceID: service.ID,
+		ReleaseID: release.ID,
+		Slot:      model.SlotGreen,
+	}); err != nil {
+		t.Fatalf("UpsertRuntimeInstance(release) error = %v", err)
+	}
 
 	output, err := releaseService.ConfirmSwitch(release.ID, "admin")
 	if err != nil {
 		t.Fatalf("ConfirmSwitch() error = %v", err)
 	}
-	if output.TrafficPercent != 100 || output.Status != model.ReleaseStatusSwitched {
+	if output.TrafficPercent != 100 || output.Status != model.ReleaseStatusCompleted || output.CompletedAt == nil {
 		t.Fatalf("unexpected release output: %#v", output)
 	}
 	if serviceRepo.byID[service.ID].CurrentLiveSlot != model.SlotGreen {
 		t.Fatalf("expected live slot switch to green, got %v", serviceRepo.byID[service.ID].CurrentLiveSlot)
+	}
+	storedPrevious := releaseRepo.releases[previous.ID]
+	if storedPrevious == nil || storedPrevious.Status != model.ReleaseStatusCompleted || storedPrevious.TrafficPercent != 0 {
+		t.Fatalf("expected previous release to be completed with zero traffic, got %#v", storedPrevious)
 	}
 }
 
