@@ -334,7 +334,47 @@ func (s *Service) ConfirmSwitch(id uuid.UUID, operator string) (*dto.ReleaseOutp
 }
 
 func (s *Service) Rollback(id uuid.UUID, operator string) (*dto.ReleaseOutput, error) {
-	return s.SetTrafficPercent(id, 0, operator)
+	release, err := s.repo.GetRelease(id)
+	if err != nil {
+		return nil, err
+	}
+	if release == nil {
+		return nil, business.ErrNotFound
+	}
+	if release.Status != model.ReleaseStatusReadyToSwitch {
+		return nil, business.NewErrorWithCode("release is not ready for rollback", 409)
+	}
+	if release.PreviousLiveSlot == 0 {
+		return nil, business.NewErrorWithCode("release has no rollback target", 409)
+	}
+	if _, err := s.requireHealthyRuntimeInstance(release.ServiceID, release.PreviousLiveSlot, "rollback target runtime instance is not healthy"); err != nil {
+		return nil, err
+	}
+	now := time.Now()
+	release.TrafficPercent = 0
+	release.SwitchConfirmed = boolPointer(false)
+	release.Status = model.ReleaseStatusRolledBack
+	release.CompletedAt = &now
+	if err := s.services.UpdateLiveSlot(release.ServiceID, release.PreviousLiveSlot); err != nil {
+		return nil, err
+	}
+	if err := s.updateTrafficFlags(release.ServiceID, release.PreviousLiveSlot, release.TargetSlot); err != nil {
+		return nil, err
+	}
+	if err := s.repo.UpdateRelease(release); err != nil {
+		return nil, err
+	}
+	if err := s.publishAgent(release.AgentID); err != nil {
+		return nil, err
+	}
+	if err := s.repo.CreateAudit(newAudit("release", release.ID.String(), "rollback_completed", release.TraceID, operator)); err != nil {
+		return nil, err
+	}
+	output, err := s.enrichReleaseOutput(release)
+	if err != nil {
+		return nil, err
+	}
+	return &output, nil
 }
 
 func (s *Service) SetTrafficPercent(id uuid.UUID, percent int, operator string) (*dto.ReleaseOutput, error) {
@@ -348,14 +388,20 @@ func (s *Service) SetTrafficPercent(id uuid.UUID, percent int, operator string) 
 	if release == nil {
 		return nil, business.ErrNotFound
 	}
-	if release.Status == model.ReleaseStatusQueued || release.Status == model.ReleaseStatusSkipped || release.Status == model.ReleaseStatusDispatching || release.Status == model.ReleaseStatusDeploying {
+	if release.Status != model.ReleaseStatusReadyToSwitch {
 		return nil, business.NewErrorWithCode("release is not ready for traffic adjustment", 409)
-	}
-	if release.Status.IsTerminal() {
-		return nil, business.NewErrorWithCode("release already finished", 409)
 	}
 	if release.PreviousLiveSlot == 0 {
 		return nil, business.NewErrorWithCode("release has no rollback target", 409)
+	}
+	if percent == 0 {
+		if _, err := s.requireHealthyRuntimeInstance(release.ServiceID, release.PreviousLiveSlot, "previous live runtime instance is not healthy"); err != nil {
+			return nil, err
+		}
+	} else {
+		if _, err := s.requireHealthyRuntimeInstance(release.ServiceID, release.TargetSlot, "target runtime instance is not healthy"); err != nil {
+			return nil, err
+		}
 	}
 	release.TrafficPercent = percent
 	release.SwitchConfirmed = boolPointer(percent == 100)
@@ -392,9 +438,6 @@ func (s *Service) SetTrafficPercent(id uuid.UUID, percent int, operator string) 
 	message := fmt.Sprintf("percent=%d operator=%s", percent, strings.TrimSpace(operator))
 	if percent == 100 {
 		event = "switch_confirmed"
-		message = operator
-	} else if percent == 0 {
-		event = "rollback_requested"
 		message = operator
 	}
 	if err := s.repo.CreateAudit(newAudit("release", release.ID.String(), event, release.TraceID, message)); err != nil {
@@ -742,6 +785,9 @@ func (s *Service) dispatch(task *model.Task) error {
 	}
 	if err := s.dispatcher.DispatchTask(task.AgentID, task); err != nil {
 		if !errors.Is(err, releasedomain.ErrAgentOffline) {
+			if markErr := s.markDispatchFailed(task, err); markErr != nil {
+				return markErr
+			}
 			return err
 		}
 		task.Status = model.TaskStatusPending
@@ -762,6 +808,43 @@ func (s *Service) dispatch(task *model.Task) error {
 		return nil
 	}
 	return nil
+}
+
+func (s *Service) markDispatchFailed(task *model.Task, dispatchErr error) error {
+	if task == nil {
+		return nil
+	}
+	now := time.Now()
+	task.Status = model.TaskStatusFailed
+	task.CompletedAt = &now
+	task.LastError = dispatchErr.Error()
+	task.LastStep = "dispatch_failed"
+	if err := s.repo.UpdateTask(task); err != nil {
+		return err
+	}
+	if err := s.repo.CreateTaskAttempt(&model.TaskAttempt{
+		ID:          uuid.New(),
+		TaskID:      task.ID,
+		AgentID:     task.AgentID,
+		Status:      model.TaskStatusFailed,
+		Message:     dispatchErr.Error(),
+		CompletedAt: &now,
+	}); err != nil {
+		return err
+	}
+	release, err := s.repo.GetRelease(task.ReleaseID)
+	if err != nil {
+		return err
+	}
+	if release == nil {
+		return nil
+	}
+	release.Status = model.ReleaseStatusFailed
+	release.CompletedAt = &now
+	if err := s.repo.UpdateRelease(release); err != nil {
+		return err
+	}
+	return s.repo.CreateAudit(newAudit("release", release.ID.String(), "dispatch_failed", release.TraceID, dispatchErr.Error()))
 }
 
 func (s *Service) recordRunningAudit(release *model.Release, task *model.Task, update *grpcapi.TaskUpdate) error {
@@ -840,10 +923,10 @@ func (s *Service) applyTaskSuccess(release *model.Release, task *model.Task, upd
 		}
 		return s.repo.CreateAudit(newAudit("release", release.ID.String(), "traffic_switched", release.TraceID, update.GetServerName()))
 	case model.TaskTypeRollback:
-		release.Status = model.ReleaseStatusReadyToSwitch
+		release.Status = model.ReleaseStatusRolledBack
 		release.TrafficPercent = 0
 		release.SwitchConfirmed = boolPointer(false)
-		release.CompletedAt = nil
+		release.CompletedAt = &now
 		if err := s.services.UpdateLiveSlot(task.ServiceID, payload.TargetSlot); err != nil {
 			return err
 		}
@@ -890,6 +973,17 @@ func (s *Service) updateTrafficFlags(serviceID uuid.UUID, liveSlot model.Slot, o
 		}
 	}
 	return nil
+}
+
+func (s *Service) requireHealthyRuntimeInstance(serviceID uuid.UUID, slot model.Slot, message string) (*model.RuntimeInstance, error) {
+	instance, err := s.repo.GetRuntimeInstanceByServiceAndSlot(serviceID, slot)
+	if err != nil {
+		return nil, err
+	}
+	if instance == nil || instance.Healthy == nil || !*instance.Healthy {
+		return nil, business.NewErrorWithCode(message, 409)
+	}
+	return instance, nil
 }
 
 func (s *Service) newDeployTask(release *model.Release, spec *dto.ServiceDeploymentSpec, req dto.CreateReleaseFromCIRequest, registryAuth *releasedomain.ResolvedRegistryCredential) (*model.Task, error) {

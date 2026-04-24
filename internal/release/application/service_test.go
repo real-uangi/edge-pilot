@@ -1530,6 +1530,70 @@ func TestStartQueuedReleaseDefersDispatchWhenAgentSessionDrops(t *testing.T) {
 	}
 }
 
+func TestStartQueuedReleaseMarksFailedWhenDispatchFails(t *testing.T) {
+	serviceRepo := &fakeServiceRepo{}
+	agentRepo := &fakeAgentRepo{nodes: map[string]*model.AgentNode{}}
+	releaseRepo := newFakeReleaseRepo()
+	dispatcher := &fakeDispatcher{dispatchErr: errors.New("stream broken")}
+
+	serviceCatalog := servicecatalogapp.NewService(serviceRepo)
+	registry := agentregistry.NewRegistryService(config.LoadAgentAuthConfig(), agentRepo)
+	releaseService := NewService(releaseRepo, dispatcher, serviceCatalog, registry)
+
+	enabled := true
+	dockerHealth := true
+	online := true
+	now := time.Now()
+	service := &model.Service{
+		ID:                uuid.New(),
+		ServiceKey:        "svc-a",
+		Name:              "svc-a",
+		AgentID:           "agent-a",
+		ImageRepo:         "repo/app",
+		ContainerPort:     8080,
+		DockerHealthCheck: &dockerHealth,
+		Enabled:           &enabled,
+	}
+	serviceRepo.ensure()
+	serviceRepo.byID[service.ID] = service
+	serviceRepo.byKey[service.ServiceKey] = service
+	agentRepo.nodes["agent-a"] = &model.AgentNode{
+		ID:              "agent-a",
+		Enabled:         &enabled,
+		Online:          &online,
+		LastHeartbeatAt: &now,
+	}
+
+	queued, err := releaseService.CreateFromCI(dto.CreateReleaseFromCIRequest{
+		ServiceKey: "svc-a",
+		ImageTag:   "v1.0.0",
+	})
+	if err != nil {
+		t.Fatalf("CreateFromCI() error = %v", err)
+	}
+	if _, err := releaseService.Start(queued.ID, "admin"); err == nil {
+		t.Fatalf("expected Start() to return dispatch error")
+	}
+	storedRelease := releaseRepo.releases[queued.ID]
+	if storedRelease == nil || storedRelease.Status != model.ReleaseStatusFailed || storedRelease.CompletedAt == nil {
+		t.Fatalf("expected release failed after dispatch error, got %#v", storedRelease)
+	}
+	task := releaseRepo.tasks[*storedRelease.CurrentTaskID]
+	if task == nil || task.Status != model.TaskStatusFailed || task.LastStep != "dispatch_failed" {
+		t.Fatalf("expected failed task after dispatch error, got %#v", task)
+	}
+	foundAudit := false
+	for _, item := range releaseRepo.audits {
+		if item.EventType == "dispatch_failed" {
+			foundAudit = true
+			break
+		}
+	}
+	if !foundAudit {
+		t.Fatalf("expected dispatch_failed audit, got %#v", releaseRepo.audits)
+	}
+}
+
 func TestSetTrafficPercentAdjustsLiveSlotAndStatus(t *testing.T) {
 	serviceRepo := &fakeServiceRepo{}
 	agentRepo := &fakeAgentRepo{}
@@ -1570,6 +1634,16 @@ func TestSetTrafficPercentAdjustsLiveSlotAndStatus(t *testing.T) {
 	if err := releaseRepo.CreateRelease(release); err != nil {
 		t.Fatalf("CreateRelease() error = %v", err)
 	}
+	healthy := true
+	if err := releaseRepo.UpsertRuntimeInstance(&model.RuntimeInstance{
+		ID:        uuid.New(),
+		ServiceID: service.ID,
+		ReleaseID: release.ID,
+		Slot:      model.SlotGreen,
+		Healthy:   &healthy,
+	}); err != nil {
+		t.Fatalf("UpsertRuntimeInstance(release) error = %v", err)
+	}
 
 	output, err := releaseService.SetTrafficPercent(release.ID, 30, "admin")
 	if err != nil {
@@ -1580,6 +1654,122 @@ func TestSetTrafficPercentAdjustsLiveSlotAndStatus(t *testing.T) {
 	}
 	if serviceRepo.byID[service.ID].CurrentLiveSlot != model.SlotBlue {
 		t.Fatalf("expected live slot stay blue, got %v", serviceRepo.byID[service.ID].CurrentLiveSlot)
+	}
+}
+
+func TestSetTrafficPercentZeroKeepsReadyToSwitch(t *testing.T) {
+	serviceRepo := &fakeServiceRepo{}
+	agentRepo := &fakeAgentRepo{}
+	releaseRepo := newFakeReleaseRepo()
+	dispatcher := &fakeDispatcher{}
+	serviceCatalog := servicecatalogapp.NewService(serviceRepo)
+	registry := agentregistry.NewRegistryService(config.LoadAgentAuthConfig(), agentRepo)
+	releaseService := NewService(releaseRepo, dispatcher, serviceCatalog, registry)
+
+	enabled := true
+	dockerHealth := true
+	service := &model.Service{
+		ID:                uuid.New(),
+		ServiceKey:        "svc-a",
+		Name:              "svc-a",
+		AgentID:           "agent-a",
+		ImageRepo:         "repo/app",
+		ContainerPort:     8080,
+		CurrentLiveSlot:   model.SlotBlue,
+		DockerHealthCheck: &dockerHealth,
+		Enabled:           &enabled,
+	}
+	serviceRepo.ensure()
+	serviceRepo.byID[service.ID] = service
+	serviceRepo.byKey[service.ServiceKey] = service
+	release := &model.Release{
+		ID:               uuid.New(),
+		ServiceID:        service.ID,
+		AgentID:          "agent-a",
+		ImageRepo:        "repo/app",
+		ImageTag:         "v1.0.0",
+		Status:           model.ReleaseStatusReadyToSwitch,
+		TargetSlot:       model.SlotGreen,
+		PreviousLiveSlot: model.SlotBlue,
+		SwitchConfirmed:  boolPointer(false),
+		TrafficPercent:   30,
+	}
+	if err := releaseRepo.CreateRelease(release); err != nil {
+		t.Fatalf("CreateRelease() error = %v", err)
+	}
+	healthy := true
+	if err := releaseRepo.UpsertRuntimeInstance(&model.RuntimeInstance{
+		ID:        uuid.New(),
+		ServiceID: service.ID,
+		ReleaseID: uuid.New(),
+		Slot:      model.SlotBlue,
+		Healthy:   &healthy,
+	}); err != nil {
+		t.Fatalf("UpsertRuntimeInstance(previous) error = %v", err)
+	}
+
+	output, err := releaseService.SetTrafficPercent(release.ID, 0, "admin")
+	if err != nil {
+		t.Fatalf("SetTrafficPercent() error = %v", err)
+	}
+	if output.TrafficPercent != 0 || output.Status != model.ReleaseStatusReadyToSwitch || output.CompletedAt != nil {
+		t.Fatalf("expected 0%% traffic adjustment to keep ready-to-switch, got %#v", output)
+	}
+	if serviceRepo.byID[service.ID].CurrentLiveSlot != model.SlotBlue {
+		t.Fatalf("expected live slot stay blue, got %v", serviceRepo.byID[service.ID].CurrentLiveSlot)
+	}
+}
+
+func TestSetTrafficPercentRejectsMissingTargetRuntime(t *testing.T) {
+	serviceRepo := &fakeServiceRepo{}
+	agentRepo := &fakeAgentRepo{}
+	releaseRepo := newFakeReleaseRepo()
+	dispatcher := &fakeDispatcher{}
+	serviceCatalog := servicecatalogapp.NewService(serviceRepo)
+	registry := agentregistry.NewRegistryService(config.LoadAgentAuthConfig(), agentRepo)
+	releaseService := NewService(releaseRepo, dispatcher, serviceCatalog, registry)
+
+	enabled := true
+	dockerHealth := true
+	service := &model.Service{
+		ID:                uuid.New(),
+		ServiceKey:        "svc-a",
+		Name:              "svc-a",
+		AgentID:           "agent-a",
+		ImageRepo:         "repo/app",
+		ContainerPort:     8080,
+		CurrentLiveSlot:   model.SlotBlue,
+		DockerHealthCheck: &dockerHealth,
+		Enabled:           &enabled,
+	}
+	serviceRepo.ensure()
+	serviceRepo.byID[service.ID] = service
+	serviceRepo.byKey[service.ServiceKey] = service
+	release := &model.Release{
+		ID:               uuid.New(),
+		ServiceID:        service.ID,
+		AgentID:          "agent-a",
+		ImageRepo:        "repo/app",
+		ImageTag:         "v1.0.0",
+		Status:           model.ReleaseStatusReadyToSwitch,
+		TargetSlot:       model.SlotGreen,
+		PreviousLiveSlot: model.SlotBlue,
+		SwitchConfirmed:  boolPointer(false),
+		TrafficPercent:   0,
+	}
+	if err := releaseRepo.CreateRelease(release); err != nil {
+		t.Fatalf("CreateRelease() error = %v", err)
+	}
+
+	if _, err := releaseService.SetTrafficPercent(release.ID, 100, "admin"); err == nil {
+		t.Fatalf("expected missing target runtime to reject traffic switch")
+	}
+	stored := releaseRepo.releases[release.ID]
+	if stored.Status != model.ReleaseStatusReadyToSwitch || stored.TrafficPercent != 0 {
+		t.Fatalf("expected release unchanged after rejected switch, got %#v", stored)
+	}
+	if serviceRepo.byID[service.ID].CurrentLiveSlot != model.SlotBlue {
+		t.Fatalf("expected live slot unchanged, got %v", serviceRepo.byID[service.ID].CurrentLiveSlot)
 	}
 }
 
@@ -1638,11 +1828,13 @@ func TestConfirmSwitchCompletesReleaseAndClearsPreviousTraffic(t *testing.T) {
 	if err := releaseRepo.CreateRelease(release); err != nil {
 		t.Fatalf("CreateRelease() error = %v", err)
 	}
+	healthy := true
 	if err := releaseRepo.UpsertRuntimeInstance(&model.RuntimeInstance{
 		ID:        uuid.New(),
 		ServiceID: service.ID,
 		ReleaseID: previous.ID,
 		Slot:      model.SlotBlue,
+		Healthy:   &healthy,
 	}); err != nil {
 		t.Fatalf("UpsertRuntimeInstance(previous) error = %v", err)
 	}
@@ -1651,6 +1843,7 @@ func TestConfirmSwitchCompletesReleaseAndClearsPreviousTraffic(t *testing.T) {
 		ServiceID: service.ID,
 		ReleaseID: release.ID,
 		Slot:      model.SlotGreen,
+		Healthy:   &healthy,
 	}); err != nil {
 		t.Fatalf("UpsertRuntimeInstance(release) error = %v", err)
 	}
@@ -1671,7 +1864,7 @@ func TestConfirmSwitchCompletesReleaseAndClearsPreviousTraffic(t *testing.T) {
 	}
 }
 
-func TestRollbackSetsTrafficToZeroWithoutTerminalState(t *testing.T) {
+func TestRollbackCompletesReleaseAndRestoresPreviousTraffic(t *testing.T) {
 	serviceRepo := &fakeServiceRepo{}
 	agentRepo := &fakeAgentRepo{}
 	releaseRepo := newFakeReleaseRepo()
@@ -1702,28 +1895,110 @@ func TestRollbackSetsTrafficToZeroWithoutTerminalState(t *testing.T) {
 		AgentID:          "agent-a",
 		ImageRepo:        "repo/app",
 		ImageTag:         "v1.0.0",
-		Status:           model.ReleaseStatusSwitched,
+		Status:           model.ReleaseStatusReadyToSwitch,
 		TargetSlot:       model.SlotGreen,
 		PreviousLiveSlot: model.SlotBlue,
-		SwitchConfirmed:  boolPointer(true),
-		TrafficPercent:   100,
+		SwitchConfirmed:  boolPointer(false),
+		TrafficPercent:   30,
 	}
 	if err := releaseRepo.CreateRelease(release); err != nil {
 		t.Fatalf("CreateRelease() error = %v", err)
+	}
+	healthy := true
+	if err := releaseRepo.UpsertRuntimeInstance(&model.RuntimeInstance{
+		ID:               uuid.New(),
+		ServiceID:        service.ID,
+		ReleaseID:        uuid.New(),
+		Slot:             model.SlotBlue,
+		Healthy:          &healthy,
+		AcceptingTraffic: boolPointer(false),
+	}); err != nil {
+		t.Fatalf("UpsertRuntimeInstance(previous) error = %v", err)
+	}
+	if err := releaseRepo.UpsertRuntimeInstance(&model.RuntimeInstance{
+		ID:               uuid.New(),
+		ServiceID:        service.ID,
+		ReleaseID:        release.ID,
+		Slot:             model.SlotGreen,
+		Healthy:          &healthy,
+		AcceptingTraffic: boolPointer(true),
+	}); err != nil {
+		t.Fatalf("UpsertRuntimeInstance(release) error = %v", err)
 	}
 
 	output, err := releaseService.Rollback(release.ID, "admin")
 	if err != nil {
 		t.Fatalf("Rollback() error = %v", err)
 	}
-	if output.TrafficPercent != 0 || output.Status != model.ReleaseStatusReadyToSwitch {
+	if output.TrafficPercent != 0 || output.Status != model.ReleaseStatusRolledBack {
 		t.Fatalf("unexpected release output: %#v", output)
 	}
-	if output.CompletedAt != nil {
-		t.Fatalf("expected rollback keep non-terminal completedAt nil, got %v", output.CompletedAt)
+	if output.CompletedAt == nil {
+		t.Fatalf("expected rollback to set completedAt")
 	}
 	if serviceRepo.byID[service.ID].CurrentLiveSlot != model.SlotBlue {
 		t.Fatalf("expected live slot rollback to blue, got %v", serviceRepo.byID[service.ID].CurrentLiveSlot)
+	}
+	previousInstance := releaseRepo.runtimeByService[service.ID][model.SlotBlue]
+	if previousInstance == nil || previousInstance.AcceptingTraffic == nil || !*previousInstance.AcceptingTraffic {
+		t.Fatalf("expected previous runtime to accept traffic, got %#v", previousInstance)
+	}
+	currentInstance := releaseRepo.runtimeByService[service.ID][model.SlotGreen]
+	if currentInstance == nil || currentInstance.AcceptingTraffic == nil || *currentInstance.AcceptingTraffic {
+		t.Fatalf("expected current runtime to stop accepting traffic, got %#v", currentInstance)
+	}
+}
+
+func TestRollbackRejectsMissingPreviousRuntime(t *testing.T) {
+	serviceRepo := &fakeServiceRepo{}
+	agentRepo := &fakeAgentRepo{}
+	releaseRepo := newFakeReleaseRepo()
+	dispatcher := &fakeDispatcher{}
+	serviceCatalog := servicecatalogapp.NewService(serviceRepo)
+	registry := agentregistry.NewRegistryService(config.LoadAgentAuthConfig(), agentRepo)
+	releaseService := NewService(releaseRepo, dispatcher, serviceCatalog, registry)
+
+	enabled := true
+	dockerHealth := true
+	service := &model.Service{
+		ID:                uuid.New(),
+		ServiceKey:        "svc-a",
+		Name:              "svc-a",
+		AgentID:           "agent-a",
+		ImageRepo:         "repo/app",
+		ContainerPort:     8080,
+		CurrentLiveSlot:   model.SlotGreen,
+		DockerHealthCheck: &dockerHealth,
+		Enabled:           &enabled,
+	}
+	serviceRepo.ensure()
+	serviceRepo.byID[service.ID] = service
+	serviceRepo.byKey[service.ServiceKey] = service
+	release := &model.Release{
+		ID:               uuid.New(),
+		ServiceID:        service.ID,
+		AgentID:          "agent-a",
+		ImageRepo:        "repo/app",
+		ImageTag:         "v1.0.0",
+		Status:           model.ReleaseStatusReadyToSwitch,
+		TargetSlot:       model.SlotGreen,
+		PreviousLiveSlot: model.SlotBlue,
+		SwitchConfirmed:  boolPointer(false),
+		TrafficPercent:   30,
+	}
+	if err := releaseRepo.CreateRelease(release); err != nil {
+		t.Fatalf("CreateRelease() error = %v", err)
+	}
+
+	if _, err := releaseService.Rollback(release.ID, "admin"); err == nil {
+		t.Fatalf("expected missing previous runtime to reject rollback")
+	}
+	stored := releaseRepo.releases[release.ID]
+	if stored.Status != model.ReleaseStatusReadyToSwitch || stored.TrafficPercent != 30 || stored.CompletedAt != nil {
+		t.Fatalf("expected release unchanged after rejected rollback, got %#v", stored)
+	}
+	if serviceRepo.byID[service.ID].CurrentLiveSlot != model.SlotGreen {
+		t.Fatalf("expected live slot unchanged, got %v", serviceRepo.byID[service.ID].CurrentLiveSlot)
 	}
 }
 

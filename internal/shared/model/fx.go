@@ -65,16 +65,6 @@ func backfillServiceHealthConfig(conn *gorm.DB) error {
 		Update("traffic_percent", 0).Error; err != nil {
 		return err
 	}
-	if err := conn.Model(&Release{}).
-		Where("status IN ?", []ReleaseStatus{ReleaseStatusSwitched, ReleaseStatusCompleted}).
-		Update("traffic_percent", 100).Error; err != nil {
-		return err
-	}
-	if err := conn.Model(&Release{}).
-		Where("status NOT IN ?", []ReleaseStatus{ReleaseStatusSwitched, ReleaseStatusCompleted}).
-		Update("traffic_percent", 0).Error; err != nil {
-		return err
-	}
 	if err := conn.Model(&SchedulerJob{}).
 		Where("enabled IS NULL").
 		Update("enabled", true).Error; err != nil {

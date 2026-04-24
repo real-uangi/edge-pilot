@@ -196,6 +196,7 @@ export function ReleaseDetailPage() {
 
   const { release, tasks } = detailQuery.data;
   const agent = agentsQuery.data?.find((item) => item.id === release.agentId);
+  const canAdjustTraffic = release.status === 4;
   const actionError = getErrorMessage(
     startMutation.error ??
       skipMutation.error ??
@@ -250,7 +251,7 @@ export function ReleaseDetailPage() {
             label="回滚"
             pending={rollbackMutation.isPending || trafficMutation.isPending}
             variant="danger"
-            disabled={[1, 9].includes(release.status)}
+            disabled={!canAdjustTraffic}
             onClick={() => void confirmAction("确认回滚这个发布单？", () => rollbackMutation.mutate())}
           />
           <ActionButton
@@ -330,7 +331,7 @@ export function ReleaseDetailPage() {
               label={`${value}%`}
               variant={value === release.trafficPercent ? "primary" : "secondary"}
               pending={trafficMutation.isPending && trafficDraft === value}
-              disabled={trafficMutation.isPending || release.status === 1 || release.status === 9}
+              disabled={trafficMutation.isPending || !canAdjustTraffic}
               onClick={() => {
                 setTrafficDraft(value);
                 void confirmAction(`确认设置切流比例为 ${value}%？`, () => trafficMutation.mutate(value));
@@ -356,7 +357,7 @@ export function ReleaseDetailPage() {
             label="应用比例"
             pending={trafficMutation.isPending}
             variant="primary"
-            disabled={trafficMutation.isPending || release.status === 1 || release.status === 9}
+            disabled={trafficMutation.isPending || !canAdjustTraffic}
             onClick={() => void confirmAction(`确认设置切流比例为 ${trafficDraft}%？`, () => trafficMutation.mutate(trafficDraft))}
           />
         </div>
