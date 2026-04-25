@@ -223,6 +223,13 @@ func (s *Service) buildServiceEntity(id uuid.UUID, req dto.UpsertServiceRequest)
 	if httpSuccessThreshold == 0 {
 		httpSuccessThreshold = model.DefaultHTTPSuccessThreshold
 	}
+	schedulerExecutorGroup := strings.TrimSpace(req.SchedulerExecutorGroup)
+	if req.SchedulerSDKPort > 0 && schedulerExecutorGroup == "" {
+		schedulerExecutorGroup = "default"
+	}
+	if err := validateSchedulerSDKConfig(req.SchedulerSDKPort, schedulerExecutorGroup); err != nil {
+		return nil, err
+	}
 	envCiphertext, envKeyVersion, err := s.encryptEnv(req.Env)
 	if err != nil {
 		return nil, err
@@ -236,6 +243,8 @@ func (s *Service) buildServiceEntity(id uuid.UUID, req dto.UpsertServiceRequest)
 		AgentID:                 req.AgentID,
 		ImageRepo:               req.ImageRepo,
 		ContainerPort:           req.ContainerPort,
+		SchedulerSDKPort:        req.SchedulerSDKPort,
+		SchedulerExecutorGroup:  schedulerExecutorGroup,
 		DockerHealthCheck:       dockerHealth,
 		HTTPHealthPath:          req.HTTPHealthPath,
 		HTTPHealthHeaders:       commondb.NewJSONB(httpHealthHeaders),
@@ -294,6 +303,8 @@ func (s *Service) toServiceOutput(service *model.Service) (dto.ServiceOutput, er
 		ImageRepo:               service.ImageRepo,
 		ContainerPort:           service.ContainerPort,
 		CurrentLiveSlot:         service.CurrentLiveSlot,
+		SchedulerSDKPort:        service.SchedulerSDKPort,
+		SchedulerExecutorGroup:  service.SchedulerExecutorGroup,
 		DockerHealthCheck:       service.DockerHealthCheck,
 		HTTPHealthPath:          service.HTTPHealthPath,
 		HTTPHealthHeaders:       getJSON(service.HTTPHealthHeaders),
@@ -329,6 +340,8 @@ func (s *Service) toDeploymentSpec(service *model.Service) (dto.ServiceDeploymen
 		ImageRepo:               service.ImageRepo,
 		ContainerPort:           service.ContainerPort,
 		CurrentLiveSlot:         service.CurrentLiveSlot,
+		SchedulerSDKPort:        service.SchedulerSDKPort,
+		SchedulerExecutorGroup:  service.SchedulerExecutorGroup,
 		DockerHealthCheck:       service.DockerHealthCheck != nil && *service.DockerHealthCheck,
 		HTTPHealthPath:          service.HTTPHealthPath,
 		HTTPHealthHeaders:       getJSON(service.HTTPHealthHeaders),
@@ -469,6 +482,16 @@ func validatePublishedPorts(items []model.PublishedPort) error {
 func validateContainerPort(port int) error {
 	if port <= 0 || port > 65535 {
 		return business.NewBadRequest("containerPort 非法")
+	}
+	return nil
+}
+
+func validateSchedulerSDKConfig(port int, group string) error {
+	if port < 0 || port > 65535 {
+		return business.NewBadRequest("schedulerSdkPort 非法")
+	}
+	if port > 0 && strings.TrimSpace(group) == "" {
+		return business.NewBadRequest("schedulerExecutorGroup 必填")
 	}
 	return nil
 }

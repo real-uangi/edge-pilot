@@ -46,6 +46,8 @@ func TestTaskToProtoPreservesFields(t *testing.T) {
 			HTTPProbeTimeoutSecond:  2,
 			HTTPProbeIntervalSecond: 1,
 			HTTPSuccessThreshold:    2,
+			SchedulerSDKPort:        19091,
+			SchedulerExecutorGroup:  "default",
 			BackendName:             "be_api",
 			ServerName:              "srv_green",
 			PreviousServer:          "srv_blue",
@@ -90,6 +92,9 @@ func TestTaskToProtoPreservesFields(t *testing.T) {
 	}
 	if pb.GetHttpHealthHeaders()["X-Probe-Token"] != "abc" {
 		t.Fatalf("unexpected health headers: %#v", pb.GetHttpHealthHeaders())
+	}
+	if pb.GetSchedulerSdkPort() != 19091 || pb.GetSchedulerExecutorGroup() != "default" {
+		t.Fatalf("unexpected scheduler sdk fields: port=%d group=%q", pb.GetSchedulerSdkPort(), pb.GetSchedulerExecutorGroup())
 	}
 	if pb.GetRegistryHost() != "ghcr.io" || pb.GetRegistryUsername() != "octocat" || pb.GetRegistrySecret() != "token-value" {
 		t.Fatalf("unexpected registry credentials: %#v", pb)

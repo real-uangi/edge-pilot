@@ -53,7 +53,6 @@ function newExecutorForm(): UpsertSchedulerExecutorInput {
     executorId: "",
     group: "default",
     enabled: true,
-    liveSlot: 0,
     metadata: {},
   };
 }
@@ -360,10 +359,6 @@ export function SchedulerPage() {
           <label className={styles.field}>
             <span className={styles.label}>group</span>
             <input className={styles.input} value={executorForm.group} onChange={(event) => setExecutorForm((v) => ({ ...v, group: event.target.value }))} />
-          </label>
-          <label className={styles.field}>
-            <span className={styles.label}>liveSlot (0/1/2)</span>
-            <input className={styles.input} type="number" value={executorForm.liveSlot ?? 0} onChange={(event) => setExecutorForm((v) => ({ ...v, liveSlot: Number(event.target.value) || 0 }))} />
           </label>
           <label className={`${styles.field} ${styles.fieldWide}`}>
             <span className={styles.label}>metadata(JSON)</span>

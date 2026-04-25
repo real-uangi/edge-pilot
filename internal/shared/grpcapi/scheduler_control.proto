@@ -10,6 +10,10 @@ service SchedulerControl {
   rpc Connect(stream ExecutorMessage) returns (stream SchedulerMessage);
 }
 
+service SchedulerInstanceControl {
+  rpc Attach(stream SchedulerInstanceMessage) returns (stream SchedulerInstanceMessage);
+}
+
 message ExecutorMessage {
   oneof payload {
     ExecutorHello hello = 1;
@@ -64,4 +68,25 @@ message SchedulerRunUpdate {
 
 message SchedulerRunLeaseRenew {
   string run_id = 1;
+}
+
+message SchedulerInstanceMessage {
+  oneof payload {
+    SchedulerInstanceAttach attach = 1;
+    ExecutorHeartbeat heartbeat = 2;
+    SchedulerRunCommand run = 3;
+    SchedulerRunUpdate run_update = 4;
+    SchedulerRunLeaseRenew lease_renew = 5;
+    SchedulerAck ack = 6;
+  }
+}
+
+message SchedulerInstanceAttach {
+  string executor_id = 1;
+  string service_id = 2;
+  string service_key = 3;
+  string release_id = 4;
+  Slot slot = 5;
+  string group = 6;
+  string container_id = 7;
 }

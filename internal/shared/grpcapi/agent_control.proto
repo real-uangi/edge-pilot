@@ -139,6 +139,8 @@ message TaskCommand {
   int32 http_probe_interval_second = 31;
   int32 http_success_threshold = 32;
   map<string, string> http_health_headers = 33;
+  int32 scheduler_sdk_port = 34;
+  string scheduler_executor_group = 35;
 }
 
 message TaskUpdate {
@@ -169,6 +171,8 @@ message ProxyServiceConfig {
   string candidate_release_id = 12;
   string candidate_backend_name = 13;
   int32 candidate_traffic_percent = 14;
+  int32 scheduler_sdk_port = 15;
+  string scheduler_executor_group = 16;
 }
 
 message ProxyConfigSnapshot {

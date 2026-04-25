@@ -141,6 +141,8 @@ type Service struct {
 	ImageRepo               string                             `json:"imageRepo" gorm:"size:512;not null"`
 	ContainerPort           int                                `json:"containerPort"`
 	CurrentLiveSlot         Slot                               `json:"currentLiveSlot"`
+	SchedulerSDKPort        int                                `json:"schedulerSdkPort"`
+	SchedulerExecutorGroup  string                             `json:"schedulerExecutorGroup" gorm:"size:128"`
 	DockerHealthCheck       *bool                              `json:"dockerHealthCheck" gorm:"not null"`
 	HTTPHealthPath          string                             `json:"httpHealthPath" gorm:"size:255"`
 	HTTPHealthHeaders       *commondb.JSONB[map[string]string] `json:"httpHealthHeaders" gorm:"type:jsonb"`
@@ -260,6 +262,8 @@ type TaskPayload struct {
 	HTTPProbeTimeoutSecond  int               `json:"httpProbeTimeoutSecond"`
 	HTTPProbeIntervalSecond int               `json:"httpProbeIntervalSecond"`
 	HTTPSuccessThreshold    int               `json:"httpSuccessThreshold"`
+	SchedulerSDKPort        int               `json:"schedulerSdkPort"`
+	SchedulerExecutorGroup  string            `json:"schedulerExecutorGroup"`
 	BackendName             string            `json:"backendName"`
 	ServerName              string            `json:"serverName"`
 	PreviousServer          string            `json:"previousServer"`

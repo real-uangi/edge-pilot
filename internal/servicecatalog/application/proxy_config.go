@@ -21,13 +21,15 @@ const (
 )
 
 type ProxyServiceConfig struct {
-	ServiceID       uuid.UUID
-	ServiceKey      string
-	RouteHost       string
-	RoutePathPrefix string
-	BackendName     string
-	CurrentLiveSlot model.Slot
-	ContainerPort   int
+	ServiceID              uuid.UUID
+	ServiceKey             string
+	RouteHost              string
+	RoutePathPrefix        string
+	BackendName            string
+	CurrentLiveSlot        model.Slot
+	ContainerPort          int
+	SchedulerSDKPort       int
+	SchedulerExecutorGroup string
 }
 
 func NormalizeRouteHost(value string) string {
@@ -128,13 +130,15 @@ func BuildProxyServiceConfigs(services []model.Service) []ProxyServiceConfig {
 			continue
 		}
 		out = append(out, ProxyServiceConfig{
-			ServiceID:       item.ID,
-			ServiceKey:      item.ServiceKey,
-			RouteHost:       NormalizeRouteHost(item.RouteHost),
-			RoutePathPrefix: NormalizeRoutePathPrefix(item.RoutePathPrefix),
-			BackendName:     BackendName(item.ID),
-			CurrentLiveSlot: item.CurrentLiveSlot,
-			ContainerPort:   item.ContainerPort,
+			ServiceID:              item.ID,
+			ServiceKey:             item.ServiceKey,
+			RouteHost:              NormalizeRouteHost(item.RouteHost),
+			RoutePathPrefix:        NormalizeRoutePathPrefix(item.RoutePathPrefix),
+			BackendName:            BackendName(item.ID),
+			CurrentLiveSlot:        item.CurrentLiveSlot,
+			ContainerPort:          item.ContainerPort,
+			SchedulerSDKPort:       item.SchedulerSDKPort,
+			SchedulerExecutorGroup: item.SchedulerExecutorGroup,
 		})
 	}
 	sort.Slice(out, func(i, j int) bool {

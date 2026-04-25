@@ -100,5 +100,10 @@ func backfillServiceHealthConfig(conn *gorm.DB) error {
 		Update("channel_mode", SchedulerExecutorChannelModeDirect).Error; err != nil {
 		return err
 	}
+	if err := conn.Model(&Service{}).
+		Where("scheduler_sdk_port > 0 AND scheduler_executor_group = ?", "").
+		Update("scheduler_executor_group", "default").Error; err != nil {
+		return err
+	}
 	return nil
 }

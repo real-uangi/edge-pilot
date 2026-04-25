@@ -111,3 +111,97 @@ var SchedulerControl_ServiceDesc = grpc.ServiceDesc{
 	},
 	Metadata: "internal/shared/grpcapi/scheduler_control.proto",
 }
+
+const (
+	SchedulerInstanceControl_Attach_FullMethodName = "/edgepilot.grpcapi.SchedulerInstanceControl/Attach"
+)
+
+// SchedulerInstanceControlClient is the client API for SchedulerInstanceControl service.
+//
+// For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
+type SchedulerInstanceControlClient interface {
+	Attach(ctx context.Context, opts ...grpc.CallOption) (grpc.BidiStreamingClient[SchedulerInstanceMessage, SchedulerInstanceMessage], error)
+}
+
+type schedulerInstanceControlClient struct {
+	cc grpc.ClientConnInterface
+}
+
+func NewSchedulerInstanceControlClient(cc grpc.ClientConnInterface) SchedulerInstanceControlClient {
+	return &schedulerInstanceControlClient{cc}
+}
+
+func (c *schedulerInstanceControlClient) Attach(ctx context.Context, opts ...grpc.CallOption) (grpc.BidiStreamingClient[SchedulerInstanceMessage, SchedulerInstanceMessage], error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	stream, err := c.cc.NewStream(ctx, &SchedulerInstanceControl_ServiceDesc.Streams[0], SchedulerInstanceControl_Attach_FullMethodName, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	x := &grpc.GenericClientStream[SchedulerInstanceMessage, SchedulerInstanceMessage]{ClientStream: stream}
+	return x, nil
+}
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type SchedulerInstanceControl_AttachClient = grpc.BidiStreamingClient[SchedulerInstanceMessage, SchedulerInstanceMessage]
+
+// SchedulerInstanceControlServer is the server API for SchedulerInstanceControl service.
+// All implementations should embed UnimplementedSchedulerInstanceControlServer
+// for forward compatibility.
+type SchedulerInstanceControlServer interface {
+	Attach(grpc.BidiStreamingServer[SchedulerInstanceMessage, SchedulerInstanceMessage]) error
+}
+
+// UnimplementedSchedulerInstanceControlServer should be embedded to have
+// forward compatible implementations.
+//
+// NOTE: this should be embedded by value instead of pointer to avoid a nil
+// pointer dereference when methods are called.
+type UnimplementedSchedulerInstanceControlServer struct{}
+
+func (UnimplementedSchedulerInstanceControlServer) Attach(grpc.BidiStreamingServer[SchedulerInstanceMessage, SchedulerInstanceMessage]) error {
+	return status.Error(codes.Unimplemented, "method Attach not implemented")
+}
+func (UnimplementedSchedulerInstanceControlServer) testEmbeddedByValue() {}
+
+// UnsafeSchedulerInstanceControlServer may be embedded to opt out of forward compatibility for this service.
+// Use of this interface is not recommended, as added methods to SchedulerInstanceControlServer will
+// result in compilation errors.
+type UnsafeSchedulerInstanceControlServer interface {
+	mustEmbedUnimplementedSchedulerInstanceControlServer()
+}
+
+func RegisterSchedulerInstanceControlServer(s grpc.ServiceRegistrar, srv SchedulerInstanceControlServer) {
+	// If the following call panics, it indicates UnimplementedSchedulerInstanceControlServer was
+	// embedded by pointer and is nil.  This will cause panics if an
+	// unimplemented method is ever invoked, so we test this at initialization
+	// time to prevent it from happening at runtime later due to I/O.
+	if t, ok := srv.(interface{ testEmbeddedByValue() }); ok {
+		t.testEmbeddedByValue()
+	}
+	s.RegisterService(&SchedulerInstanceControl_ServiceDesc, srv)
+}
+
+func _SchedulerInstanceControl_Attach_Handler(srv interface{}, stream grpc.ServerStream) error {
+	return srv.(SchedulerInstanceControlServer).Attach(&grpc.GenericServerStream[SchedulerInstanceMessage, SchedulerInstanceMessage]{ServerStream: stream})
+}
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type SchedulerInstanceControl_AttachServer = grpc.BidiStreamingServer[SchedulerInstanceMessage, SchedulerInstanceMessage]
+
+// SchedulerInstanceControl_ServiceDesc is the grpc.ServiceDesc for SchedulerInstanceControl service.
+// It's only intended for direct use with grpc.RegisterService,
+// and not to be introspected or modified (even as a copy)
+var SchedulerInstanceControl_ServiceDesc = grpc.ServiceDesc{
+	ServiceName: "edgepilot.grpcapi.SchedulerInstanceControl",
+	HandlerType: (*SchedulerInstanceControlServer)(nil),
+	Methods:     []grpc.MethodDesc{},
+	Streams: []grpc.StreamDesc{
+		{
+			StreamName:    "Attach",
+			Handler:       _SchedulerInstanceControl_Attach_Handler,
+			ServerStreams: true,
+			ClientStreams: true,
+		},
+	},
+	Metadata: "internal/shared/grpcapi/scheduler_control.proto",
+}

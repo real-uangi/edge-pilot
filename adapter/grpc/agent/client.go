@@ -24,17 +24,20 @@ type Client struct {
 	state     *taskexec.RuntimeState
 	collector perf.Collector
 	relay     *schedulerRelayBridge
+	instances *schedulerInstanceConnector
 	logger    *log.StdLogger
 }
 
-func NewClient(cfg *config.AgentRuntimeConfig, executor *taskexec.Executor, proxy agentdomain.ProxyRuntime, state *taskexec.RuntimeState, collector perf.Collector) *Client {
+func NewClient(cfg *config.AgentRuntimeConfig, executor *taskexec.Executor, docker agentdomain.DockerRuntime, proxy agentdomain.ProxyRuntime, state *taskexec.RuntimeState, collector perf.Collector) *Client {
+	relay := newSchedulerRelayBridge(cfg)
 	return &Client{
 		cfg:       cfg,
 		executor:  executor,
 		proxy:     proxy,
 		state:     state,
 		collector: collector,
-		relay:     newSchedulerRelayBridge(cfg),
+		relay:     relay,
+		instances: newSchedulerInstanceConnector(cfg, docker, relay),
 		logger:    log.NewStdLogger("agent.grpc-client"),
 	}
 }
@@ -46,6 +49,7 @@ func startClient(lc fx.Lifecycle, client *Client) {
 			if err := client.relay.Start(); err != nil {
 				return err
 			}
+			go client.instances.Start(ctx)
 			client.logger.Infof("starting grpc client after proxy stack preparation: agentId=%s addr=%s", client.cfg.AgentID, client.cfg.ControlPlaneAddr)
 			go client.run(ctx)
 			return nil
@@ -200,6 +204,7 @@ func (c *Client) connectOnce(ctx context.Context) error {
 				c.logger.Errorf(err, "failed to apply proxy snapshot: agentId=%s services=%d", c.cfg.AgentID, len(msg.GetProxyConfig().GetServices()))
 				continue
 			}
+			c.instances.UpdateSnapshot(msg.GetProxyConfig())
 			continue
 		}
 		if msg.GetHaproxyConfigRequest() != nil {

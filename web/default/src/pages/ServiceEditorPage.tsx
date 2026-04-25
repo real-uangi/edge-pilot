@@ -191,6 +191,14 @@ export function ServiceEditorPage() {
               <input className={styles.input} type="number" {...form.register("httpSuccessThreshold")} />
             </label>
             <label className={styles.field}>
+              <span className={styles.label}>调度 SDK 端口</span>
+              <input className={styles.input} type="number" {...form.register("schedulerSdkPort")} />
+            </label>
+            <label className={styles.field}>
+              <span className={styles.label}>执行器组</span>
+              <input className={styles.input} {...form.register("schedulerExecutorGroup")} />
+            </label>
+            <label className={styles.field}>
               <span className={styles.checkboxRow}>
                 <input type="checkbox" {...form.register("dockerHealthCheck")} />
                 <span className={styles.label}>启用 Docker 探活</span>
@@ -257,6 +265,14 @@ export function ServiceEditorPage() {
               <div className={styles.keyValue}>
                 <span className={styles.key}>当前槽位</span>
                 <span className={styles.value}>{slotLabel(serviceQuery.data.currentLiveSlot)}</span>
+              </div>
+              <div className={styles.keyValue}>
+                <span className={styles.key}>调度端口</span>
+                <span className={styles.value}>{serviceQuery.data.schedulerSdkPort || "-"}</span>
+              </div>
+              <div className={styles.keyValue}>
+                <span className={styles.key}>执行器组</span>
+                <span className={styles.value}>{serviceQuery.data.schedulerExecutorGroup || "-"}</span>
               </div>
               <div className={styles.keyValue}>
                 <span className={styles.key}>Docker 探活</span>

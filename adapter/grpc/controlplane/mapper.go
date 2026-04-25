@@ -49,6 +49,8 @@ func taskToProto(task *model.Task, codec *secret.Codec) (*grpcapi.TaskCommand, e
 		HttpProbeTimeoutSecond:  int32(payload.HTTPProbeTimeoutSecond),
 		HttpProbeIntervalSecond: int32(payload.HTTPProbeIntervalSecond),
 		HttpSuccessThreshold:    int32(payload.HTTPSuccessThreshold),
+		SchedulerSdkPort:        int32(payload.SchedulerSDKPort),
+		SchedulerExecutorGroup:  payload.SchedulerExecutorGroup,
 	}, nil
 }
 

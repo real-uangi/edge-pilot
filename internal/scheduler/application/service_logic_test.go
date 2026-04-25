@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	commondb "github.com/real-uangi/allingo/common/db"
 )
 
 func TestCalcInitialNextRun_OneTimeUsesRunAt(t *testing.T) {
@@ -83,6 +84,131 @@ func TestSanitizeExecutorMetadata(t *testing.T) {
 	if got := clean["instanceId"]; got != "i-1" {
 		t.Fatalf("instanceId should be kept, got %q", got)
 	}
+}
+
+func TestPickExecutorIDFixedLiveSlotPrefersMatchingServiceInstance(t *testing.T) {
+	serviceID := uuid.New()
+	otherServiceID := uuid.New()
+	svc := &Service{liveSlot: staticLiveSlotResolver{slot: model.SlotGreen}}
+	run := &model.SchedulerJobRun{
+		DispatchPolicy: model.SchedulerDispatchPolicyFixedLiveSlot,
+		Payload:        commondb.NewJSONB(map[string]any{"serviceId": serviceID.String()}),
+	}
+
+	got, err := svc.pickExecutorID(run, []OnlineExecutor{
+		{ExecutorID: "instance-other-green", Group: "default", LiveSlot: model.SlotGreen, ServiceInstance: true, ServiceID: otherServiceID.String()},
+		{ExecutorID: "instance-target-green", Group: "default", LiveSlot: model.SlotGreen, ServiceInstance: true, ServiceID: serviceID.String()},
+		{ExecutorID: "manual-green", Group: "default", LiveSlot: model.SlotGreen},
+	})
+	if err != nil {
+		t.Fatalf("pickExecutorID() error = %v", err)
+	}
+	if got != "instance-target-green" {
+		t.Fatalf("expected matching service instance on current live slot, got %q", got)
+	}
+}
+
+func TestPickExecutorIDFixedLiveSlotFallsBackWhenServiceInstanceMismatched(t *testing.T) {
+	serviceID := uuid.New()
+	svc := &Service{liveSlot: staticLiveSlotResolver{slot: model.SlotBlue}}
+	run := &model.SchedulerJobRun{
+		DispatchPolicy: model.SchedulerDispatchPolicyFixedLiveSlot,
+		Payload:        commondb.NewJSONB(map[string]any{"serviceId": serviceID.String()}),
+	}
+
+	got, err := svc.pickExecutorID(run, []OnlineExecutor{
+		{ExecutorID: "instance-green", Group: "default", LiveSlot: model.SlotGreen, ServiceInstance: true, ServiceID: serviceID.String()},
+		{ExecutorID: "instance-blue-other", Group: "default", LiveSlot: model.SlotBlue, ServiceInstance: true, ServiceID: uuid.New().String()},
+		{ExecutorID: "manual-blue", Group: "default", LiveSlot: model.SlotBlue},
+	})
+	if err != nil {
+		t.Fatalf("pickExecutorID() error = %v", err)
+	}
+	if got != "manual-blue" {
+		t.Fatalf("expected fallback to non-instance executor on target slot, got %q", got)
+	}
+}
+
+func TestRegisterServiceInstanceExecutor(t *testing.T) {
+	repo := newAuthOnlyRepo()
+	svc := NewService(repo, nil, nil, nil)
+
+	serviceID := uuid.New().String()
+	releaseID := "release-a"
+	containerID := "abcdef0123456789"
+	executorID := schedulerServiceInstanceExecutorID(serviceID, releaseID, model.SlotBlue, containerID)
+	executor, err := svc.RegisterServiceInstanceExecutor(
+		executorID,
+		"default",
+		model.SlotBlue,
+		map[string]string{"service_id": serviceID, "release_id": releaseID, "container_id": containerID, "relay_token": "secret"},
+		"agent-a",
+		executorID,
+	)
+	if err != nil {
+		t.Fatalf("RegisterServiceInstanceExecutor() error = %v", err)
+	}
+	if executor.ChannelMode != model.SchedulerExecutorChannelModeAgentRelay || executor.RelayAgentID != "agent-a" {
+		t.Fatalf("unexpected relay binding: %#v", executor)
+	}
+	if executor.LiveSlot != model.SlotBlue || executor.Enabled == nil || !*executor.Enabled {
+		t.Fatalf("unexpected executor state: %#v", executor)
+	}
+	if _, ok := executor.InstanceMeta.Get()["relay_token"]; ok {
+		t.Fatalf("expected relay token metadata to be sanitized")
+	}
+}
+
+func TestRegisterServiceInstanceExecutorRejectsMismatchedExecutorID(t *testing.T) {
+	repo := newAuthOnlyRepo()
+	svc := NewService(repo, nil, nil, nil)
+
+	_, err := svc.RegisterServiceInstanceExecutor(
+		"svc:wrong:rel:r1:slot:blue:ctr:abcdef012345",
+		"default",
+		model.SlotBlue,
+		map[string]string{"service_id": uuid.New().String(), "release_id": "r1", "container_id": "abcdef0123456789"},
+		"agent-a",
+		"svc:wrong:rel:r1:slot:blue:ctr:abcdef012345",
+	)
+	if err == nil {
+		t.Fatalf("expected executorId mismatch error")
+	}
+}
+
+func TestRegisterServiceInstanceExecutorRejectsRebindToDifferentAgent(t *testing.T) {
+	repo := newAuthOnlyRepo()
+	existingEnabled := true
+	serviceID := uuid.New().String()
+	releaseID := "release-a"
+	containerID := "abcdef0123456789"
+	executorID := schedulerServiceInstanceExecutorID(serviceID, releaseID, model.SlotGreen, containerID)
+	repo.executor = &model.SchedulerExecutor{
+		ID:           executorID,
+		RelayAgentID: "agent-bound",
+		Enabled:      &existingEnabled,
+	}
+	svc := NewService(repo, nil, nil, nil)
+
+	_, err := svc.RegisterServiceInstanceExecutor(
+		executorID,
+		"default",
+		model.SlotGreen,
+		map[string]string{"service_id": serviceID, "release_id": releaseID, "container_id": containerID},
+		"agent-other",
+		executorID,
+	)
+	if err == nil {
+		t.Fatalf("expected unauthorized rebind error")
+	}
+}
+
+type staticLiveSlotResolver struct {
+	slot model.Slot
+}
+
+func (r staticLiveSlotResolver) ResolveLiveSlot(uuid.UUID) (model.Slot, error) {
+	return r.slot, nil
 }
 
 func TestAuthenticateExecutor_AutoDetectAllowsDirectForRelayConfiguredExecutor(t *testing.T) {

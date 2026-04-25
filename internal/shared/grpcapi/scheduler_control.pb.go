@@ -609,6 +609,244 @@ func (x *SchedulerRunLeaseRenew) GetRunId() string {
 	return ""
 }
 
+type SchedulerInstanceMessage struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Types that are valid to be assigned to Payload:
+	//
+	//	*SchedulerInstanceMessage_Attach
+	//	*SchedulerInstanceMessage_Heartbeat
+	//	*SchedulerInstanceMessage_Run
+	//	*SchedulerInstanceMessage_RunUpdate
+	//	*SchedulerInstanceMessage_LeaseRenew
+	//	*SchedulerInstanceMessage_Ack
+	Payload       isSchedulerInstanceMessage_Payload `protobuf_oneof:"payload"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SchedulerInstanceMessage) Reset() {
+	*x = SchedulerInstanceMessage{}
+	mi := &file_internal_shared_grpcapi_scheduler_control_proto_msgTypes[8]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SchedulerInstanceMessage) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SchedulerInstanceMessage) ProtoMessage() {}
+
+func (x *SchedulerInstanceMessage) ProtoReflect() protoreflect.Message {
+	mi := &file_internal_shared_grpcapi_scheduler_control_proto_msgTypes[8]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SchedulerInstanceMessage.ProtoReflect.Descriptor instead.
+func (*SchedulerInstanceMessage) Descriptor() ([]byte, []int) {
+	return file_internal_shared_grpcapi_scheduler_control_proto_rawDescGZIP(), []int{8}
+}
+
+func (x *SchedulerInstanceMessage) GetPayload() isSchedulerInstanceMessage_Payload {
+	if x != nil {
+		return x.Payload
+	}
+	return nil
+}
+
+func (x *SchedulerInstanceMessage) GetAttach() *SchedulerInstanceAttach {
+	if x != nil {
+		if x, ok := x.Payload.(*SchedulerInstanceMessage_Attach); ok {
+			return x.Attach
+		}
+	}
+	return nil
+}
+
+func (x *SchedulerInstanceMessage) GetHeartbeat() *ExecutorHeartbeat {
+	if x != nil {
+		if x, ok := x.Payload.(*SchedulerInstanceMessage_Heartbeat); ok {
+			return x.Heartbeat
+		}
+	}
+	return nil
+}
+
+func (x *SchedulerInstanceMessage) GetRun() *SchedulerRunCommand {
+	if x != nil {
+		if x, ok := x.Payload.(*SchedulerInstanceMessage_Run); ok {
+			return x.Run
+		}
+	}
+	return nil
+}
+
+func (x *SchedulerInstanceMessage) GetRunUpdate() *SchedulerRunUpdate {
+	if x != nil {
+		if x, ok := x.Payload.(*SchedulerInstanceMessage_RunUpdate); ok {
+			return x.RunUpdate
+		}
+	}
+	return nil
+}
+
+func (x *SchedulerInstanceMessage) GetLeaseRenew() *SchedulerRunLeaseRenew {
+	if x != nil {
+		if x, ok := x.Payload.(*SchedulerInstanceMessage_LeaseRenew); ok {
+			return x.LeaseRenew
+		}
+	}
+	return nil
+}
+
+func (x *SchedulerInstanceMessage) GetAck() *SchedulerAck {
+	if x != nil {
+		if x, ok := x.Payload.(*SchedulerInstanceMessage_Ack); ok {
+			return x.Ack
+		}
+	}
+	return nil
+}
+
+type isSchedulerInstanceMessage_Payload interface {
+	isSchedulerInstanceMessage_Payload()
+}
+
+type SchedulerInstanceMessage_Attach struct {
+	Attach *SchedulerInstanceAttach `protobuf:"bytes,1,opt,name=attach,proto3,oneof"`
+}
+
+type SchedulerInstanceMessage_Heartbeat struct {
+	Heartbeat *ExecutorHeartbeat `protobuf:"bytes,2,opt,name=heartbeat,proto3,oneof"`
+}
+
+type SchedulerInstanceMessage_Run struct {
+	Run *SchedulerRunCommand `protobuf:"bytes,3,opt,name=run,proto3,oneof"`
+}
+
+type SchedulerInstanceMessage_RunUpdate struct {
+	RunUpdate *SchedulerRunUpdate `protobuf:"bytes,4,opt,name=run_update,json=runUpdate,proto3,oneof"`
+}
+
+type SchedulerInstanceMessage_LeaseRenew struct {
+	LeaseRenew *SchedulerRunLeaseRenew `protobuf:"bytes,5,opt,name=lease_renew,json=leaseRenew,proto3,oneof"`
+}
+
+type SchedulerInstanceMessage_Ack struct {
+	Ack *SchedulerAck `protobuf:"bytes,6,opt,name=ack,proto3,oneof"`
+}
+
+func (*SchedulerInstanceMessage_Attach) isSchedulerInstanceMessage_Payload() {}
+
+func (*SchedulerInstanceMessage_Heartbeat) isSchedulerInstanceMessage_Payload() {}
+
+func (*SchedulerInstanceMessage_Run) isSchedulerInstanceMessage_Payload() {}
+
+func (*SchedulerInstanceMessage_RunUpdate) isSchedulerInstanceMessage_Payload() {}
+
+func (*SchedulerInstanceMessage_LeaseRenew) isSchedulerInstanceMessage_Payload() {}
+
+func (*SchedulerInstanceMessage_Ack) isSchedulerInstanceMessage_Payload() {}
+
+type SchedulerInstanceAttach struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	ExecutorId    string                 `protobuf:"bytes,1,opt,name=executor_id,json=executorId,proto3" json:"executor_id,omitempty"`
+	ServiceId     string                 `protobuf:"bytes,2,opt,name=service_id,json=serviceId,proto3" json:"service_id,omitempty"`
+	ServiceKey    string                 `protobuf:"bytes,3,opt,name=service_key,json=serviceKey,proto3" json:"service_key,omitempty"`
+	ReleaseId     string                 `protobuf:"bytes,4,opt,name=release_id,json=releaseId,proto3" json:"release_id,omitempty"`
+	Slot          Slot                   `protobuf:"varint,5,opt,name=slot,proto3,enum=edgepilot.grpcapi.Slot" json:"slot,omitempty"`
+	Group         string                 `protobuf:"bytes,6,opt,name=group,proto3" json:"group,omitempty"`
+	ContainerId   string                 `protobuf:"bytes,7,opt,name=container_id,json=containerId,proto3" json:"container_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SchedulerInstanceAttach) Reset() {
+	*x = SchedulerInstanceAttach{}
+	mi := &file_internal_shared_grpcapi_scheduler_control_proto_msgTypes[9]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SchedulerInstanceAttach) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SchedulerInstanceAttach) ProtoMessage() {}
+
+func (x *SchedulerInstanceAttach) ProtoReflect() protoreflect.Message {
+	mi := &file_internal_shared_grpcapi_scheduler_control_proto_msgTypes[9]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SchedulerInstanceAttach.ProtoReflect.Descriptor instead.
+func (*SchedulerInstanceAttach) Descriptor() ([]byte, []int) {
+	return file_internal_shared_grpcapi_scheduler_control_proto_rawDescGZIP(), []int{9}
+}
+
+func (x *SchedulerInstanceAttach) GetExecutorId() string {
+	if x != nil {
+		return x.ExecutorId
+	}
+	return ""
+}
+
+func (x *SchedulerInstanceAttach) GetServiceId() string {
+	if x != nil {
+		return x.ServiceId
+	}
+	return ""
+}
+
+func (x *SchedulerInstanceAttach) GetServiceKey() string {
+	if x != nil {
+		return x.ServiceKey
+	}
+	return ""
+}
+
+func (x *SchedulerInstanceAttach) GetReleaseId() string {
+	if x != nil {
+		return x.ReleaseId
+	}
+	return ""
+}
+
+func (x *SchedulerInstanceAttach) GetSlot() Slot {
+	if x != nil {
+		return x.Slot
+	}
+	return Slot_SLOT_UNSPECIFIED
+}
+
+func (x *SchedulerInstanceAttach) GetGroup() string {
+	if x != nil {
+		return x.Group
+	}
+	return ""
+}
+
+func (x *SchedulerInstanceAttach) GetContainerId() string {
+	if x != nil {
+		return x.ContainerId
+	}
+	return ""
+}
+
 var File_internal_shared_grpcapi_scheduler_control_proto protoreflect.FileDescriptor
 
 const file_internal_shared_grpcapi_scheduler_control_proto_rawDesc = "" +
@@ -659,9 +897,33 @@ const file_internal_shared_grpcapi_scheduler_control_proto_rawDesc = "" +
 	"\rerror_message\x18\x04 \x01(\tR\ferrorMessage\x12\x18\n" +
 	"\arunning\x18\x05 \x01(\bR\arunning\"/\n" +
 	"\x16SchedulerRunLeaseRenew\x12\x15\n" +
-	"\x06run_id\x18\x01 \x01(\tR\x05runId2j\n" +
+	"\x06run_id\x18\x01 \x01(\tR\x05runId\"\xb8\x03\n" +
+	"\x18SchedulerInstanceMessage\x12D\n" +
+	"\x06attach\x18\x01 \x01(\v2*.edgepilot.grpcapi.SchedulerInstanceAttachH\x00R\x06attach\x12D\n" +
+	"\theartbeat\x18\x02 \x01(\v2$.edgepilot.grpcapi.ExecutorHeartbeatH\x00R\theartbeat\x12:\n" +
+	"\x03run\x18\x03 \x01(\v2&.edgepilot.grpcapi.SchedulerRunCommandH\x00R\x03run\x12F\n" +
+	"\n" +
+	"run_update\x18\x04 \x01(\v2%.edgepilot.grpcapi.SchedulerRunUpdateH\x00R\trunUpdate\x12L\n" +
+	"\vlease_renew\x18\x05 \x01(\v2).edgepilot.grpcapi.SchedulerRunLeaseRenewH\x00R\n" +
+	"leaseRenew\x123\n" +
+	"\x03ack\x18\x06 \x01(\v2\x1f.edgepilot.grpcapi.SchedulerAckH\x00R\x03ackB\t\n" +
+	"\apayload\"\xff\x01\n" +
+	"\x17SchedulerInstanceAttach\x12\x1f\n" +
+	"\vexecutor_id\x18\x01 \x01(\tR\n" +
+	"executorId\x12\x1d\n" +
+	"\n" +
+	"service_id\x18\x02 \x01(\tR\tserviceId\x12\x1f\n" +
+	"\vservice_key\x18\x03 \x01(\tR\n" +
+	"serviceKey\x12\x1d\n" +
+	"\n" +
+	"release_id\x18\x04 \x01(\tR\treleaseId\x12+\n" +
+	"\x04slot\x18\x05 \x01(\x0e2\x17.edgepilot.grpcapi.SlotR\x04slot\x12\x14\n" +
+	"\x05group\x18\x06 \x01(\tR\x05group\x12!\n" +
+	"\fcontainer_id\x18\a \x01(\tR\vcontainerId2j\n" +
 	"\x10SchedulerControl\x12V\n" +
-	"\aConnect\x12\".edgepilot.grpcapi.ExecutorMessage\x1a#.edgepilot.grpcapi.SchedulerMessage(\x010\x01B,Z*edge-pilot/internal/shared/grpcapi;grpcapib\x06proto3"
+	"\aConnect\x12\".edgepilot.grpcapi.ExecutorMessage\x1a#.edgepilot.grpcapi.SchedulerMessage(\x010\x012\x82\x01\n" +
+	"\x18SchedulerInstanceControl\x12f\n" +
+	"\x06Attach\x12+.edgepilot.grpcapi.SchedulerInstanceMessage\x1a+.edgepilot.grpcapi.SchedulerInstanceMessage(\x010\x01B,Z*edge-pilot/internal/shared/grpcapi;grpcapib\x06proto3"
 
 var (
 	file_internal_shared_grpcapi_scheduler_control_proto_rawDescOnce sync.Once
@@ -675,35 +937,46 @@ func file_internal_shared_grpcapi_scheduler_control_proto_rawDescGZIP() []byte {
 	return file_internal_shared_grpcapi_scheduler_control_proto_rawDescData
 }
 
-var file_internal_shared_grpcapi_scheduler_control_proto_msgTypes = make([]protoimpl.MessageInfo, 9)
+var file_internal_shared_grpcapi_scheduler_control_proto_msgTypes = make([]protoimpl.MessageInfo, 11)
 var file_internal_shared_grpcapi_scheduler_control_proto_goTypes = []any{
-	(*ExecutorMessage)(nil),        // 0: edgepilot.grpcapi.ExecutorMessage
-	(*SchedulerMessage)(nil),       // 1: edgepilot.grpcapi.SchedulerMessage
-	(*ExecutorHello)(nil),          // 2: edgepilot.grpcapi.ExecutorHello
-	(*ExecutorHeartbeat)(nil),      // 3: edgepilot.grpcapi.ExecutorHeartbeat
-	(*SchedulerAck)(nil),           // 4: edgepilot.grpcapi.SchedulerAck
-	(*SchedulerRunCommand)(nil),    // 5: edgepilot.grpcapi.SchedulerRunCommand
-	(*SchedulerRunUpdate)(nil),     // 6: edgepilot.grpcapi.SchedulerRunUpdate
-	(*SchedulerRunLeaseRenew)(nil), // 7: edgepilot.grpcapi.SchedulerRunLeaseRenew
-	nil,                            // 8: edgepilot.grpcapi.ExecutorHello.MetadataEntry
-	(Slot)(0),                      // 9: edgepilot.grpcapi.Slot
+	(*ExecutorMessage)(nil),          // 0: edgepilot.grpcapi.ExecutorMessage
+	(*SchedulerMessage)(nil),         // 1: edgepilot.grpcapi.SchedulerMessage
+	(*ExecutorHello)(nil),            // 2: edgepilot.grpcapi.ExecutorHello
+	(*ExecutorHeartbeat)(nil),        // 3: edgepilot.grpcapi.ExecutorHeartbeat
+	(*SchedulerAck)(nil),             // 4: edgepilot.grpcapi.SchedulerAck
+	(*SchedulerRunCommand)(nil),      // 5: edgepilot.grpcapi.SchedulerRunCommand
+	(*SchedulerRunUpdate)(nil),       // 6: edgepilot.grpcapi.SchedulerRunUpdate
+	(*SchedulerRunLeaseRenew)(nil),   // 7: edgepilot.grpcapi.SchedulerRunLeaseRenew
+	(*SchedulerInstanceMessage)(nil), // 8: edgepilot.grpcapi.SchedulerInstanceMessage
+	(*SchedulerInstanceAttach)(nil),  // 9: edgepilot.grpcapi.SchedulerInstanceAttach
+	nil,                              // 10: edgepilot.grpcapi.ExecutorHello.MetadataEntry
+	(Slot)(0),                        // 11: edgepilot.grpcapi.Slot
 }
 var file_internal_shared_grpcapi_scheduler_control_proto_depIdxs = []int32{
-	2, // 0: edgepilot.grpcapi.ExecutorMessage.hello:type_name -> edgepilot.grpcapi.ExecutorHello
-	3, // 1: edgepilot.grpcapi.ExecutorMessage.heartbeat:type_name -> edgepilot.grpcapi.ExecutorHeartbeat
-	6, // 2: edgepilot.grpcapi.ExecutorMessage.run_update:type_name -> edgepilot.grpcapi.SchedulerRunUpdate
-	7, // 3: edgepilot.grpcapi.ExecutorMessage.lease_renew:type_name -> edgepilot.grpcapi.SchedulerRunLeaseRenew
-	4, // 4: edgepilot.grpcapi.SchedulerMessage.ack:type_name -> edgepilot.grpcapi.SchedulerAck
-	5, // 5: edgepilot.grpcapi.SchedulerMessage.run:type_name -> edgepilot.grpcapi.SchedulerRunCommand
-	9, // 6: edgepilot.grpcapi.ExecutorHello.live_slot:type_name -> edgepilot.grpcapi.Slot
-	8, // 7: edgepilot.grpcapi.ExecutorHello.metadata:type_name -> edgepilot.grpcapi.ExecutorHello.MetadataEntry
-	0, // 8: edgepilot.grpcapi.SchedulerControl.Connect:input_type -> edgepilot.grpcapi.ExecutorMessage
-	1, // 9: edgepilot.grpcapi.SchedulerControl.Connect:output_type -> edgepilot.grpcapi.SchedulerMessage
-	9, // [9:10] is the sub-list for method output_type
-	8, // [8:9] is the sub-list for method input_type
-	8, // [8:8] is the sub-list for extension type_name
-	8, // [8:8] is the sub-list for extension extendee
-	0, // [0:8] is the sub-list for field type_name
+	2,  // 0: edgepilot.grpcapi.ExecutorMessage.hello:type_name -> edgepilot.grpcapi.ExecutorHello
+	3,  // 1: edgepilot.grpcapi.ExecutorMessage.heartbeat:type_name -> edgepilot.grpcapi.ExecutorHeartbeat
+	6,  // 2: edgepilot.grpcapi.ExecutorMessage.run_update:type_name -> edgepilot.grpcapi.SchedulerRunUpdate
+	7,  // 3: edgepilot.grpcapi.ExecutorMessage.lease_renew:type_name -> edgepilot.grpcapi.SchedulerRunLeaseRenew
+	4,  // 4: edgepilot.grpcapi.SchedulerMessage.ack:type_name -> edgepilot.grpcapi.SchedulerAck
+	5,  // 5: edgepilot.grpcapi.SchedulerMessage.run:type_name -> edgepilot.grpcapi.SchedulerRunCommand
+	11, // 6: edgepilot.grpcapi.ExecutorHello.live_slot:type_name -> edgepilot.grpcapi.Slot
+	10, // 7: edgepilot.grpcapi.ExecutorHello.metadata:type_name -> edgepilot.grpcapi.ExecutorHello.MetadataEntry
+	9,  // 8: edgepilot.grpcapi.SchedulerInstanceMessage.attach:type_name -> edgepilot.grpcapi.SchedulerInstanceAttach
+	3,  // 9: edgepilot.grpcapi.SchedulerInstanceMessage.heartbeat:type_name -> edgepilot.grpcapi.ExecutorHeartbeat
+	5,  // 10: edgepilot.grpcapi.SchedulerInstanceMessage.run:type_name -> edgepilot.grpcapi.SchedulerRunCommand
+	6,  // 11: edgepilot.grpcapi.SchedulerInstanceMessage.run_update:type_name -> edgepilot.grpcapi.SchedulerRunUpdate
+	7,  // 12: edgepilot.grpcapi.SchedulerInstanceMessage.lease_renew:type_name -> edgepilot.grpcapi.SchedulerRunLeaseRenew
+	4,  // 13: edgepilot.grpcapi.SchedulerInstanceMessage.ack:type_name -> edgepilot.grpcapi.SchedulerAck
+	11, // 14: edgepilot.grpcapi.SchedulerInstanceAttach.slot:type_name -> edgepilot.grpcapi.Slot
+	0,  // 15: edgepilot.grpcapi.SchedulerControl.Connect:input_type -> edgepilot.grpcapi.ExecutorMessage
+	8,  // 16: edgepilot.grpcapi.SchedulerInstanceControl.Attach:input_type -> edgepilot.grpcapi.SchedulerInstanceMessage
+	1,  // 17: edgepilot.grpcapi.SchedulerControl.Connect:output_type -> edgepilot.grpcapi.SchedulerMessage
+	8,  // 18: edgepilot.grpcapi.SchedulerInstanceControl.Attach:output_type -> edgepilot.grpcapi.SchedulerInstanceMessage
+	17, // [17:19] is the sub-list for method output_type
+	15, // [15:17] is the sub-list for method input_type
+	15, // [15:15] is the sub-list for extension type_name
+	15, // [15:15] is the sub-list for extension extendee
+	0,  // [0:15] is the sub-list for field type_name
 }
 
 func init() { file_internal_shared_grpcapi_scheduler_control_proto_init() }
@@ -722,15 +995,23 @@ func file_internal_shared_grpcapi_scheduler_control_proto_init() {
 		(*SchedulerMessage_Ack)(nil),
 		(*SchedulerMessage_Run)(nil),
 	}
+	file_internal_shared_grpcapi_scheduler_control_proto_msgTypes[8].OneofWrappers = []any{
+		(*SchedulerInstanceMessage_Attach)(nil),
+		(*SchedulerInstanceMessage_Heartbeat)(nil),
+		(*SchedulerInstanceMessage_Run)(nil),
+		(*SchedulerInstanceMessage_RunUpdate)(nil),
+		(*SchedulerInstanceMessage_LeaseRenew)(nil),
+		(*SchedulerInstanceMessage_Ack)(nil),
+	}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_internal_shared_grpcapi_scheduler_control_proto_rawDesc), len(file_internal_shared_grpcapi_scheduler_control_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   9,
+			NumMessages:   11,
 			NumExtensions: 0,
-			NumServices:   1,
+			NumServices:   2,
 		},
 		GoTypes:           file_internal_shared_grpcapi_scheduler_control_proto_goTypes,
 		DependencyIndexes: file_internal_shared_grpcapi_scheduler_control_proto_depIdxs,

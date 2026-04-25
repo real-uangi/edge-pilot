@@ -987,6 +987,8 @@ type TaskCommand struct {
 	HttpProbeIntervalSecond int32                  `protobuf:"varint,31,opt,name=http_probe_interval_second,json=httpProbeIntervalSecond,proto3" json:"http_probe_interval_second,omitempty"`
 	HttpSuccessThreshold    int32                  `protobuf:"varint,32,opt,name=http_success_threshold,json=httpSuccessThreshold,proto3" json:"http_success_threshold,omitempty"`
 	HttpHealthHeaders       map[string]string      `protobuf:"bytes,33,rep,name=http_health_headers,json=httpHealthHeaders,proto3" json:"http_health_headers,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	SchedulerSdkPort        int32                  `protobuf:"varint,34,opt,name=scheduler_sdk_port,json=schedulerSdkPort,proto3" json:"scheduler_sdk_port,omitempty"`
+	SchedulerExecutorGroup  string                 `protobuf:"bytes,35,opt,name=scheduler_executor_group,json=schedulerExecutorGroup,proto3" json:"scheduler_executor_group,omitempty"`
 	unknownFields           protoimpl.UnknownFields
 	sizeCache               protoimpl.SizeCache
 }
@@ -1252,6 +1254,20 @@ func (x *TaskCommand) GetHttpHealthHeaders() map[string]string {
 	return nil
 }
 
+func (x *TaskCommand) GetSchedulerSdkPort() int32 {
+	if x != nil {
+		return x.SchedulerSdkPort
+	}
+	return 0
+}
+
+func (x *TaskCommand) GetSchedulerExecutorGroup() string {
+	if x != nil {
+		return x.SchedulerExecutorGroup
+	}
+	return ""
+}
+
 type TaskUpdate struct {
 	state            protoimpl.MessageState `protogen:"open.v1"`
 	TaskId           string                 `protobuf:"bytes,1,opt,name=task_id,json=taskId,proto3" json:"task_id,omitempty"`
@@ -1398,6 +1414,8 @@ type ProxyServiceConfig struct {
 	CandidateReleaseId      string                 `protobuf:"bytes,12,opt,name=candidate_release_id,json=candidateReleaseId,proto3" json:"candidate_release_id,omitempty"`
 	CandidateBackendName    string                 `protobuf:"bytes,13,opt,name=candidate_backend_name,json=candidateBackendName,proto3" json:"candidate_backend_name,omitempty"`
 	CandidateTrafficPercent int32                  `protobuf:"varint,14,opt,name=candidate_traffic_percent,json=candidateTrafficPercent,proto3" json:"candidate_traffic_percent,omitempty"`
+	SchedulerSdkPort        int32                  `protobuf:"varint,15,opt,name=scheduler_sdk_port,json=schedulerSdkPort,proto3" json:"scheduler_sdk_port,omitempty"`
+	SchedulerExecutorGroup  string                 `protobuf:"bytes,16,opt,name=scheduler_executor_group,json=schedulerExecutorGroup,proto3" json:"scheduler_executor_group,omitempty"`
 	unknownFields           protoimpl.UnknownFields
 	sizeCache               protoimpl.SizeCache
 }
@@ -1514,6 +1532,20 @@ func (x *ProxyServiceConfig) GetCandidateTrafficPercent() int32 {
 		return x.CandidateTrafficPercent
 	}
 	return 0
+}
+
+func (x *ProxyServiceConfig) GetSchedulerSdkPort() int32 {
+	if x != nil {
+		return x.SchedulerSdkPort
+	}
+	return 0
+}
+
+func (x *ProxyServiceConfig) GetSchedulerExecutorGroup() string {
+	if x != nil {
+		return x.SchedulerExecutorGroup
+	}
+	return ""
 }
 
 type ProxyConfigSnapshot struct {
@@ -1984,7 +2016,7 @@ const file_internal_shared_grpcapi_agent_control_proto_rawDesc = "" +
 	"\tread_only\x18\x03 \x01(\bR\breadOnly\"S\n" +
 	"\rPublishedPort\x12\x1b\n" +
 	"\thost_port\x18\x01 \x01(\x05R\bhostPort\x12%\n" +
-	"\x0econtainer_port\x18\x02 \x01(\x05R\rcontainerPort\"\xcc\f\n" +
+	"\x0econtainer_port\x18\x02 \x01(\x05R\rcontainerPort\"\xb4\r\n" +
 	"\vTaskCommand\x12\x17\n" +
 	"\atask_id\x18\x01 \x01(\tR\x06taskId\x12\x1d\n" +
 	"\n" +
@@ -2028,7 +2060,9 @@ const file_internal_shared_grpcapi_agent_control_proto_rawDesc = "" +
 	"\x19http_probe_timeout_second\x18\x1e \x01(\x05R\x16httpProbeTimeoutSecond\x12;\n" +
 	"\x1ahttp_probe_interval_second\x18\x1f \x01(\x05R\x17httpProbeIntervalSecond\x124\n" +
 	"\x16http_success_threshold\x18  \x01(\x05R\x14httpSuccessThreshold\x12e\n" +
-	"\x13http_health_headers\x18! \x03(\v25.edgepilot.grpcapi.TaskCommand.HttpHealthHeadersEntryR\x11httpHealthHeaders\x1a6\n" +
+	"\x13http_health_headers\x18! \x03(\v25.edgepilot.grpcapi.TaskCommand.HttpHealthHeadersEntryR\x11httpHealthHeaders\x12,\n" +
+	"\x12scheduler_sdk_port\x18\" \x01(\x05R\x10schedulerSdkPort\x128\n" +
+	"\x18scheduler_executor_group\x18# \x01(\tR\x16schedulerExecutorGroup\x1a6\n" +
 	"\bEnvEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\x1aD\n" +
@@ -2053,7 +2087,7 @@ const file_internal_shared_grpcapi_agent_control_proto_rawDesc = "" +
 	"\x11cleanup_completed\x18\f \x01(\bR\x10cleanupCompleted\x1a:\n" +
 	"\fMetricsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\x03R\x05value:\x028\x01\"\xa6\x04\n" +
+	"\x05value\x18\x02 \x01(\x03R\x05value:\x028\x01\"\x8e\x05\n" +
 	"\x12ProxyServiceConfig\x12\x1d\n" +
 	"\n" +
 	"service_id\x18\x01 \x01(\tR\tserviceId\x12\x1f\n" +
@@ -2070,7 +2104,9 @@ const file_internal_shared_grpcapi_agent_control_proto_rawDesc = "" +
 	"\x11live_backend_name\x18\v \x01(\tR\x0fliveBackendName\x120\n" +
 	"\x14candidate_release_id\x18\f \x01(\tR\x12candidateReleaseId\x124\n" +
 	"\x16candidate_backend_name\x18\r \x01(\tR\x14candidateBackendName\x12:\n" +
-	"\x19candidate_traffic_percent\x18\x0e \x01(\x05R\x17candidateTrafficPercent\"\xde\x01\n" +
+	"\x19candidate_traffic_percent\x18\x0e \x01(\x05R\x17candidateTrafficPercent\x12,\n" +
+	"\x12scheduler_sdk_port\x18\x0f \x01(\x05R\x10schedulerSdkPort\x128\n" +
+	"\x18scheduler_executor_group\x18\x10 \x01(\tR\x16schedulerExecutorGroup\"\xde\x01\n" +
 	"\x13ProxyConfigSnapshot\x12\x19\n" +
 	"\bagent_id\x18\x01 \x01(\tR\aagentId\x12#\n" +
 	"\rfrontend_name\x18\x02 \x01(\tR\ffrontendName\x12'\n" +

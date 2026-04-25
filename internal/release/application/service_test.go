@@ -242,19 +242,21 @@ func TestStartQueuedReleaseDispatchesDeployTask(t *testing.T) {
 	online := true
 	now := time.Now()
 	service := &model.Service{
-		ID:                uuid.New(),
-		ServiceKey:        "svc-a",
-		Name:              "svc-a",
-		AgentID:           "agent-a",
-		ImageRepo:         "repo/app",
-		ContainerPort:     8080,
-		DockerHealthCheck: &dockerHealth,
-		HTTPHealthPath:    "/health",
-		HTTPExpectedCode:  200,
-		HTTPTimeoutSecond: 5,
-		RouteHost:         "svc-a.example.com",
-		RoutePathPrefix:   "/",
-		Enabled:           &enabled,
+		ID:                     uuid.New(),
+		ServiceKey:             "svc-a",
+		Name:                   "svc-a",
+		AgentID:                "agent-a",
+		ImageRepo:              "repo/app",
+		ContainerPort:          8080,
+		SchedulerSDKPort:       19091,
+		SchedulerExecutorGroup: "default",
+		DockerHealthCheck:      &dockerHealth,
+		HTTPHealthPath:         "/health",
+		HTTPExpectedCode:       200,
+		HTTPTimeoutSecond:      5,
+		RouteHost:              "svc-a.example.com",
+		RoutePathPrefix:        "/",
+		Enabled:                &enabled,
 	}
 	serviceRepo.ensure()
 	serviceRepo.byID[service.ID] = service
@@ -295,6 +297,9 @@ func TestStartQueuedReleaseDispatchesDeployTask(t *testing.T) {
 	payload := dispatcher.tasks[0].Payload.Get()
 	if payload.ImageRepo != "repo/override" {
 		t.Fatalf("expected queued image repo to be preserved, got %s", payload.ImageRepo)
+	}
+	if payload.SchedulerSDKPort != 19091 || payload.SchedulerExecutorGroup != "default" {
+		t.Fatalf("unexpected scheduler sdk config in task payload: port=%d group=%q", payload.SchedulerSDKPort, payload.SchedulerExecutorGroup)
 	}
 }
 

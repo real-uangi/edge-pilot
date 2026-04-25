@@ -65,6 +65,8 @@ func (p *ProxyConfigPublisher) buildProxyConfigSnapshot(agentID string, services
 			CandidateReleaseId:      candidateReleaseID,
 			CandidateBackendName:    servicecatalogapp.BackendNameForRelease(item.ServiceID, candidateReleaseID),
 			CandidateTrafficPercent: int32(candidateTrafficPercent),
+			SchedulerSdkPort:        int32(item.SchedulerSDKPort),
+			SchedulerExecutorGroup:  item.SchedulerExecutorGroup,
 		})
 	}
 	return &grpcapi.ProxyConfigSnapshot{

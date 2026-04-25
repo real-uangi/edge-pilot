@@ -23,6 +23,8 @@ export interface ServiceRecord {
   imageRepo: string;
   containerPort: number;
   currentLiveSlot: number;
+  schedulerSdkPort: number;
+  schedulerExecutorGroup: string;
   dockerHealthCheck: boolean | null;
   httpHealthPath: string;
   httpHealthHeaders: Record<string, string>;
@@ -293,6 +295,8 @@ export interface UpsertServiceInput {
   httpProbeTimeoutSecond: number;
   httpProbeIntervalSecond: number;
   httpSuccessThreshold: number;
+  schedulerSdkPort: number;
+  schedulerExecutorGroup: string;
   routeHost: string;
   routePathPrefix: string;
   env: Record<string, string>;

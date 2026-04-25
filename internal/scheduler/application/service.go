@@ -16,9 +16,11 @@ import (
 )
 
 type OnlineExecutor struct {
-	ExecutorID string
-	Group      string
-	LiveSlot   model.Slot
+	ExecutorID      string
+	Group           string
+	LiveSlot        model.Slot
+	ServiceInstance bool
+	ServiceID       string
 }
 
 type RunDispatcher interface {
@@ -304,6 +306,67 @@ func (s *Service) AuthenticateExecutor(executorID string, token string, group st
 	return executor, nil
 }
 
+func (s *Service) RegisterServiceInstanceExecutor(executorID string, group string, liveSlot model.Slot, metadata map[string]string, relayAgentID string, relayRoutingKey string) (*model.SchedulerExecutor, error) {
+	executorID = strings.TrimSpace(executorID)
+	group = strings.TrimSpace(group)
+	relayAgentID = strings.TrimSpace(relayAgentID)
+	relayRoutingKey = strings.TrimSpace(relayRoutingKey)
+	if executorID == "" {
+		return nil, business.NewBadRequest("executorId required")
+	}
+	if group == "" {
+		return nil, business.NewBadRequest("group required")
+	}
+	if relayAgentID == "" {
+		return nil, business.NewBadRequest("relayAgentID required")
+	}
+	cleanMeta := sanitizeExecutorMetadata(metadata)
+	serviceID, err := serviceIDFromServiceInstanceMetadata(cleanMeta)
+	if err != nil {
+		return nil, err
+	}
+	releaseID := strings.TrimSpace(cleanMeta["release_id"])
+	if releaseID == "" {
+		return nil, business.NewBadRequest("release_id required in metadata")
+	}
+	containerID := strings.TrimSpace(cleanMeta["container_id"])
+	if containerID == "" {
+		return nil, business.NewBadRequest("container_id required in metadata")
+	}
+	expectedExecutorID := schedulerServiceInstanceExecutorID(serviceID.String(), releaseID, liveSlot, containerID)
+	if expectedExecutorID == "" || executorID != expectedExecutorID {
+		return nil, business.NewBadRequest("executorId mismatch with service instance metadata")
+	}
+	if relayRoutingKey != "" && relayRoutingKey != executorID {
+		return nil, business.ErrUnauthorized
+	}
+	existing, err := s.repo.GetExecutor(executorID)
+	if err != nil {
+		return nil, err
+	}
+	if existing != nil && strings.TrimSpace(existing.RelayAgentID) != "" && strings.TrimSpace(existing.RelayAgentID) != relayAgentID {
+		return nil, business.ErrUnauthorized
+	}
+	now := time.Now().UTC()
+	enabled := true
+	executor := &model.SchedulerExecutor{
+		ID:              executorID,
+		TokenHash:       "agent-relay-service-instance",
+		Group:           group,
+		ChannelMode:     model.SchedulerExecutorChannelModeAgentRelay,
+		RelayAgentID:    relayAgentID,
+		RelayRoutingKey: relayRoutingKey,
+		Enabled:         &enabled,
+		LiveSlot:        liveSlot,
+		LastSeenAt:      &now,
+		InstanceMeta:    commondb.NewJSONB(cleanMeta),
+	}
+	if err := s.repo.UpsertExecutor(executor); err != nil {
+		return nil, err
+	}
+	return executor, nil
+}
+
 func (s *Service) HeartbeatExecutor(executorID string) error {
 	return s.repo.MarkExecutorSeen(executorID, time.Now().UTC())
 }
@@ -493,19 +556,29 @@ func (s *Service) pickExecutorAndClaim(run *model.SchedulerJobRun, now time.Time
 
 func (s *Service) pickExecutorID(run *model.SchedulerJobRun, online []OnlineExecutor) (string, error) {
 	if run.DispatchPolicy == model.SchedulerDispatchPolicyFixedLiveSlot {
-		serviceID, err := serviceIDFromPayload(runPayload(run))
+		runServiceID, err := serviceIDFromPayload(runPayload(run))
 		if err != nil {
 			return "", err
 		}
 		targetSlot := model.SlotBlue
 		if s.liveSlot != nil {
-			targetSlot, err = s.liveSlot.ResolveLiveSlot(serviceID)
+			targetSlot, err = s.liveSlot.ResolveLiveSlot(runServiceID)
 			if err != nil {
 				return "", err
 			}
 		}
 		for i := range online {
-			if online[i].LiveSlot == targetSlot {
+			if online[i].LiveSlot != targetSlot || !online[i].ServiceInstance {
+				continue
+			}
+			onlineServiceID, ok := serviceInstanceServiceID(online[i])
+			if !ok || onlineServiceID != runServiceID {
+				continue
+			}
+			return online[i].ExecutorID, nil
+		}
+		for i := range online {
+			if online[i].LiveSlot == targetSlot && !online[i].ServiceInstance {
 				return online[i].ExecutorID, nil
 			}
 		}
@@ -764,6 +837,59 @@ func serviceIDFromPayload(payload map[string]any) (uuid.UUID, error) {
 		return uuid.Nil, fmt.Errorf("invalid serviceId: %w", err)
 	}
 	return id, nil
+}
+
+func serviceIDFromServiceInstanceMetadata(metadata map[string]string) (uuid.UUID, error) {
+	raw := strings.TrimSpace(metadata["service_id"])
+	if raw == "" {
+		return uuid.Nil, business.NewBadRequest("service_id required in metadata")
+	}
+	id, err := uuid.Parse(raw)
+	if err != nil {
+		return uuid.Nil, business.NewBadRequest("service_id must be valid uuid")
+	}
+	return id, nil
+}
+
+func schedulerServiceInstanceExecutorID(serviceID string, releaseID string, slot model.Slot, containerID string) string {
+	serviceID = strings.TrimSpace(serviceID)
+	releaseID = strings.TrimSpace(releaseID)
+	containerID = strings.TrimSpace(containerID)
+	if serviceID == "" || releaseID == "" || containerID == "" {
+		return ""
+	}
+	return fmt.Sprintf("svc:%s:rel:%s:slot:%s:ctr:%s", serviceID, releaseID, schedulerSlotToken(slot), shortContainerID(containerID))
+}
+
+func schedulerSlotToken(slot model.Slot) string {
+	switch slot {
+	case model.SlotBlue:
+		return "blue"
+	case model.SlotGreen:
+		return "green"
+	default:
+		return "unknown"
+	}
+}
+
+func shortContainerID(containerID string) string {
+	containerID = strings.TrimSpace(containerID)
+	if len(containerID) <= 12 {
+		return containerID
+	}
+	return containerID[:12]
+}
+
+func serviceInstanceServiceID(executor OnlineExecutor) (uuid.UUID, bool) {
+	raw := strings.TrimSpace(executor.ServiceID)
+	if raw == "" {
+		return uuid.Nil, false
+	}
+	id, err := uuid.Parse(raw)
+	if err != nil {
+		return uuid.Nil, false
+	}
+	return id, true
 }
 
 func jobPayload(job *model.SchedulerJob) map[string]any {

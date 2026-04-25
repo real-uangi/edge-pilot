@@ -53,6 +53,56 @@ func TestCreateRejectsDuplicateRouteOnSameAgent(t *testing.T) {
 	}
 }
 
+func TestCreateServiceSchedulerSDKConfig(t *testing.T) {
+	repo := newFakeServiceCatalogRepo()
+	agents := &fakeAgentLookup{agents: map[string]*dto.AgentOutput{
+		"11111111-1111-1111-1111-111111111111": {ID: "11111111-1111-1111-1111-111111111111", Enabled: boolPointer(true)},
+	}}
+	svc := NewServiceWithPublisher(repo, nil, agents)
+
+	created, err := svc.Create(dto.UpsertServiceRequest{
+		Name:             "svc-scheduler",
+		ServiceKey:       "svc-scheduler",
+		AgentID:          "11111111-1111-1111-1111-111111111111",
+		ImageRepo:        "repo/app",
+		ContainerPort:    8080,
+		SchedulerSDKPort: 19091,
+		RouteHost:        "scheduler.example.com",
+	})
+	if err != nil {
+		t.Fatalf("Create() error = %v", err)
+	}
+	if created.SchedulerSDKPort != 19091 || created.SchedulerExecutorGroup != "default" {
+		t.Fatalf("unexpected scheduler sdk config: port=%d group=%q", created.SchedulerSDKPort, created.SchedulerExecutorGroup)
+	}
+
+	spec, err := svc.GetSpecByID(created.ID)
+	if err != nil {
+		t.Fatalf("GetSpecByID() error = %v", err)
+	}
+	if spec.SchedulerSDKPort != 19091 || spec.SchedulerExecutorGroup != "default" {
+		t.Fatalf("unexpected deployment scheduler sdk config: port=%d group=%q", spec.SchedulerSDKPort, spec.SchedulerExecutorGroup)
+	}
+}
+
+func TestCreateServiceRejectsInvalidSchedulerSDKPort(t *testing.T) {
+	repo := newFakeServiceCatalogRepo()
+	svc := NewServiceWithPublisher(repo, nil, nil)
+
+	_, err := svc.Create(dto.UpsertServiceRequest{
+		Name:             "svc-bad",
+		ServiceKey:       "svc-bad",
+		AgentID:          "11111111-1111-1111-1111-111111111111",
+		ImageRepo:        "repo/app",
+		ContainerPort:    8080,
+		SchedulerSDKPort: 70000,
+		RouteHost:        "bad.example.com",
+	})
+	if err == nil {
+		t.Fatalf("expected invalid scheduler sdk port error")
+	}
+}
+
 func TestBuildProxyServiceConfigsSortsLongestPathFirst(t *testing.T) {
 	enabled := true
 	configs := BuildProxyServiceConfigs([]model.Service{

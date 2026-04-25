@@ -5,6 +5,7 @@ import (
 	"edge-pilot/internal/shared/grpcapi"
 	"edge-pilot/internal/shared/model"
 	"encoding/json"
+	"strings"
 	"sync"
 
 	"github.com/google/uuid"
@@ -33,18 +34,22 @@ type schedulerSessionHub struct {
 }
 
 type executorSession struct {
-	mu             sync.Mutex
-	executorID     string
-	group          string
-	liveSlot       model.Slot
-	channelType    schedulerChannelType
-	relaySessionID string
-	agentID        string
-	routingKey     string
-	sendCh         chan *grpcapi.SchedulerMessage
-	closed         bool
-	agentHub       *sessionHub
+	mu              sync.Mutex
+	executorID      string
+	group           string
+	liveSlot        model.Slot
+	channelType     schedulerChannelType
+	relaySessionID  string
+	agentID         string
+	routingKey      string
+	serviceInstance bool
+	serviceID       string
+	sendCh          chan *grpcapi.SchedulerMessage
+	closed          bool
+	agentHub        *sessionHub
 }
+
+const schedulerServiceInstanceMetadataKey = "edge_pilot_service_instance"
 
 func NewSchedulerSessionHub() *schedulerSessionHub {
 	return &schedulerSessionHub{sessions: make(map[schedulerSessionKey]*executorSession)}
@@ -68,7 +73,7 @@ func (h *schedulerSessionHub) registerDirect(executorID string, group string, li
 	return session
 }
 
-func (h *schedulerSessionHub) registerRelay(executorID string, group string, liveSlot model.Slot, agentID string, relaySessionID string, routingKey string, agentHub *sessionHub) *executorSession {
+func (h *schedulerSessionHub) registerRelay(executorID string, group string, liveSlot model.Slot, agentID string, relaySessionID string, routingKey string, serviceInstance bool, serviceID string, agentHub *sessionHub) *executorSession {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	key := schedulerSessionKey{executorID: executorID, channelType: schedulerChannelRelay, relaySessionID: relaySessionID}
@@ -76,14 +81,16 @@ func (h *schedulerSessionHub) registerRelay(executorID string, group string, liv
 		existing.close()
 	}
 	session := &executorSession{
-		executorID:     executorID,
-		group:          group,
-		liveSlot:       liveSlot,
-		channelType:    schedulerChannelRelay,
-		relaySessionID: relaySessionID,
-		agentID:        agentID,
-		routingKey:     routingKey,
-		agentHub:       agentHub,
+		executorID:      executorID,
+		group:           group,
+		liveSlot:        liveSlot,
+		channelType:     schedulerChannelRelay,
+		relaySessionID:  relaySessionID,
+		agentID:         agentID,
+		routingKey:      routingKey,
+		serviceInstance: serviceInstance,
+		serviceID:       strings.TrimSpace(serviceID),
+		agentHub:        agentHub,
 	}
 	h.sessions[key] = session
 	return session
@@ -185,9 +192,11 @@ func (h *schedulerSessionHub) ListOnlineExecutors(group string) []schedulerapp.O
 		}
 		seen[session.executorID] = struct{}{}
 		out = append(out, schedulerapp.OnlineExecutor{
-			ExecutorID: session.executorID,
-			Group:      session.group,
-			LiveSlot:   session.liveSlot,
+			ExecutorID:      session.executorID,
+			Group:           session.group,
+			LiveSlot:        session.liveSlot,
+			ServiceInstance: session.serviceInstance,
+			ServiceID:       session.serviceID,
 		})
 	}
 	for _, session := range h.sessions {
@@ -202,9 +211,11 @@ func (h *schedulerSessionHub) ListOnlineExecutors(group string) []schedulerapp.O
 		}
 		seen[session.executorID] = struct{}{}
 		out = append(out, schedulerapp.OnlineExecutor{
-			ExecutorID: session.executorID,
-			Group:      session.group,
-			LiveSlot:   session.liveSlot,
+			ExecutorID:      session.executorID,
+			Group:           session.group,
+			LiveSlot:        session.liveSlot,
+			ServiceInstance: session.serviceInstance,
+			ServiceID:       session.serviceID,
 		})
 	}
 	return out
@@ -338,23 +349,44 @@ func (s *SchedulerServer) handleRelayExecutorMessage(agentID string, envelope *g
 	}
 	if msg.GetHello() != nil {
 		hello := msg.GetHello()
-		executor, err := s.service.AuthenticateExecutor(
-			hello.GetExecutorId(),
-			hello.GetToken(),
-			hello.GetGroup(),
-			model.Slot(hello.GetLiveSlot()),
-			hello.GetMetadata(),
-			agentID,
-			envelope.GetRoutingKey(),
-		)
-		if err != nil {
-			return err
-		}
-		relaySessionID := envelope.GetRelaySessionId()
+		relaySessionID := strings.TrimSpace(envelope.GetRelaySessionId())
 		if relaySessionID == "" {
 			return status.Error(codes.InvalidArgument, "relay_session_id required")
 		}
-		s.hub.registerRelay(hello.GetExecutorId(), executor.Group, executor.LiveSlot, agentID, relaySessionID, envelope.GetRoutingKey(), s.agentHub)
+		if strings.TrimSpace(hello.GetExecutorId()) == "" {
+			return status.Error(codes.InvalidArgument, "executor_id required")
+		}
+		var executor *model.SchedulerExecutor
+		var err error
+		serviceInstance := hello.GetMetadata()[schedulerServiceInstanceMetadataKey] == "true"
+		if serviceInstance {
+			executor, err = s.service.RegisterServiceInstanceExecutor(
+				hello.GetExecutorId(),
+				hello.GetGroup(),
+				model.Slot(hello.GetLiveSlot()),
+				hello.GetMetadata(),
+				agentID,
+				envelope.GetRoutingKey(),
+			)
+		} else {
+			executor, err = s.service.AuthenticateExecutor(
+				hello.GetExecutorId(),
+				hello.GetToken(),
+				hello.GetGroup(),
+				model.Slot(hello.GetLiveSlot()),
+				hello.GetMetadata(),
+				agentID,
+				envelope.GetRoutingKey(),
+			)
+		}
+		if err != nil {
+			return err
+		}
+		executorMeta := map[string]string{}
+		if executor.InstanceMeta != nil {
+			executorMeta = executor.InstanceMeta.Get()
+		}
+		s.hub.registerRelay(hello.GetExecutorId(), executor.Group, executor.LiveSlot, agentID, relaySessionID, envelope.GetRoutingKey(), serviceInstance, executorMeta["service_id"], s.agentHub)
 		ack := &grpcapi.SchedulerMessage{Payload: &grpcapi.SchedulerMessage_Ack{Ack: &grpcapi.SchedulerAck{Message: "connected"}}}
 		session := s.hub.getRelay(relaySessionID, agentID)
 		if session != nil {

@@ -33,6 +33,8 @@ type UpsertServiceRequest struct {
 	HTTPProbeTimeoutSecond  int               `json:"httpProbeTimeoutSecond"`
 	HTTPProbeIntervalSecond int               `json:"httpProbeIntervalSecond"`
 	HTTPSuccessThreshold    int               `json:"httpSuccessThreshold"`
+	SchedulerSDKPort        int               `json:"schedulerSdkPort"`
+	SchedulerExecutorGroup  string            `json:"schedulerExecutorGroup"`
 	RouteHost               string            `json:"routeHost" binding:"required"`
 	RoutePathPrefix         string            `json:"routePathPrefix"`
 	Env                     map[string]string `json:"env"`
@@ -60,6 +62,8 @@ type ServiceOutput struct {
 	HTTPProbeTimeoutSecond  int               `json:"httpProbeTimeoutSecond"`
 	HTTPProbeIntervalSecond int               `json:"httpProbeIntervalSecond"`
 	HTTPSuccessThreshold    int               `json:"httpSuccessThreshold"`
+	SchedulerSDKPort        int               `json:"schedulerSdkPort"`
+	SchedulerExecutorGroup  string            `json:"schedulerExecutorGroup"`
 	RouteHost               string            `json:"routeHost"`
 	RoutePathPrefix         string            `json:"routePathPrefix"`
 	Env                     map[string]string `json:"env"`
@@ -89,6 +93,8 @@ type ServiceDeploymentSpec struct {
 	HTTPProbeTimeoutSecond  int
 	HTTPProbeIntervalSecond int
 	HTTPSuccessThreshold    int
+	SchedulerSDKPort        int
+	SchedulerExecutorGroup  string
 	RouteHost               string
 	RoutePathPrefix         string
 	Env                     map[string]string
