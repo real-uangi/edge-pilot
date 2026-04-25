@@ -177,6 +177,9 @@ func TestCreateFromCIPopulatesVerificationAccessInfo(t *testing.T) {
 	if output.LiveReleaseHeaderName != servicecatalogapp.LiveReleaseIDHeaderName {
 		t.Fatalf("unexpected live release header name: %q", output.LiveReleaseHeaderName)
 	}
+	if output.ReleaseRoleHeaderName != servicecatalogapp.ReleaseRoleHeaderName {
+		t.Fatalf("unexpected release role header name: %q", output.ReleaseRoleHeaderName)
+	}
 }
 
 func TestCreateFromCIAllowsMultipleQueuedRequestsForDifferentImages(t *testing.T) {

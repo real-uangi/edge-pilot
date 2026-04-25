@@ -257,7 +257,7 @@ func TestFormatDataplaneFailureContextIncludesFrontendDetails(t *testing.T) {
 				Mode:              "http",
 				From:              managedProxyDefaultsName,
 				Balance:           backendBalance{Algorithm: "roundrobin"},
-				HTTPResponseRules: serviceBackendResponseRules("svc-a", "/", "release-blue", "release-blue"),
+				HTTPResponseRules: serviceBackendResponseRules("svc-a", "/", "release-blue", "release-blue", servicecatalogapp.ReleaseRoleLive),
 			},
 		},
 	})
@@ -326,6 +326,9 @@ func TestFormatDataplaneFailureContextIncludesRenderedFrontendConfig(t *testing.
 	if strings.Contains(contextText, "http-after-response") {
 		t.Fatalf("expected rendered frontend config without response rule lines, got %s", contextText)
 	}
+	if !strings.Contains(contextText, "http-request return status 204") {
+		t.Fatalf("expected rendered frontend config with normalize return rule, got %s", contextText)
+	}
 	if !strings.Contains(contextText, "use_backend be-api_blue") {
 		t.Fatalf("expected backend switching lines in rendered config, got %s", contextText)
 	}
@@ -378,19 +381,47 @@ func TestReconcileLockedPrecreatesServersWithResolversForEmptyInstances(t *testi
 func TestFrontendSectionAddsStickyPreviewRoutingRules(t *testing.T) {
 	proxy := newTestManagedProxyRuntime(&fakeManagedProxyDataplane{}, &fakeManagedProxyRuntime{})
 
-	section := proxy.frontendSection(testProxySnapshotWithService(grpcapi.Slot_SLOT_GREEN))
+	snapshot := testProxySnapshotWithService(grpcapi.Slot_SLOT_GREEN)
+	snapshot.Services[0].CandidateTrafficPercent = 30
+	section := proxy.frontendSection(snapshot)
 
-	if len(section.BackendSwitchingRuleList) != 5 {
-		t.Fatalf("expected 5 switching rules, got %d", len(section.BackendSwitchingRuleList))
+	if len(section.BackendSwitchingRuleList) != 6 {
+		t.Fatalf("expected 6 switching rules, got %d", len(section.BackendSwitchingRuleList))
 	}
 	if section.BackendSwitchingRuleList[0].Name != "be-api_blue" {
 		t.Fatalf("expected blue preview backend first, got %q", section.BackendSwitchingRuleList[0].Name)
 	}
-	if section.BackendSwitchingRuleList[4].Name != "be-api_green" {
-		t.Fatalf("expected live green backend fallback, got %q", section.BackendSwitchingRuleList[4].Name)
+	if section.BackendSwitchingRuleList[5].Name != "be-api_green" {
+		t.Fatalf("expected live green backend fallback, got %q", section.BackendSwitchingRuleList[5].Name)
 	}
-	if len(section.HTTPAfterResponseRules) != 0 {
-		t.Fatalf("expected frontend to not define response header rules, got %d", len(section.HTTPAfterResponseRules))
+	if len(section.HTTPRequestRules) != 5 {
+		t.Fatalf("expected 5 normalize request rules, got %d", len(section.HTTPRequestRules))
+	}
+	if section.HTTPRequestRules[0].Type != "set-header" || !strings.Contains(section.HTTPRequestRules[0].CondTest, "normalize_path") {
+		t.Fatalf("expected normalize current release header rule first, got %#v", section.HTTPRequestRules[0])
+	}
+	if section.HTTPRequestRules[4].Type != "return" || section.HTTPRequestRules[4].Status != 204 {
+		t.Fatalf("expected normalize return rule last, got %#v", section.HTTPRequestRules[4])
+	}
+}
+
+func TestFrontendSectionSkipsCandidateCookieRuleWhenSplitInactive(t *testing.T) {
+	proxy := newTestManagedProxyRuntime(&fakeManagedProxyDataplane{}, &fakeManagedProxyRuntime{})
+
+	snapshot := testProxySnapshotWithService(grpcapi.Slot_SLOT_GREEN)
+	snapshot.Services[0].CandidateTrafficPercent = 0
+	section := proxy.frontendSection(snapshot)
+
+	if len(section.HTTPRequestRules) != 5 {
+		t.Fatalf("expected 5 normalize request rules when split inactive, got %d", len(section.HTTPRequestRules))
+	}
+	for _, rule := range section.BackendSwitchingRuleList {
+		if rule.Name != "be-api_blue" {
+			continue
+		}
+		if strings.Contains(rule.CondTest, "cookie_candidate") {
+			t.Fatalf("expected candidate cookie override rule to be absent when split inactive, got %q", rule.CondTest)
+		}
 	}
 }
 
@@ -407,7 +438,9 @@ func TestReconcileLockedBuildsBackendResponseHeaderRules(t *testing.T) {
 	runtime := &fakeManagedProxyRuntime{callLog: &callLog}
 	proxy := newTestManagedProxyRuntime(dataplane, runtime)
 
-	if err := proxy.reconcileLocked(context.Background(), testProxySnapshotWithService(grpcapi.Slot_SLOT_GREEN)); err != nil {
+	snapshot := testProxySnapshotWithService(grpcapi.Slot_SLOT_GREEN)
+	snapshot.Services[0].CandidateTrafficPercent = 30
+	if err := proxy.reconcileLocked(context.Background(), snapshot); err != nil {
 		t.Fatalf("reconcileLocked() error = %v", err)
 	}
 
@@ -425,6 +458,8 @@ func TestReconcileLockedBuildsBackendResponseHeaderRules(t *testing.T) {
 	assertBackendResponseRuleExact(t, green.HTTPResponseRules, servicecatalogapp.CurrentReleaseIDHeaderName, "release-green")
 	assertBackendResponseRuleExact(t, blue.HTTPResponseRules, servicecatalogapp.LiveReleaseIDHeaderName, "release-green")
 	assertBackendResponseRuleExact(t, green.HTTPResponseRules, servicecatalogapp.LiveReleaseIDHeaderName, "release-green")
+	assertBackendResponseRuleExact(t, blue.HTTPResponseRules, servicecatalogapp.ReleaseRoleHeaderName, servicecatalogapp.ReleaseRoleCanary)
+	assertBackendResponseRuleExact(t, green.HTTPResponseRules, servicecatalogapp.ReleaseRoleHeaderName, servicecatalogapp.ReleaseRoleLive)
 	blueServer := findServerEntry(dataplane.serverEntries, "be-api_blue")
 	greenServer := findServerEntry(dataplane.serverEntries, "be-api_green")
 	if blueServer == nil || greenServer == nil {
@@ -448,6 +483,27 @@ func TestReconcileLockedBuildsBackendResponseHeaderRules(t *testing.T) {
 				t.Fatalf("backend %s rule[%d] should be unconditional, got %#v", backend.Name, i, rule)
 			}
 		}
+	}
+}
+
+func TestFrontendSectionNormalizeRuleUsesServicePath(t *testing.T) {
+	proxy := newTestManagedProxyRuntime(&fakeManagedProxyDataplane{}, &fakeManagedProxyRuntime{})
+
+	snapshot := testProxySnapshotWithService(grpcapi.Slot_SLOT_BLUE)
+	snapshot.Services[0].RoutePathPrefix = "/v1"
+	section := proxy.frontendSection(snapshot)
+
+	foundNormalizePathACL := false
+	for _, acl := range section.ACLList {
+		if strings.Contains(acl.Name, "normalize_path") {
+			foundNormalizePathACL = true
+			if acl.Value != "-i /v1/__ep/normalize" {
+				t.Fatalf("expected normalize path acl value -i /v1/__ep/normalize, got %q", acl.Value)
+			}
+		}
+	}
+	if !foundNormalizePathACL {
+		t.Fatal("expected normalize path acl")
 	}
 }
 
@@ -475,8 +531,8 @@ func TestReconcileLockedFiltersInvalidBackendResponseHeaderRules(t *testing.T) {
 	if blue == nil || green == nil {
 		t.Fatalf("expected both blue/green backend configs, got %#v", dataplane.backendConfigs)
 	}
-	if len(blue.HTTPResponseRules) != 3 {
-		t.Fatalf("expected blue backend keep 3 response rules, got %d", len(blue.HTTPResponseRules))
+	if len(blue.HTTPResponseRules) != 4 {
+		t.Fatalf("expected blue backend keep 4 response rules, got %d", len(blue.HTTPResponseRules))
 	}
 	if len(green.HTTPResponseRules) != 1 {
 		t.Fatalf("expected green backend keep only live release header rule, got %d", len(green.HTTPResponseRules))

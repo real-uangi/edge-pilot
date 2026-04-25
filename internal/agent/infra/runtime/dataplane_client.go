@@ -31,6 +31,7 @@ type frontendSection struct {
 	Binds                    map[string]frontendBind `json:"binds"`
 	ACLList                  []frontendACL           `json:"acl_list,omitempty"`
 	BackendSwitchingRuleList []frontendSwitchRule    `json:"backend_switching_rule_list,omitempty"`
+	HTTPRequestRules         []httpRequestRule       `json:"http_request_rule_list,omitempty"`
 	HTTPAfterResponseRules   []httpAfterResponseRule `json:"http_after_response_rule_list,omitempty"`
 }
 
@@ -52,6 +53,19 @@ type frontendSwitchRule struct {
 	Cond     string `json:"cond"`
 	CondTest string `json:"cond_test"`
 	Index    int    `json:"index"`
+}
+
+type httpRequestRule struct {
+	Type        string `json:"type"`
+	Action      string `json:"-"`
+	Header      string `json:"hdr_name,omitempty"`
+	Format      string `json:"hdr_format,omitempty"`
+	Status      int    `json:"status,omitempty"`
+	ContentType string `json:"content_type,omitempty"`
+	String      string `json:"string,omitempty"`
+	Cond        string `json:"cond,omitempty"`
+	CondTest    string `json:"cond_test,omitempty"`
+	Index       int    `json:"index"`
 }
 
 type httpAfterResponseRule struct {
@@ -146,6 +160,7 @@ func (c *DataPlaneAPIClient) ShowRawConfigInTransaction(ctx context.Context, tra
 }
 
 func (c *DataPlaneAPIClient) ReplaceFrontend(ctx context.Context, section frontendSection) error {
+	section.HTTPRequestRules = filterHTTPRequestRules(section.HTTPRequestRules)
 	section.HTTPAfterResponseRules = filterHTTPAfterResponseRules(section.HTTPAfterResponseRules)
 	version, err := c.ConfigurationVersion(ctx)
 	if err != nil {
@@ -164,6 +179,7 @@ func (c *DataPlaneAPIClient) ReplaceFrontend(ctx context.Context, section fronte
 }
 
 func (c *DataPlaneAPIClient) ReplaceFrontendInTransaction(ctx context.Context, transactionID string, section frontendSection) error {
+	section.HTTPRequestRules = filterHTTPRequestRules(section.HTTPRequestRules)
 	section.HTTPAfterResponseRules = filterHTTPAfterResponseRules(section.HTTPAfterResponseRules)
 	path := c.configurationPath("/v3/services/haproxy/configuration/frontends/"+url.PathEscape(section.Name), "", transactionID, true)
 	if _, err := c.do(ctx, http.MethodPut, path, section); err != nil {
@@ -175,6 +191,51 @@ func (c *DataPlaneAPIClient) ReplaceFrontendInTransaction(ctx context.Context, t
 		return err
 	}
 	return nil
+}
+
+func filterHTTPRequestRules(rules []httpRequestRule) []httpRequestRule {
+	out := make([]httpRequestRule, 0, len(rules))
+	for _, rule := range rules {
+		rule.Type = strings.TrimSpace(rule.Type)
+		if rule.Type == "" {
+			continue
+		}
+		switch rule.Type {
+		case "set-header", "add-header":
+			if strings.TrimSpace(rule.Header) == "" || strings.TrimSpace(rule.Format) == "" {
+				continue
+			}
+			rule.Format = normalizeHAProxyFmt(rule.Format)
+		case "return":
+			if rule.Status <= 0 {
+				rule.Status = http.StatusOK
+			}
+			rule.ContentType = strings.TrimSpace(rule.ContentType)
+			rule.String = strings.TrimSpace(rule.String)
+		default:
+			continue
+		}
+		rule.Cond = strings.TrimSpace(rule.Cond)
+		rule.CondTest = strings.TrimSpace(rule.CondTest)
+		if strings.HasPrefix(rule.CondTest, "if ") {
+			rule.Cond = "if"
+			rule.CondTest = strings.TrimSpace(strings.TrimPrefix(rule.CondTest, "if "))
+		} else if strings.HasPrefix(rule.CondTest, "unless ") {
+			rule.Cond = "unless"
+			rule.CondTest = strings.TrimSpace(strings.TrimPrefix(rule.CondTest, "unless "))
+		}
+		if rule.CondTest == "" {
+			continue
+		}
+		if rule.Cond != "if" && rule.Cond != "unless" {
+			rule.Cond = "if"
+		}
+		out = append(out, rule)
+	}
+	for i := range out {
+		out[i].Index = i
+	}
+	return out
 }
 
 func filterHTTPAfterResponseRules(rules []httpAfterResponseRule) []httpAfterResponseRule {

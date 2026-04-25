@@ -1185,6 +1185,7 @@ func toReleaseOutput(release *model.Release) dto.ReleaseOutput {
 		StickyCookieTTL:          servicecatalogapp.StickyCookieMaxAgeSec,
 		CurrentReleaseHeaderName: servicecatalogapp.CurrentReleaseIDHeaderName,
 		LiveReleaseHeaderName:    servicecatalogapp.LiveReleaseIDHeaderName,
+		ReleaseRoleHeaderName:    servicecatalogapp.ReleaseRoleHeaderName,
 		IsActive:                 release.Status.IsActive(),
 		CreatedAt:                release.CreatedAt,
 		UpdatedAt:                release.UpdatedAt,

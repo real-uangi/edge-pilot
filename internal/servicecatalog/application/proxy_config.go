@@ -15,8 +15,13 @@ const (
 	SharedDefaultBackend       = "ep_default"
 	SharedFrontendBindPort     = 80
 	PreviewReleaseIDQueryParam = "__ep_release_id"
+	NormalizeStickyPathSuffix  = "/__ep/normalize"
 	CurrentReleaseIDHeaderName = "X-Edge-Pilot-Current-Release-Id"
 	LiveReleaseIDHeaderName    = "X-Edge-Pilot-Live-Release-Id"
+	ReleaseRoleHeaderName      = "X-Edge-Pilot-Release-Role"
+	ReleaseRoleLive            = "live"
+	ReleaseRoleCanary          = "canary"
+	ReleaseRoleHistorical      = "historical"
 	StickyCookieMaxAgeSec      = 600
 )
 
@@ -110,6 +115,14 @@ func BuildVerificationURL(routeHost string, routePathPrefix string, releaseID st
 	values := url.Values{}
 	values.Set(PreviewReleaseIDQueryParam, releaseID)
 	return "//" + host + NormalizeRoutePathPrefix(routePathPrefix) + "?" + values.Encode()
+}
+
+func BuildStickyNormalizePath(routePathPrefix string) string {
+	prefix := NormalizeRoutePathPrefix(routePathPrefix)
+	if prefix == "/" {
+		return NormalizeStickyPathSuffix
+	}
+	return prefix + NormalizeStickyPathSuffix
 }
 
 func ServerName(slot model.Slot) string {

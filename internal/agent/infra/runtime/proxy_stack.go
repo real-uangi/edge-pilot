@@ -420,6 +420,7 @@ func (m *ManagedProxyRuntime) reconcileLocked(ctx context.Context, snapshot *grp
 					service.GetRoutePathPrefix(),
 					target.ReleaseID,
 					strings.TrimSpace(service.GetLiveReleaseId()),
+					releaseRoleForTarget(target, service),
 				),
 			}
 			failureContext.Backends = append(failureContext.Backends, backend)
@@ -547,7 +548,7 @@ func formatDataplaneFailureContext(failureContext dataplaneFailureContext) strin
 }
 
 func renderIntendedFrontendConfig(frontend frontendSection) string {
-	lines := make([]string, 0, len(frontend.ACLList)+len(frontend.BackendSwitchingRuleList)+len(frontend.HTTPAfterResponseRules)+8)
+	lines := make([]string, 0, len(frontend.ACLList)+len(frontend.BackendSwitchingRuleList)+len(frontend.HTTPRequestRules)+len(frontend.HTTPAfterResponseRules)+8)
 	lines = append(lines, "frontend "+strings.TrimSpace(frontend.Name))
 	if strings.TrimSpace(frontend.Mode) != "" {
 		lines = append(lines, "  mode "+strings.TrimSpace(frontend.Mode))
@@ -567,6 +568,36 @@ func renderIntendedFrontendConfig(frontend frontendSection) string {
 			switchLine += " " + strings.TrimSpace(rule.Cond) + " " + condTest
 		}
 		lines = append(lines, strings.TrimSpace(strings.ReplaceAll(strings.ReplaceAll(switchLine, "  ", " "), "  ", " ")))
+	}
+	for _, rule := range frontend.HTTPRequestRules {
+		action := strings.TrimSpace(rule.Type)
+		if action == "" {
+			action = strings.TrimSpace(rule.Action)
+		}
+		actionLine := ""
+		switch action {
+		case "set-header", "add-header":
+			actionLine = fmt.Sprintf("  http-request %s %s %s", action, strings.TrimSpace(rule.Header), strings.TrimSpace(rule.Format))
+		case "return":
+			actionLine = fmt.Sprintf("  http-request return status %d", rule.Status)
+			if strings.TrimSpace(rule.ContentType) != "" {
+				actionLine += " content-type " + strings.TrimSpace(rule.ContentType)
+			}
+			if strings.TrimSpace(rule.String) != "" {
+				actionLine += " string " + strings.TrimSpace(rule.String)
+			}
+		default:
+			continue
+		}
+		cond := strings.TrimSpace(rule.Cond)
+		condTest := strings.TrimSpace(rule.CondTest)
+		if condTest != "" {
+			if cond != "" {
+				actionLine += " " + cond
+			}
+			actionLine += " " + condTest
+		}
+		lines = append(lines, strings.TrimSpace(strings.ReplaceAll(strings.ReplaceAll(actionLine, "  ", " "), "  ", " ")))
 	}
 	for _, rule := range frontend.HTTPAfterResponseRules {
 		action := strings.TrimSpace(rule.Type)
@@ -645,8 +676,9 @@ func (m *ManagedProxyRuntime) frontendSection(snapshot *grpcapi.ProxyConfigSnaps
 		}
 		return services[i].GetServiceKey() < services[j].GetServiceKey()
 	})
-	acls := make([]frontendACL, 0, len(services)*8)
+	acls := make([]frontendACL, 0, len(services)*9)
 	rules := make([]frontendSwitchRule, 0, len(services)*8)
+	requestRules := make([]httpRequestRule, 0, len(services)*5)
 	addACL := func(name string, criterion string, value string) {
 		acls = append(acls, frontendACL{
 			Name:      name,
@@ -667,9 +699,28 @@ func (m *ManagedProxyRuntime) frontendSection(snapshot *grpcapi.ProxyConfigSnaps
 			Index:    len(rules),
 		})
 	}
+	addRequestRule := func(ruleType string, header string, format string, status int, contentType string, body string, condTest string) {
+		condTest = strings.TrimSpace(condTest)
+		if condTest == "" {
+			return
+		}
+		requestRules = append(requestRules, httpRequestRule{
+			Type:        strings.TrimSpace(ruleType),
+			Action:      strings.TrimSpace(ruleType),
+			Header:      strings.TrimSpace(header),
+			Format:      strings.TrimSpace(format),
+			Status:      status,
+			ContentType: strings.TrimSpace(contentType),
+			String:      strings.TrimSpace(body),
+			Cond:        "if",
+			CondTest:    condTest,
+			Index:       len(requestRules),
+		})
+	}
 	for _, service := range services {
 		hostACL := aclName(service.GetServiceId(), "host")
 		pathACL := aclName(service.GetServiceId(), "path")
+		normalizePathACL := aclName(service.GetServiceId(), "normalize_path")
 		queryLiveACL := aclName(service.GetServiceId(), "query_live")
 		queryCandidateACL := aclName(service.GetServiceId(), "query_candidate")
 		cookieLiveACL := aclName(service.GetServiceId(), "cookie_live")
@@ -681,21 +732,41 @@ func (m *ManagedProxyRuntime) frontendSection(snapshot *grpcapi.ProxyConfigSnaps
 		liveBackend := strings.TrimSpace(service.GetLiveBackendName())
 		candidateBackend := strings.TrimSpace(service.GetCandidateBackendName())
 		trafficPercent := clampTrafficPercent(int(service.GetCandidateTrafficPercent()))
+		normalizePath := servicecatalogapp.BuildStickyNormalizePath(service.GetRoutePathPrefix())
 
 		addACL(hostACL, "hdr(host)", "-i "+service.GetRouteHost())
 		addACL(pathACL, "path_beg", service.GetRoutePathPrefix())
+		addACL(normalizePathACL, "path", exactPathMatchValue(normalizePath))
 		addACL(queryLiveACL, "url_param("+servicecatalogapp.PreviewReleaseIDQueryParam+")", exactMatchValue(liveRelease))
 		addACL(queryCandidateACL, "url_param("+servicecatalogapp.PreviewReleaseIDQueryParam+")", exactMatchValue(candidateRelease))
 		addACL(cookieLiveACL, "cook("+cookieName+")", exactMatchValue(liveRelease))
 		addACL(cookieCandidateACL, "cook("+cookieName+")", exactMatchValue(candidateRelease))
 
 		baseMatch := hostACL + " " + pathACL
-		baseNoOverride := baseMatch + " !" + queryLiveACL + " !" + queryCandidateACL + " !" + cookieLiveACL + " !" + cookieCandidateACL
+		normalizeMatch := baseMatch + " " + normalizePathACL
+		if liveRelease != "" {
+			addRequestRule("set-header", servicecatalogapp.CurrentReleaseIDHeaderName, liveRelease, 0, "", "", normalizeMatch)
+			addRequestRule("set-header", servicecatalogapp.LiveReleaseIDHeaderName, liveRelease, 0, "", "", normalizeMatch)
+			addRequestRule("set-header", servicecatalogapp.ReleaseRoleHeaderName, servicecatalogapp.ReleaseRoleLive, 0, "", "", normalizeMatch)
+			addRequestRule("add-header", "Set-Cookie", servicecatalogapp.BuildStickyCookie(cookieName, liveRelease, service.GetRoutePathPrefix()), 0, "", "", normalizeMatch)
+			addRequestRule("return", "", "", 204, "text/plain", "sticky-normalized", normalizeMatch)
+		}
+		baseNoOverrideParts := []string{
+			baseMatch,
+			"!" + normalizePathACL,
+			"!" + queryLiveACL,
+			"!" + queryCandidateACL,
+			"!" + cookieLiveACL,
+		}
 
 		addRule(candidateBackend, baseMatch+" "+queryCandidateACL)
 		addRule(liveBackend, baseMatch+" "+queryLiveACL)
-		addRule(candidateBackend, baseMatch+" !"+queryLiveACL+" !"+queryCandidateACL+" "+cookieCandidateACL)
+		if trafficPercent > 0 {
+			addRule(candidateBackend, baseMatch+" !"+queryLiveACL+" !"+queryCandidateACL+" "+cookieCandidateACL)
+			baseNoOverrideParts = append(baseNoOverrideParts, "!"+cookieCandidateACL)
+		}
 		addRule(liveBackend, baseMatch+" !"+queryLiveACL+" !"+queryCandidateACL+" "+cookieLiveACL)
+		baseNoOverride := strings.Join(baseNoOverrideParts, " ")
 
 		if liveBackend == "" && candidateBackend == "" {
 			continue
@@ -721,9 +792,10 @@ func (m *ManagedProxyRuntime) frontendSection(snapshot *grpcapi.ProxyConfigSnaps
 		addRule(liveBackend, baseNoOverride+" !"+splitACL)
 	}
 	return frontendSection{
-		Name:           snapshot.GetFrontendName(),
-		Mode:           "http",
-		DefaultBackend: snapshot.GetDefaultBackend(),
+		Name:             snapshot.GetFrontendName(),
+		Mode:             "http",
+		DefaultBackend:   snapshot.GetDefaultBackend(),
+		HTTPRequestRules: requestRules,
 		Binds: map[string]frontendBind{
 			"public": {
 				Name:    "public",
@@ -992,7 +1064,7 @@ type serviceBackendTarget struct {
 	Slot        grpcapi.Slot
 }
 
-func serviceBackendResponseRules(serviceKey string, routePathPrefix string, currentReleaseID string, liveReleaseID string) []httpResponseRule {
+func serviceBackendResponseRules(serviceKey string, routePathPrefix string, currentReleaseID string, liveReleaseID string, releaseRole string) []httpResponseRule {
 	cookieName := servicecatalogapp.StickyCookieName(serviceKey)
 	rules := []httpResponseRule{
 		{
@@ -1013,8 +1085,41 @@ func serviceBackendResponseRules(serviceKey string, routePathPrefix string, curr
 			Header: servicecatalogapp.LiveReleaseIDHeaderName,
 			Format: liveReleaseID,
 		},
+		{
+			Type:   "set-header",
+			Action: "set-header",
+			Header: servicecatalogapp.ReleaseRoleHeaderName,
+			Format: strings.TrimSpace(releaseRole),
+		},
 	}
 	return filterHTTPResponseRules(rules)
+}
+
+func releaseRoleForTarget(target serviceBackendTarget, service *grpcapi.ProxyServiceConfig) string {
+	liveReleaseID := strings.TrimSpace(service.GetLiveReleaseId())
+	candidateReleaseID := strings.TrimSpace(service.GetCandidateReleaseId())
+	targetReleaseID := strings.TrimSpace(target.ReleaseID)
+	if targetReleaseID == "" {
+		return ""
+	}
+	if targetReleaseID == liveReleaseID {
+		return servicecatalogapp.ReleaseRoleLive
+	}
+	if targetReleaseID == candidateReleaseID {
+		if splitActiveForService(service) {
+			return servicecatalogapp.ReleaseRoleCanary
+		}
+		return servicecatalogapp.ReleaseRoleHistorical
+	}
+	return servicecatalogapp.ReleaseRoleHistorical
+}
+
+func splitActiveForService(service *grpcapi.ProxyServiceConfig) bool {
+	if service == nil {
+		return false
+	}
+	percent := clampTrafficPercent(int(service.GetCandidateTrafficPercent()))
+	return percent >= 1 && percent <= 99
 }
 
 func serviceLiveTarget(service *grpcapi.ProxyServiceConfig) serviceBackendTarget {
@@ -1062,6 +1167,14 @@ func clampTrafficPercent(percent int) int {
 		return 100
 	}
 	return percent
+}
+
+func exactPathMatchValue(value string) string {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return "-i __edge_pilot_invalid__"
+	}
+	return "-i " + value
 }
 
 func exactMatchValue(value string) string {

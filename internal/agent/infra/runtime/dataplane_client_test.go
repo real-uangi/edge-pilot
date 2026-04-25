@@ -447,6 +447,82 @@ func TestNormalizeHAProxyFmtKeepsExpression(t *testing.T) {
 	}
 }
 
+func TestDataPlaneClientReplaceFrontendInTransactionEncodesRequestRules(t *testing.T) {
+	var requests []recordedRequest
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, err := io.ReadAll(r.Body)
+		if err != nil {
+			t.Fatalf("ReadAll() error = %v", err)
+		}
+		requests = append(requests, recordedRequest{
+			method: r.Method,
+			path:   r.URL.Path,
+			query:  r.URL.Query(),
+			body:   string(body),
+		})
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer server.Close()
+
+	client := newDataPlaneAPIClient(func() string { return server.URL }, func() string { return "admin" }, func() string { return "secret" })
+	ctx := context.Background()
+	if err := client.ReplaceFrontendInTransaction(ctx, "tx-12", frontendSection{
+		Name: "ep_http",
+		Mode: "http",
+		HTTPRequestRules: []httpRequestRule{
+			{
+				Type:     "set-header",
+				Header:   "X-Test",
+				Format:   "release-1",
+				CondTest: "if normalize_acl",
+			},
+			{
+				Type:        "return",
+				Status:      204,
+				ContentType: "text/plain",
+				String:      "sticky-normalized",
+				CondTest:    "normalize_acl",
+			},
+		},
+	}); err != nil {
+		t.Fatalf("ReplaceFrontendInTransaction() error = %v", err)
+	}
+
+	if len(requests) != 1 {
+		t.Fatalf("expected 1 request, got %d", len(requests))
+	}
+	var payload map[string]any
+	if err := json.Unmarshal([]byte(requests[0].body), &payload); err != nil {
+		t.Fatalf("Unmarshal() error = %v", err)
+	}
+	rawRules, ok := payload["http_request_rule_list"].([]any)
+	if !ok || len(rawRules) != 2 {
+		t.Fatalf("expected 2 request rules, got %#v", payload["http_request_rule_list"])
+	}
+	first := rawRules[0].(map[string]any)
+	if got := first["type"]; got != "set-header" {
+		t.Fatalf("expected first request rule type set-header, got %#v", got)
+	}
+	if got := first["hdr_name"]; got != "X-Test" {
+		t.Fatalf("expected first request rule hdr_name X-Test, got %#v", got)
+	}
+	if got := first["cond_test"]; got != "normalize_acl" {
+		t.Fatalf("expected first request rule cond_test normalize_acl, got %#v", got)
+	}
+	second := rawRules[1].(map[string]any)
+	if got := second["type"]; got != "return" {
+		t.Fatalf("expected second request rule type return, got %#v", got)
+	}
+	if got := second["status"]; got != float64(204) {
+		t.Fatalf("expected second request rule status 204, got %#v", got)
+	}
+	if got := second["content_type"]; got != "text/plain" {
+		t.Fatalf("expected second request rule content_type text/plain, got %#v", got)
+	}
+	if got := second["string"]; got != "sticky-normalized" {
+		t.Fatalf("expected second request rule string sticky-normalized, got %#v", got)
+	}
+}
 func assertServerPayload(t *testing.T, request recordedRequest, resolvers string, initAddr string) {
 	t.Helper()
 	var payload map[string]any

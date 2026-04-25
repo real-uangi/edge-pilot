@@ -75,6 +75,19 @@ func (r *repository) ListQueuedBefore(serviceID uuid.UUID, createdAt time.Time, 
 	return releases, nil
 }
 
+func isTrafficSplitStatus(status model.ReleaseStatus) bool {
+	switch status {
+	case model.ReleaseStatusReadyToSwitch, model.ReleaseStatusSwitched:
+		return true
+	default:
+		return false
+	}
+}
+
+func isPartialTrafficPercent(percent int) bool {
+	return percent >= 1 && percent <= 99
+}
+
 func (r *repository) HasActiveRelease(serviceID uuid.UUID) (bool, error) {
 	var count int64
 	if err := r.conn.Model(&model.Release{}).

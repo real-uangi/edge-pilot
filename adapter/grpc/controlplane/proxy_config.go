@@ -129,10 +129,23 @@ func (p *ProxyConfigPublisher) resolveReleases(item servicecatalogapp.ProxyServi
 }
 
 func candidateTrafficPercentForRelease(release *model.Release) int {
-	if release == nil || release.Status != model.ReleaseStatusReadyToSwitch {
+	if !isSplitActiveRelease(release) {
 		return 0
 	}
 	return clampTrafficPercent(release.TrafficPercent)
+}
+
+func isSplitActiveRelease(release *model.Release) bool {
+	if release == nil {
+		return false
+	}
+	switch release.Status {
+	case model.ReleaseStatusReadyToSwitch, model.ReleaseStatusSwitched:
+		percent := clampTrafficPercent(release.TrafficPercent)
+		return percent >= 1 && percent <= 99
+	default:
+		return false
+	}
 }
 
 func normalizeLiveSlot(slot model.Slot) model.Slot {

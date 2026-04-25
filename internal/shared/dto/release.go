@@ -36,6 +36,7 @@ type ReleaseOutput struct {
 	StickyCookieTTL          int                 `json:"stickyCookieTtl"`
 	CurrentReleaseHeaderName string              `json:"currentReleaseHeaderName"`
 	LiveReleaseHeaderName    string              `json:"liveReleaseHeaderName"`
+	ReleaseRoleHeaderName    string              `json:"releaseRoleHeaderName"`
 	IsActive                 bool                `json:"isActive"`
 	QueuePosition            int                 `json:"queuePosition"`
 	CreatedAt                time.Time           `json:"createdAt"`
