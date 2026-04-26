@@ -85,6 +85,12 @@ func (s *Service) Update(id uuid.UUID, req dto.UpsertServiceRequest) (*dto.Servi
 	if current == nil {
 		return nil, business.ErrNotFound
 	}
+	if strings.TrimSpace(req.ServiceKey) != current.ServiceKey {
+		return nil, business.NewBadRequest("serviceKey 不允许修改")
+	}
+	if strings.TrimSpace(req.AgentID) != current.AgentID {
+		return nil, business.NewBadRequest("agentId 不允许修改")
+	}
 	updated, err := s.buildServiceEntity(id, req)
 	if err != nil {
 		return nil, err

@@ -55,6 +55,10 @@ export function ServiceEditorPage() {
   const saveMutation = useMutation({
     mutationFn: async (values: ServiceFormValues) => {
       const payload = toServicePayload(values);
+      if (isEdit && serviceQuery.data) {
+        payload.serviceKey = serviceQuery.data.serviceKey;
+        payload.agentId = serviceQuery.data.agentId;
+      }
       return isEdit ? api.updateService(serviceId!, payload) : api.createService(payload);
     },
     onSuccess: async (service) => {
@@ -126,11 +130,12 @@ export function ServiceEditorPage() {
             </label>
             <label className={styles.field}>
               <span className={styles.label}>服务标识</span>
-              <input className={styles.input} {...form.register("serviceKey")} />
+              <input className={styles.input} readOnly={isEdit} {...form.register("serviceKey")} />
+              {isEdit ? <span className={styles.hint}>创建后不可修改</span> : null}
             </label>
             <label className={styles.field}>
               <span className={styles.label}>节点</span>
-              <select className={styles.select} {...form.register("agentId")}>
+              <select className={styles.select} disabled={isEdit} {...form.register("agentId")}>
                 <option value="">选择节点</option>
                 {agentsQuery.data?.map((agent) => (
                   <option key={agent.id} value={agent.id}>
@@ -138,6 +143,7 @@ export function ServiceEditorPage() {
                   </option>
                 ))}
               </select>
+              {isEdit ? <span className={styles.hint}>创建后不可修改</span> : null}
             </label>
             <label className={styles.field}>
               <span className={styles.label}>镜像仓库</span>

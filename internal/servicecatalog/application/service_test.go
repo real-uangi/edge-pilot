@@ -382,6 +382,45 @@ func TestUpdateNormalizesNetworkAliases(t *testing.T) {
 	}
 }
 
+func TestUpdateRejectsImmutableFields(t *testing.T) {
+	repo := newFakeServiceCatalogRepo()
+	svc := NewService(repo)
+
+	created, err := svc.Create(dto.UpsertServiceRequest{
+		Name:          "svc-a",
+		ServiceKey:    "svc-a",
+		AgentID:       "11111111-1111-1111-1111-111111111111",
+		ImageRepo:     "repo/app",
+		ContainerPort: 8080,
+		RouteHost:     "a.example.com",
+	})
+	if err != nil {
+		t.Fatalf("Create() error = %v", err)
+	}
+
+	if _, err := svc.Update(created.ID, dto.UpsertServiceRequest{
+		Name:          "svc-a",
+		ServiceKey:    "svc-a-new",
+		AgentID:       "11111111-1111-1111-1111-111111111111",
+		ImageRepo:     "repo/app",
+		ContainerPort: 8080,
+		RouteHost:     "a.example.com",
+	}); err == nil {
+		t.Fatal("expected serviceKey update to be rejected")
+	}
+
+	if _, err := svc.Update(created.ID, dto.UpsertServiceRequest{
+		Name:          "svc-a",
+		ServiceKey:    "svc-a",
+		AgentID:       "22222222-2222-2222-2222-222222222222",
+		ImageRepo:     "repo/app",
+		ContainerPort: 8080,
+		RouteHost:     "a.example.com",
+	}); err == nil {
+		t.Fatal("expected agentId update to be rejected")
+	}
+}
+
 func TestCreateRejectsInvalidContainerPort(t *testing.T) {
 	repo := newFakeServiceCatalogRepo()
 	svc := NewService(repo)
