@@ -44,6 +44,7 @@ func taskToProto(task *model.Task, codec *secret.Codec) (*grpcapi.TaskCommand, e
 		Command:                 payload.Command,
 		Entrypoint:              payload.Entrypoint,
 		Volumes:                 toProtoVolumes(payload.Volumes),
+		NetworkAliases:          payload.NetworkAliases,
 		PublishedPorts:          toProtoPublishedPorts(payload.PublishedPorts),
 		StartupGraceSecond:      int32(payload.StartupGraceSecond),
 		HttpProbeTimeoutSecond:  int32(payload.HTTPProbeTimeoutSecond),

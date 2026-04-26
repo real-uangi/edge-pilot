@@ -7,11 +7,12 @@
 package grpcapi
 
 import (
-	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
-	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 	reflect "reflect"
 	sync "sync"
 	unsafe "unsafe"
+
+	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
+	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 )
 
 const (
@@ -989,6 +990,7 @@ type TaskCommand struct {
 	HttpHealthHeaders       map[string]string      `protobuf:"bytes,33,rep,name=http_health_headers,json=httpHealthHeaders,proto3" json:"http_health_headers,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
 	SchedulerSdkPort        int32                  `protobuf:"varint,34,opt,name=scheduler_sdk_port,json=schedulerSdkPort,proto3" json:"scheduler_sdk_port,omitempty"`
 	SchedulerExecutorGroup  string                 `protobuf:"bytes,35,opt,name=scheduler_executor_group,json=schedulerExecutorGroup,proto3" json:"scheduler_executor_group,omitempty"`
+	NetworkAliases          []string               `protobuf:"bytes,36,rep,name=network_aliases,json=networkAliases,proto3" json:"network_aliases,omitempty"`
 	unknownFields           protoimpl.UnknownFields
 	sizeCache               protoimpl.SizeCache
 }
@@ -1266,6 +1268,13 @@ func (x *TaskCommand) GetSchedulerExecutorGroup() string {
 		return x.SchedulerExecutorGroup
 	}
 	return ""
+}
+
+func (x *TaskCommand) GetNetworkAliases() []string {
+	if x != nil {
+		return x.NetworkAliases
+	}
+	return nil
 }
 
 type TaskUpdate struct {
@@ -2016,7 +2025,7 @@ const file_internal_shared_grpcapi_agent_control_proto_rawDesc = "" +
 	"\tread_only\x18\x03 \x01(\bR\breadOnly\"S\n" +
 	"\rPublishedPort\x12\x1b\n" +
 	"\thost_port\x18\x01 \x01(\x05R\bhostPort\x12%\n" +
-	"\x0econtainer_port\x18\x02 \x01(\x05R\rcontainerPort\"\xb4\r\n" +
+	"\x0econtainer_port\x18\x02 \x01(\x05R\rcontainerPort\"\xdd\r\n" +
 	"\vTaskCommand\x12\x17\n" +
 	"\atask_id\x18\x01 \x01(\tR\x06taskId\x12\x1d\n" +
 	"\n" +
@@ -2062,7 +2071,8 @@ const file_internal_shared_grpcapi_agent_control_proto_rawDesc = "" +
 	"\x16http_success_threshold\x18  \x01(\x05R\x14httpSuccessThreshold\x12e\n" +
 	"\x13http_health_headers\x18! \x03(\v25.edgepilot.grpcapi.TaskCommand.HttpHealthHeadersEntryR\x11httpHealthHeaders\x12,\n" +
 	"\x12scheduler_sdk_port\x18\" \x01(\x05R\x10schedulerSdkPort\x128\n" +
-	"\x18scheduler_executor_group\x18# \x01(\tR\x16schedulerExecutorGroup\x1a6\n" +
+	"\x18scheduler_executor_group\x18# \x01(\tR\x16schedulerExecutorGroup\x12'\n" +
+	"\x0fnetwork_aliases\x18$ \x03(\tR\x0enetworkAliases\x1a6\n" +
 	"\bEnvEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\x1aD\n" +

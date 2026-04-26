@@ -21,6 +21,7 @@ func TestBuildWorkloadCreateRequestUsesLimitedRestartPolicy(t *testing.T) {
 		PublishedPorts: []*grpcapi.PublishedPort{
 			{HostPort: 18080, ContainerPort: 8080},
 		},
+		NetworkAliases: []string{"svc-a", "svc-a-canary"},
 	}
 
 	req := buildWorkloadCreateRequest(cfg, "repo/demo:v1", task)
@@ -35,6 +36,9 @@ func TestBuildWorkloadCreateRequestUsesLimitedRestartPolicy(t *testing.T) {
 	}
 	if _, ok := req.NetworkingConfig.EndpointsConfig["epNet"]; !ok {
 		t.Fatal("expected workload to attach to proxy network")
+	}
+	if got := req.NetworkingConfig.EndpointsConfig["epNet"].Aliases; len(got) != 2 || got[0] != "svc-a" || got[1] != "svc-a-canary" {
+		t.Fatalf("expected network aliases in endpoint settings, got %#v", got)
 	}
 }
 

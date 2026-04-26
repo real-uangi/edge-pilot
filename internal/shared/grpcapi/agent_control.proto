@@ -141,6 +141,7 @@ message TaskCommand {
   map<string, string> http_health_headers = 33;
   int32 scheduler_sdk_port = 34;
   string scheduler_executor_group = 35;
+  repeated string network_aliases = 36;
 }
 
 message TaskUpdate {

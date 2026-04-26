@@ -259,6 +259,7 @@ func TestStartQueuedReleaseDispatchesDeployTask(t *testing.T) {
 		HTTPTimeoutSecond:      5,
 		RouteHost:              "svc-a.example.com",
 		RoutePathPrefix:        "/",
+		NetworkAliases:         commondb.NewJSONB([]string{"svc-a", "svc-a-canary"}),
 		Enabled:                &enabled,
 	}
 	serviceRepo.ensure()
@@ -303,6 +304,9 @@ func TestStartQueuedReleaseDispatchesDeployTask(t *testing.T) {
 	}
 	if payload.SchedulerSDKPort != 19091 || payload.SchedulerExecutorGroup != "default" {
 		t.Fatalf("unexpected scheduler sdk config in task payload: port=%d group=%q", payload.SchedulerSDKPort, payload.SchedulerExecutorGroup)
+	}
+	if len(payload.NetworkAliases) != 2 || payload.NetworkAliases[0] != "svc-a" || payload.NetworkAliases[1] != "svc-a-canary" {
+		t.Fatalf("unexpected network aliases in task payload: %#v", payload.NetworkAliases)
 	}
 }
 

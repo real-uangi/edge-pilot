@@ -53,7 +53,7 @@ func ManagedSlotValue(slot grpcapi.Slot) string {
 }
 
 func sanitizeContainerToken(value string, fallback string) string {
-	replacer := strings.NewReplacer("/", "-", "_", "-", " ", "-")
+	replacer := strings.NewReplacer("/", "-", "_", "-", " ", "-", ".", "-")
 	name := replacer.Replace(strings.TrimSpace(value))
 	name = strings.Trim(name, "-")
 	if name == "" {

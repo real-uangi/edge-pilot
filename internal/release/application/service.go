@@ -1014,6 +1014,7 @@ func (s *Service) newDeployTask(release *model.Release, spec *dto.ServiceDeploym
 		Command:                 spec.Command,
 		Entrypoint:              spec.Entrypoint,
 		Volumes:                 toModelVolumeMounts(spec.Volumes),
+		NetworkAliases:          cloneStringSlice(spec.NetworkAliases),
 		PublishedPorts:          toModelPublishedPorts(spec.PublishedPorts),
 	}
 	sensitive := model.TaskSensitivePayload{
@@ -1081,6 +1082,7 @@ func (s *Service) newSwitchTask(release *model.Release, spec *dto.ServiceDeploym
 		Command:                 spec.Command,
 		Entrypoint:              spec.Entrypoint,
 		Volumes:                 toModelVolumeMounts(spec.Volumes),
+		NetworkAliases:          cloneStringSlice(spec.NetworkAliases),
 		PublishedPorts:          toModelPublishedPorts(spec.PublishedPorts),
 	}
 	ciphertext, keyVersion, plaintextSensitive, err := s.prepareTaskSensitive(spec, model.TaskSensitivePayload{Env: spec.Env})
@@ -1129,6 +1131,7 @@ func (s *Service) newRollbackTask(release *model.Release, spec *dto.ServiceDeplo
 		Command:                 spec.Command,
 		Entrypoint:              spec.Entrypoint,
 		Volumes:                 toModelVolumeMounts(spec.Volumes),
+		NetworkAliases:          cloneStringSlice(spec.NetworkAliases),
 		PublishedPorts:          toModelPublishedPorts(spec.PublishedPorts),
 	}
 	ciphertext, keyVersion, plaintextSensitive, err := s.prepareTaskSensitive(spec, model.TaskSensitivePayload{Env: spec.Env})
@@ -1433,6 +1436,15 @@ func cloneStringMap(source map[string]string) map[string]string {
 	for key, value := range source {
 		cloned[key] = value
 	}
+	return cloned
+}
+
+func cloneStringSlice(source []string) []string {
+	if len(source) == 0 {
+		return nil
+	}
+	cloned := make([]string, len(source))
+	copy(cloned, source)
 	return cloned
 }
 

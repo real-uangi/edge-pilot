@@ -292,6 +292,96 @@ func TestCreateNormalizesHTTPHealthHeaders(t *testing.T) {
 	}
 }
 
+func TestCreateNormalizesNetworkAliases(t *testing.T) {
+	repo := newFakeServiceCatalogRepo()
+	svc := NewService(repo)
+
+	created, err := svc.Create(dto.UpsertServiceRequest{
+		Name:           "svc-a",
+		ServiceKey:     "svc-a",
+		AgentID:        "11111111-1111-1111-1111-111111111111",
+		ImageRepo:      "repo/app",
+		ContainerPort:  8080,
+		RouteHost:      "a.example.com",
+		NetworkAliases: []string{"svc-a", "  ", "svc-b", "svc-a"},
+	})
+	if err != nil {
+		t.Fatalf("Create() error = %v", err)
+	}
+	if len(created.NetworkAliases) != 2 || created.NetworkAliases[0] != "svc-a" || created.NetworkAliases[1] != "svc-b" {
+		t.Fatalf("expected normalized network aliases in output, got %#v", created.NetworkAliases)
+	}
+	spec, err := svc.GetSpecByID(created.ID)
+	if err != nil {
+		t.Fatalf("GetSpecByID() error = %v", err)
+	}
+	if len(spec.NetworkAliases) != 2 || spec.NetworkAliases[0] != "svc-a" || spec.NetworkAliases[1] != "svc-b" {
+		t.Fatalf("expected normalized network aliases in deployment spec, got %#v", spec.NetworkAliases)
+	}
+}
+
+func TestCreateRejectsInvalidNetworkAliases(t *testing.T) {
+	repo := newFakeServiceCatalogRepo()
+	svc := NewService(repo)
+
+	if _, err := svc.Create(dto.UpsertServiceRequest{
+		Name:           "svc-a",
+		ServiceKey:     "svc-a",
+		AgentID:        "11111111-1111-1111-1111-111111111111",
+		ImageRepo:      "repo/app",
+		ContainerPort:  8080,
+		RouteHost:      "a.example.com",
+		NetworkAliases: []string{"Svc-A"},
+	}); err == nil {
+		t.Fatal("expected uppercase network alias to be rejected")
+	}
+
+	if _, err := svc.Create(dto.UpsertServiceRequest{
+		Name:           "svc-b",
+		ServiceKey:     "svc-b",
+		AgentID:        "11111111-1111-1111-1111-111111111111",
+		ImageRepo:      "repo/app",
+		ContainerPort:  8080,
+		RouteHost:      "b.example.com",
+		NetworkAliases: []string{"svc.alias"},
+	}); err == nil {
+		t.Fatal("expected network alias with dot to be rejected")
+	}
+}
+
+func TestUpdateNormalizesNetworkAliases(t *testing.T) {
+	repo := newFakeServiceCatalogRepo()
+	svc := NewService(repo)
+
+	created, err := svc.Create(dto.UpsertServiceRequest{
+		Name:          "svc-a",
+		ServiceKey:    "svc-a",
+		AgentID:       "11111111-1111-1111-1111-111111111111",
+		ImageRepo:     "repo/app",
+		ContainerPort: 8080,
+		RouteHost:     "a.example.com",
+	})
+	if err != nil {
+		t.Fatalf("Create() error = %v", err)
+	}
+
+	updated, err := svc.Update(created.ID, dto.UpsertServiceRequest{
+		Name:           "svc-a",
+		ServiceKey:     "svc-a",
+		AgentID:        "11111111-1111-1111-1111-111111111111",
+		ImageRepo:      "repo/app",
+		ContainerPort:  8080,
+		RouteHost:      "a.example.com",
+		NetworkAliases: []string{"svc-candidate", "svc-a", "svc-candidate"},
+	})
+	if err != nil {
+		t.Fatalf("Update() error = %v", err)
+	}
+	if len(updated.NetworkAliases) != 2 || updated.NetworkAliases[0] != "svc-candidate" || updated.NetworkAliases[1] != "svc-a" {
+		t.Fatalf("expected normalized network aliases in update output, got %#v", updated.NetworkAliases)
+	}
+}
+
 func TestCreateRejectsInvalidContainerPort(t *testing.T) {
 	repo := newFakeServiceCatalogRepo()
 	svc := NewService(repo)

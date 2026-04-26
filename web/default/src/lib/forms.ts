@@ -51,7 +51,7 @@ function parseVolumes(text: string): Array<{ source: string; target: string; rea
 }
 
 function parsePublishedPorts(text: string): Array<{ hostPort: number; containerPort: number }> {
-  return lineList(text).map((line) => {
+ return lineList(text).map((line) => {
     const parts = line.split(":").map((item) => item.trim());
     if (parts.length !== 2) {
       throw new Error(`Invalid published port line: ${line}`);
@@ -61,6 +61,10 @@ function parsePublishedPorts(text: string): Array<{ hostPort: number; containerP
       containerPort: Number(parts[1]),
     };
   });
+}
+
+function parseNetworkAliases(text: string): string[] {
+  return lineList(text);
 }
 
 export const serviceFormSchema = z.object({
@@ -87,6 +91,7 @@ export const serviceFormSchema = z.object({
   commandText: z.string(),
   entrypointText: z.string(),
   volumesText: z.string(),
+  networkAliasesText: z.string(),
   publishedPortsText: z.string(),
 });
 
@@ -118,6 +123,7 @@ export function toServicePayload(values: ServiceFormValues): UpsertServiceInput 
     command: lineList(values.commandText),
     entrypoint: lineList(values.entrypointText),
     volumes: parseVolumes(values.volumesText),
+    networkAliases: parseNetworkAliases(values.networkAliasesText),
     publishedPorts: parsePublishedPorts(values.publishedPortsText),
   };
 }
@@ -153,6 +159,7 @@ export function toServiceFormDefaults(service?: ServiceRecord): ServiceFormInput
     volumesText: (service?.volumes ?? [])
       .map((item) => `${item.source}:${item.target}${item.readOnly ? ":ro" : ""}`)
       .join("\n"),
+    networkAliasesText: (service?.networkAliases ?? []).join("\n"),
     publishedPortsText: (service?.publishedPorts ?? [])
       .map((item) => `${item.hostPort}:${item.containerPort}`)
       .join("\n"),

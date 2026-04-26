@@ -160,6 +160,7 @@ type Service struct {
 	Command                 *commondb.JSONB[[]string]          `json:"command" gorm:"type:jsonb"`
 	Entrypoint              *commondb.JSONB[[]string]          `json:"entrypoint" gorm:"type:jsonb"`
 	Volumes                 *commondb.JSONB[[]VolumeMount]     `json:"volumes" gorm:"type:jsonb"`
+	NetworkAliases          *commondb.JSONB[[]string]          `json:"networkAliases" gorm:"type:jsonb"`
 	PublishedPorts          *commondb.JSONB[[]PublishedPort]   `json:"publishedPorts" gorm:"type:jsonb"`
 	Enabled                 *bool                              `json:"enabled" gorm:"not null"`
 }
@@ -271,6 +272,7 @@ type TaskPayload struct {
 	Command                 []string          `json:"command,omitempty"`
 	Entrypoint              []string          `json:"entrypoint,omitempty"`
 	Volumes                 []VolumeMount     `json:"volumes,omitempty"`
+	NetworkAliases          []string          `json:"networkAliases,omitempty"`
 	PublishedPorts          []PublishedPort   `json:"publishedPorts,omitempty"`
 }
 

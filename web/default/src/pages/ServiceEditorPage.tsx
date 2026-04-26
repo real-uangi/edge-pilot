@@ -232,6 +232,11 @@ export function ServiceEditorPage() {
               <span className={styles.hint}>格式：`/src:/dst[:ro]`</span>
             </label>
             <label className={styles.field}>
+              <span className={styles.label}>网络别名</span>
+              <textarea className={styles.textarea} {...form.register("networkAliasesText")} />
+              <span className={styles.hint}>每行一个 RFC1123 小写别名，如：`svc-api`</span>
+            </label>
+            <label className={styles.field}>
               <span className={styles.label}>暴露端口</span>
               <textarea className={styles.textarea} {...form.register("publishedPortsText")} />
               <span className={styles.hint}>格式：`host:container`</span>

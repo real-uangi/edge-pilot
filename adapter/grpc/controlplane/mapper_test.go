@@ -53,6 +53,7 @@ func TestTaskToProtoPreservesFields(t *testing.T) {
 			PreviousServer:          "srv_blue",
 			Command:                 []string{"run"},
 			Entrypoint:              []string{"/bin/app"},
+			NetworkAliases:          []string{"svc-a", "svc-a-canary"},
 			Volumes: []model.VolumeMount{
 				{Source: "/tmp/a", Target: "/data", ReadOnly: true},
 			},
@@ -104,5 +105,8 @@ func TestTaskToProtoPreservesFields(t *testing.T) {
 	}
 	if len(pb.GetVolumes()) != 1 || pb.GetVolumes()[0].GetTarget() != "/data" || !pb.GetVolumes()[0].GetReadOnly() {
 		t.Fatalf("unexpected volumes: %#v", pb.GetVolumes())
+	}
+	if len(pb.GetNetworkAliases()) != 2 || pb.GetNetworkAliases()[0] != "svc-a" || pb.GetNetworkAliases()[1] != "svc-a-canary" {
+		t.Fatalf("unexpected network aliases: %#v", pb.GetNetworkAliases())
 	}
 }

@@ -119,6 +119,7 @@ func (c *DockerClient) DeployContainer(ctx context.Context, task *grpcapi.TaskCo
 }
 
 func buildWorkloadCreateRequest(cfg *config.AgentRuntimeConfig, imageRef string, task *grpcapi.TaskCommand) dockerCreateRequest {
+	networkAliases := task.GetNetworkAliases()
 	return dockerCreateRequest{
 		Image:      imageRef,
 		Env:        flattenEnv(task.GetEnv()),
@@ -144,7 +145,9 @@ func buildWorkloadCreateRequest(cfg *config.AgentRuntimeConfig, imageRef string,
 		},
 		NetworkingConfig: dockerNetworkingConfig{
 			EndpointsConfig: map[string]dockerEndpointSettings{
-				cfg.ProxyNetworkName: {},
+				cfg.ProxyNetworkName: {
+					Aliases: networkAliases,
+				},
 			},
 		},
 	}

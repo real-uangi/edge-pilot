@@ -41,6 +41,7 @@ type UpsertServiceRequest struct {
 	Command                 []string          `json:"command"`
 	Entrypoint              []string          `json:"entrypoint"`
 	Volumes                 []VolumeMount     `json:"volumes"`
+	NetworkAliases          []string          `json:"networkAliases"`
 	PublishedPorts          []PublishedPort   `json:"publishedPorts"`
 	Enabled                 *bool             `json:"enabled"`
 }
@@ -70,6 +71,7 @@ type ServiceOutput struct {
 	Command                 []string          `json:"command"`
 	Entrypoint              []string          `json:"entrypoint"`
 	Volumes                 []VolumeMount     `json:"volumes"`
+	NetworkAliases          []string          `json:"networkAliases"`
 	PublishedPorts          []PublishedPort   `json:"publishedPorts"`
 	Enabled                 *bool             `json:"enabled"`
 	CreatedAt               time.Time         `json:"createdAt"`
@@ -102,6 +104,7 @@ type ServiceDeploymentSpec struct {
 	Command                 []string
 	Entrypoint              []string
 	Volumes                 []VolumeMount
+	NetworkAliases          []string
 	PublishedPorts          []PublishedPort
 	Enabled                 bool
 }

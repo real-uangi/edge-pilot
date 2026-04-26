@@ -6,12 +6,15 @@ import (
 	"edge-pilot/internal/shared/model"
 	"edge-pilot/internal/shared/secret"
 	"fmt"
+	"regexp"
 	"strings"
 
 	"github.com/google/uuid"
 	"github.com/real-uangi/allingo/common/business"
 	commondb "github.com/real-uangi/allingo/common/db"
 )
+
+var networkAliasPattern = regexp.MustCompile(`^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$`)
 
 type Service struct {
 	repo      domain.Repository
@@ -235,6 +238,10 @@ func (s *Service) buildServiceEntity(id uuid.UUID, req dto.UpsertServiceRequest)
 		return nil, err
 	}
 	httpHealthHeaders := normalizeHTTPHeaders(req.HTTPHealthHeaders)
+	networkAliases, err := normalizeNetworkAliases(req.NetworkAliases)
+	if err != nil {
+		return nil, err
+	}
 
 	return &model.Service{
 		ID:                      id,
@@ -262,6 +269,7 @@ func (s *Service) buildServiceEntity(id uuid.UUID, req dto.UpsertServiceRequest)
 		Command:                 commondb.NewJSONB(req.Command),
 		Entrypoint:              commondb.NewJSONB(req.Entrypoint),
 		Volumes:                 commondb.NewJSONB(toModelVolumes(req.Volumes)),
+		NetworkAliases:          commondb.NewJSONB(networkAliases),
 		PublishedPorts:          commondb.NewJSONB(toModelPublishedPorts(req.PublishedPorts)),
 		Enabled:                 enabled,
 	}, nil
@@ -320,6 +328,7 @@ func (s *Service) toServiceOutput(service *model.Service) (dto.ServiceOutput, er
 		Command:                 getJSON(service.Command),
 		Entrypoint:              getJSON(service.Entrypoint),
 		Volumes:                 toDTOVolumes(getJSON(service.Volumes)),
+		NetworkAliases:          getJSON(service.NetworkAliases),
 		PublishedPorts:          toDTOPublishedPorts(getJSON(service.PublishedPorts)),
 		Enabled:                 service.Enabled,
 		CreatedAt:               service.CreatedAt,
@@ -358,6 +367,7 @@ func (s *Service) toDeploymentSpec(service *model.Service) (dto.ServiceDeploymen
 		Command:                 getJSON(service.Command),
 		Entrypoint:              getJSON(service.Entrypoint),
 		Volumes:                 toDTOVolumes(getJSON(service.Volumes)),
+		NetworkAliases:          getJSON(service.NetworkAliases),
 		PublishedPorts:          toDTOPublishedPorts(getJSON(service.PublishedPorts)),
 		Enabled:                 service.Enabled != nil && *service.Enabled,
 	}, nil
@@ -457,6 +467,32 @@ func normalizeHTTPHeaders(headers map[string]string) map[string]string {
 		return nil
 	}
 	return normalized
+}
+
+func normalizeNetworkAliases(items []string) ([]string, error) {
+	if len(items) == 0 {
+		return nil, nil
+	}
+	normalized := make([]string, 0, len(items))
+	seen := make(map[string]struct{}, len(items))
+	for _, item := range items {
+		alias := strings.TrimSpace(item)
+		if alias == "" {
+			continue
+		}
+		if !networkAliasPattern.MatchString(alias) {
+			return nil, business.NewBadRequest("networkAliases 非法")
+		}
+		if _, ok := seen[alias]; ok {
+			continue
+		}
+		seen[alias] = struct{}{}
+		normalized = append(normalized, alias)
+	}
+	if len(normalized) == 0 {
+		return nil, nil
+	}
+	return normalized, nil
 }
 
 func validatePublishedPorts(items []model.PublishedPort) error {

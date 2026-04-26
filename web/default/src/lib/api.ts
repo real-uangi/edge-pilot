@@ -40,6 +40,7 @@ export interface ServiceRecord {
   command: string[];
   entrypoint: string[];
   volumes: Array<{ source: string; target: string; readOnly: boolean }>;
+  networkAliases: string[];
   publishedPorts: Array<{ hostPort: number; containerPort: number }>;
   enabled: boolean | null;
   createdAt: string;
@@ -303,6 +304,7 @@ export interface UpsertServiceInput {
   command: string[];
   entrypoint: string[];
   volumes: Array<{ source: string; target: string; readOnly: boolean }>;
+  networkAliases: string[];
   publishedPorts: Array<{ hostPort: number; containerPort: number }>;
   enabled: boolean;
 }

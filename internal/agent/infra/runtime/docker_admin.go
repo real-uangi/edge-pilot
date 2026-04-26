@@ -93,6 +93,7 @@ type dockerNetworkingConfig struct {
 
 type dockerEndpointSettings struct {
 	IPAMConfig *dockerEndpointIPAMConfig `json:"IPAMConfig,omitempty"`
+	Aliases    []string                  `json:"Aliases,omitempty"`
 }
 
 type dockerEndpointIPAMConfig struct {

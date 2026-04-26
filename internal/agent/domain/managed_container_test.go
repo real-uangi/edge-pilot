@@ -12,6 +12,13 @@ func TestManagedContainerNameForRelease(t *testing.T) {
 	}
 }
 
+func TestManagedContainerNameForReleaseReplacesDots(t *testing.T) {
+	name := ManagedContainerNameForRelease("svc.api", "rel.1")
+	if name != "ep-svc-api-rel-1" {
+		t.Fatalf("expected dots to be replaced with dashes, got %q", name)
+	}
+}
+
 func TestManagedContainerNameForTaskFallsBackToSlotWhenReleaseMissing(t *testing.T) {
 	name := ManagedContainerNameForTask("svc-a", "", grpcapi.Slot_SLOT_GREEN)
 	if name != "ep-svc-a-green" {
