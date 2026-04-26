@@ -22,6 +22,8 @@ export interface ServiceRecord {
   agentId: string;
   imageRepo: string;
   containerPort: number;
+  cpuLimitCores: number;
+  memoryLimitMB: number;
   currentLiveSlot: number;
   schedulerSdkPort: number;
   schedulerExecutorGroup: string;
@@ -287,6 +289,8 @@ export interface UpsertServiceInput {
   agentId: string;
   imageRepo: string;
   containerPort: number;
+  cpuLimitCores: number;
+  memoryLimitMB: number;
   dockerHealthCheck: boolean;
   httpHealthPath: string;
   httpHealthHeaders: Record<string, string>;

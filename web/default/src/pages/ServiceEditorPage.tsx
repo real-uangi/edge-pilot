@@ -171,6 +171,16 @@ export function ServiceEditorPage() {
               <input className={styles.input} type="number" {...form.register("containerPort")} />
             </label>
             <label className={styles.field}>
+              <span className={styles.label}>CPU 限制（核）</span>
+              <input className={styles.input} type="number" step="0.1" min="0" {...form.register("cpuLimitCores")} />
+              <span className={styles.hint}>默认 0，不限制</span>
+            </label>
+            <label className={styles.field}>
+              <span className={styles.label}>内存限制（MB）</span>
+              <input className={styles.input} type="number" min="0" {...form.register("memoryLimitMB")} />
+              <span className={styles.hint}>默认 0，不限制</span>
+            </label>
+            <label className={styles.field}>
               <span className={styles.label}>路由 Host</span>
               <input className={styles.input} {...form.register("routeHost")} />
             </label>
@@ -323,6 +333,14 @@ export function ServiceEditorPage() {
               <div className={styles.keyValue}>
                 <span className={styles.key}>Docker 探活</span>
                 <span className={styles.value}>{boolLabel(serviceQuery.data.dockerHealthCheck)}</span>
+              </div>
+              <div className={styles.keyValue}>
+                <span className={styles.key}>CPU 限制</span>
+                <span className={styles.value}>{serviceQuery.data.cpuLimitCores > 0 ? `${serviceQuery.data.cpuLimitCores} 核` : "不限"}</span>
+              </div>
+              <div className={styles.keyValue}>
+                <span className={styles.key}>内存限制</span>
+                <span className={styles.value}>{serviceQuery.data.memoryLimitMB > 0 ? `${serviceQuery.data.memoryLimitMB} MB` : "不限"}</span>
               </div>
               <div className={styles.keyValue}>
                 <span className={styles.key}>预热窗口</span>

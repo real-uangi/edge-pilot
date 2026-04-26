@@ -24,6 +24,8 @@ type UpsertServiceRequest struct {
 	AgentID                 string            `json:"agentId" binding:"required"`
 	ImageRepo               string            `json:"imageRepo" binding:"required"`
 	ContainerPort           int               `json:"containerPort" binding:"required"`
+	CPULimitCores           float64           `json:"cpuLimitCores"`
+	MemoryLimitMB           int64             `json:"memoryLimitMB"`
 	DockerHealthCheck       *bool             `json:"dockerHealthCheck"`
 	HTTPHealthPath          string            `json:"httpHealthPath"`
 	HTTPHealthHeaders       map[string]string `json:"httpHealthHeaders"`
@@ -53,6 +55,8 @@ type ServiceOutput struct {
 	AgentID                 string            `json:"agentId"`
 	ImageRepo               string            `json:"imageRepo"`
 	ContainerPort           int               `json:"containerPort"`
+	CPULimitCores           float64           `json:"cpuLimitCores"`
+	MemoryLimitMB           int64             `json:"memoryLimitMB"`
 	CurrentLiveSlot         model.Slot        `json:"currentLiveSlot"`
 	DockerHealthCheck       *bool             `json:"dockerHealthCheck"`
 	HTTPHealthPath          string            `json:"httpHealthPath"`
@@ -85,6 +89,8 @@ type ServiceDeploymentSpec struct {
 	AgentID                 string
 	ImageRepo               string
 	ContainerPort           int
+	CPULimitCores           float64
+	MemoryLimitMB           int64
 	CurrentLiveSlot         model.Slot
 	DockerHealthCheck       bool
 	HTTPHealthPath          string

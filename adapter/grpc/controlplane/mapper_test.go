@@ -37,6 +37,8 @@ func TestTaskToProtoPreservesFields(t *testing.T) {
 			TargetSlot:              model.SlotGreen,
 			CurrentLiveSlot:         model.SlotBlue,
 			ContainerPort:           8080,
+			CPULimitCores:           0.5,
+			MemoryLimitMB:           256,
 			DockerHealthCheck:       true,
 			HTTPHealthPath:          "/health",
 			HTTPHealthHeaders:       map[string]string{"X-Probe-Token": "abc"},
@@ -87,6 +89,9 @@ func TestTaskToProtoPreservesFields(t *testing.T) {
 	}
 	if pb.GetContainerPort() != 8080 || !pb.GetDockerHealthCheck() {
 		t.Fatalf("unexpected ports/health: container=%d health=%v", pb.GetContainerPort(), pb.GetDockerHealthCheck())
+	}
+	if pb.GetCpuLimitCores() != 0.5 || pb.GetMemoryLimitMb() != 256 {
+		t.Fatalf("unexpected resource limits: cpu=%v memory=%d", pb.GetCpuLimitCores(), pb.GetMemoryLimitMb())
 	}
 	if pb.GetStartupGraceSecond() != 15 || pb.GetHttpProbeTimeoutSecond() != 2 || pb.GetHttpProbeIntervalSecond() != 1 || pb.GetHttpSuccessThreshold() != 2 {
 		t.Fatalf("unexpected health tuning fields: %#v", pb)

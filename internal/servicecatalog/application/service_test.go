@@ -103,6 +103,65 @@ func TestCreateServiceRejectsInvalidSchedulerSDKPort(t *testing.T) {
 	}
 }
 
+func TestCreateServiceWithResourceLimits(t *testing.T) {
+	repo := newFakeServiceCatalogRepo()
+	svc := NewServiceWithPublisher(repo, nil, nil)
+
+	created, err := svc.Create(dto.UpsertServiceRequest{
+		Name:          "svc-limited",
+		ServiceKey:    "svc-limited",
+		AgentID:       "11111111-1111-1111-1111-111111111111",
+		ImageRepo:     "repo/app",
+		ContainerPort: 8080,
+		CPULimitCores: 0.5,
+		MemoryLimitMB: 256,
+		RouteHost:     "limited.example.com",
+	})
+	if err != nil {
+		t.Fatalf("Create() error = %v", err)
+	}
+	if created.CPULimitCores != 0.5 || created.MemoryLimitMB != 256 {
+		t.Fatalf("unexpected resource limits: cpu=%v memory=%d", created.CPULimitCores, created.MemoryLimitMB)
+	}
+
+	spec, err := svc.GetSpecByID(created.ID)
+	if err != nil {
+		t.Fatalf("GetSpecByID() error = %v", err)
+	}
+	if spec.CPULimitCores != 0.5 || spec.MemoryLimitMB != 256 {
+		t.Fatalf("unexpected deployment resource limits: cpu=%v memory=%d", spec.CPULimitCores, spec.MemoryLimitMB)
+	}
+}
+
+func TestCreateServiceRejectsInvalidResourceLimits(t *testing.T) {
+	repo := newFakeServiceCatalogRepo()
+	svc := NewServiceWithPublisher(repo, nil, nil)
+
+	if _, err := svc.Create(dto.UpsertServiceRequest{
+		Name:          "svc-negative-cpu",
+		ServiceKey:    "svc-negative-cpu",
+		AgentID:       "11111111-1111-1111-1111-111111111111",
+		ImageRepo:     "repo/app",
+		ContainerPort: 8080,
+		CPULimitCores: -0.1,
+		RouteHost:     "a.example.com",
+	}); err == nil {
+		t.Fatal("expected negative cpuLimitCores to be rejected")
+	}
+
+	if _, err := svc.Create(dto.UpsertServiceRequest{
+		Name:          "svc-negative-memory",
+		ServiceKey:    "svc-negative-memory",
+		AgentID:       "11111111-1111-1111-1111-111111111111",
+		ImageRepo:     "repo/app",
+		ContainerPort: 8080,
+		MemoryLimitMB: -1,
+		RouteHost:     "b.example.com",
+	}); err == nil {
+		t.Fatal("expected negative memoryLimitMB to be rejected")
+	}
+}
+
 func TestCreateRejectsServiceKeyLongerThan24(t *testing.T) {
 	repo := newFakeServiceCatalogRepo()
 	svc := NewServiceWithPublisher(repo, nil, nil)

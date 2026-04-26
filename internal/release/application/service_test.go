@@ -251,6 +251,8 @@ func TestStartQueuedReleaseDispatchesDeployTask(t *testing.T) {
 		AgentID:                "agent-a",
 		ImageRepo:              "repo/app",
 		ContainerPort:          8080,
+		CPULimitCores:          0.5,
+		MemoryLimitMB:          256,
 		SchedulerSDKPort:       19091,
 		SchedulerExecutorGroup: "default",
 		DockerHealthCheck:      &dockerHealth,
@@ -307,6 +309,9 @@ func TestStartQueuedReleaseDispatchesDeployTask(t *testing.T) {
 	}
 	if len(payload.NetworkAliases) != 2 || payload.NetworkAliases[0] != "svc-a" || payload.NetworkAliases[1] != "svc-a-canary" {
 		t.Fatalf("unexpected network aliases in task payload: %#v", payload.NetworkAliases)
+	}
+	if payload.CPULimitCores != 0.5 || payload.MemoryLimitMB != 256 {
+		t.Fatalf("unexpected resource limits in task payload: cpu=%v memory=%d", payload.CPULimitCores, payload.MemoryLimitMB)
 	}
 }
 

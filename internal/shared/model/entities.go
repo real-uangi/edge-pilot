@@ -140,6 +140,8 @@ type Service struct {
 	AgentID                 string                             `json:"agentId" gorm:"size:128;index;not null"`
 	ImageRepo               string                             `json:"imageRepo" gorm:"size:512;not null"`
 	ContainerPort           int                                `json:"containerPort"`
+	CPULimitCores           float64                            `json:"cpuLimitCores"`
+	MemoryLimitMB           int64                              `json:"memoryLimitMB"`
 	CurrentLiveSlot         Slot                               `json:"currentLiveSlot"`
 	SchedulerSDKPort        int                                `json:"schedulerSdkPort"`
 	SchedulerExecutorGroup  string                             `json:"schedulerExecutorGroup" gorm:"size:128"`
@@ -254,6 +256,8 @@ type TaskPayload struct {
 	TargetSlot              Slot              `json:"targetSlot"`
 	CurrentLiveSlot         Slot              `json:"currentLiveSlot"`
 	ContainerPort           int               `json:"containerPort"`
+	CPULimitCores           float64           `json:"cpuLimitCores"`
+	MemoryLimitMB           int64             `json:"memoryLimitMB"`
 	DockerHealthCheck       bool              `json:"dockerHealthCheck"`
 	HTTPHealthPath          string            `json:"httpHealthPath"`
 	HTTPHealthHeaders       map[string]string `json:"httpHealthHeaders,omitempty"`

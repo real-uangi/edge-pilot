@@ -142,6 +142,8 @@ message TaskCommand {
   int32 scheduler_sdk_port = 34;
   string scheduler_executor_group = 35;
   repeated string network_aliases = 36;
+  double cpu_limit_cores = 37;
+  int64 memory_limit_mb = 38;
 }
 
 message TaskUpdate {

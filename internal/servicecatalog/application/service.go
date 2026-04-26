@@ -234,6 +234,9 @@ func (s *Service) buildServiceEntity(id uuid.UUID, req dto.UpsertServiceRequest)
 	if err := validateContainerPort(req.ContainerPort); err != nil {
 		return nil, err
 	}
+	if err := validateResourceLimits(req.CPULimitCores, req.MemoryLimitMB); err != nil {
+		return nil, err
+	}
 	normalizedPathPrefix := NormalizeRoutePathPrefix(req.RoutePathPrefix)
 	if err := validateRoutePathPrefix(normalizedPathPrefix); err != nil {
 		return nil, err
@@ -294,6 +297,8 @@ func (s *Service) buildServiceEntity(id uuid.UUID, req dto.UpsertServiceRequest)
 		AgentID:                 req.AgentID,
 		ImageRepo:               req.ImageRepo,
 		ContainerPort:           req.ContainerPort,
+		CPULimitCores:           req.CPULimitCores,
+		MemoryLimitMB:           req.MemoryLimitMB,
 		SchedulerSDKPort:        req.SchedulerSDKPort,
 		SchedulerExecutorGroup:  schedulerExecutorGroup,
 		DockerHealthCheck:       dockerHealth,
@@ -362,6 +367,8 @@ func (s *Service) toServiceOutput(service *model.Service) (dto.ServiceOutput, er
 		AgentID:                 service.AgentID,
 		ImageRepo:               service.ImageRepo,
 		ContainerPort:           service.ContainerPort,
+		CPULimitCores:           service.CPULimitCores,
+		MemoryLimitMB:           service.MemoryLimitMB,
 		CurrentLiveSlot:         service.CurrentLiveSlot,
 		SchedulerSDKPort:        service.SchedulerSDKPort,
 		SchedulerExecutorGroup:  service.SchedulerExecutorGroup,
@@ -400,6 +407,8 @@ func (s *Service) toDeploymentSpec(service *model.Service) (dto.ServiceDeploymen
 		AgentID:                 service.AgentID,
 		ImageRepo:               service.ImageRepo,
 		ContainerPort:           service.ContainerPort,
+		CPULimitCores:           service.CPULimitCores,
+		MemoryLimitMB:           service.MemoryLimitMB,
 		CurrentLiveSlot:         service.CurrentLiveSlot,
 		SchedulerSDKPort:        service.SchedulerSDKPort,
 		SchedulerExecutorGroup:  service.SchedulerExecutorGroup,
@@ -570,6 +579,16 @@ func validatePublishedPorts(items []model.PublishedPort) error {
 func validateContainerPort(port int) error {
 	if port <= 0 || port > 65535 {
 		return business.NewBadRequest("containerPort 非法")
+	}
+	return nil
+}
+
+func validateResourceLimits(cpuLimitCores float64, memoryLimitMB int64) error {
+	if cpuLimitCores < 0 {
+		return business.NewBadRequest("cpuLimitCores 非法")
+	}
+	if memoryLimitMB < 0 {
+		return business.NewBadRequest("memoryLimitMB 非法")
 	}
 	return nil
 }

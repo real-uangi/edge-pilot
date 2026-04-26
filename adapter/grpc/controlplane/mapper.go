@@ -32,6 +32,8 @@ func taskToProto(task *model.Task, codec *secret.Codec) (*grpcapi.TaskCommand, e
 		TargetSlot:              toProtoSlot(payload.TargetSlot),
 		CurrentLiveSlot:         toProtoSlot(payload.CurrentLiveSlot),
 		ContainerPort:           int32(payload.ContainerPort),
+		CpuLimitCores:           payload.CPULimitCores,
+		MemoryLimitMb:           payload.MemoryLimitMB,
 		DockerHealthCheck:       payload.DockerHealthCheck,
 		HttpHealthPath:          payload.HTTPHealthPath,
 		HttpHealthHeaders:       payload.HTTPHealthHeaders,

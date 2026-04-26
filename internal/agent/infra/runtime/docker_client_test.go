@@ -18,6 +18,8 @@ func TestBuildWorkloadCreateRequestUsesLimitedRestartPolicy(t *testing.T) {
 		ReleaseId:     "rel-1",
 		TargetSlot:    grpcapi.Slot_SLOT_BLUE,
 		ContainerPort: 8080,
+		CpuLimitCores: 0.5,
+		MemoryLimitMb: 256,
 		PublishedPorts: []*grpcapi.PublishedPort{
 			{HostPort: 18080, ContainerPort: 8080},
 		},
@@ -33,6 +35,12 @@ func TestBuildWorkloadCreateRequestUsesLimitedRestartPolicy(t *testing.T) {
 	}
 	if req.HostConfig.NetworkMode != "epNet" {
 		t.Fatalf("expected workload network mode epNet, got %q", req.HostConfig.NetworkMode)
+	}
+	if req.HostConfig.NanoCpus != 500000000 {
+		t.Fatalf("expected workload nano cpus 500000000, got %d", req.HostConfig.NanoCpus)
+	}
+	if req.HostConfig.Memory != 268435456 {
+		t.Fatalf("expected workload memory bytes 268435456, got %d", req.HostConfig.Memory)
 	}
 	if _, ok := req.NetworkingConfig.EndpointsConfig["epNet"]; !ok {
 		t.Fatal("expected workload to attach to proxy network")

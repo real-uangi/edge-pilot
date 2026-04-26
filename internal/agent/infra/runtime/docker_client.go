@@ -11,6 +11,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"math"
 	"net"
 	"net/http"
 	"net/url"
@@ -138,6 +139,8 @@ func buildWorkloadCreateRequest(cfg *config.AgentRuntimeConfig, imageRef string,
 			NetworkMode:  cfg.ProxyNetworkName,
 			PortBindings: flattenPublishedPorts(task.GetPublishedPorts()),
 			Binds:        flattenVolumes(task.GetVolumes()),
+			NanoCpus:     cpuLimitCoresToNanoCPUs(task.GetCpuLimitCores()),
+			Memory:       memoryLimitMBToBytes(task.GetMemoryLimitMb()),
 			RestartPolicy: dockerRestartPolicy{
 				Name:              "on-failure",
 				MaximumRetryCount: 5,
@@ -485,6 +488,8 @@ type dockerHostConfig struct {
 	PortBindings  map[string][]dockerPortBinding `json:"PortBindings,omitempty"`
 	Binds         []string                       `json:"Binds,omitempty"`
 	Tmpfs         map[string]string              `json:"Tmpfs,omitempty"`
+	NanoCpus      int64                          `json:"NanoCpus,omitempty"`
+	Memory        int64                          `json:"Memory,omitempty"`
 	RestartPolicy dockerRestartPolicy            `json:"RestartPolicy,omitempty"`
 }
 
@@ -578,6 +583,20 @@ func exposedPorts(task *grpcapi.TaskCommand) map[string]map[string]string {
 
 func portKey(port int) string {
 	return strconv.Itoa(port) + "/tcp"
+}
+
+func cpuLimitCoresToNanoCPUs(cpuLimitCores float64) int64 {
+	if cpuLimitCores <= 0 {
+		return 0
+	}
+	return int64(math.Round(cpuLimitCores * 1_000_000_000))
+}
+
+func memoryLimitMBToBytes(memoryLimitMB int64) int64 {
+	if memoryLimitMB <= 0 {
+		return 0
+	}
+	return memoryLimitMB * 1024 * 1024
 }
 
 func toManagedContainer(resp *dockerInspectResponse) *agentdomain.ManagedContainer {

@@ -7,12 +7,11 @@
 package grpcapi
 
 import (
+	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
+	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 	reflect "reflect"
 	sync "sync"
 	unsafe "unsafe"
-
-	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
-	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 )
 
 const (
@@ -991,6 +990,8 @@ type TaskCommand struct {
 	SchedulerSdkPort        int32                  `protobuf:"varint,34,opt,name=scheduler_sdk_port,json=schedulerSdkPort,proto3" json:"scheduler_sdk_port,omitempty"`
 	SchedulerExecutorGroup  string                 `protobuf:"bytes,35,opt,name=scheduler_executor_group,json=schedulerExecutorGroup,proto3" json:"scheduler_executor_group,omitempty"`
 	NetworkAliases          []string               `protobuf:"bytes,36,rep,name=network_aliases,json=networkAliases,proto3" json:"network_aliases,omitempty"`
+	CpuLimitCores           float64                `protobuf:"fixed64,37,opt,name=cpu_limit_cores,json=cpuLimitCores,proto3" json:"cpu_limit_cores,omitempty"`
+	MemoryLimitMb           int64                  `protobuf:"varint,38,opt,name=memory_limit_mb,json=memoryLimitMb,proto3" json:"memory_limit_mb,omitempty"`
 	unknownFields           protoimpl.UnknownFields
 	sizeCache               protoimpl.SizeCache
 }
@@ -1275,6 +1276,20 @@ func (x *TaskCommand) GetNetworkAliases() []string {
 		return x.NetworkAliases
 	}
 	return nil
+}
+
+func (x *TaskCommand) GetCpuLimitCores() float64 {
+	if x != nil {
+		return x.CpuLimitCores
+	}
+	return 0
+}
+
+func (x *TaskCommand) GetMemoryLimitMb() int64 {
+	if x != nil {
+		return x.MemoryLimitMb
+	}
+	return 0
 }
 
 type TaskUpdate struct {
@@ -2025,7 +2040,7 @@ const file_internal_shared_grpcapi_agent_control_proto_rawDesc = "" +
 	"\tread_only\x18\x03 \x01(\bR\breadOnly\"S\n" +
 	"\rPublishedPort\x12\x1b\n" +
 	"\thost_port\x18\x01 \x01(\x05R\bhostPort\x12%\n" +
-	"\x0econtainer_port\x18\x02 \x01(\x05R\rcontainerPort\"\xdd\r\n" +
+	"\x0econtainer_port\x18\x02 \x01(\x05R\rcontainerPort\"\xad\x0e\n" +
 	"\vTaskCommand\x12\x17\n" +
 	"\atask_id\x18\x01 \x01(\tR\x06taskId\x12\x1d\n" +
 	"\n" +
@@ -2072,7 +2087,9 @@ const file_internal_shared_grpcapi_agent_control_proto_rawDesc = "" +
 	"\x13http_health_headers\x18! \x03(\v25.edgepilot.grpcapi.TaskCommand.HttpHealthHeadersEntryR\x11httpHealthHeaders\x12,\n" +
 	"\x12scheduler_sdk_port\x18\" \x01(\x05R\x10schedulerSdkPort\x128\n" +
 	"\x18scheduler_executor_group\x18# \x01(\tR\x16schedulerExecutorGroup\x12'\n" +
-	"\x0fnetwork_aliases\x18$ \x03(\tR\x0enetworkAliases\x1a6\n" +
+	"\x0fnetwork_aliases\x18$ \x03(\tR\x0enetworkAliases\x12&\n" +
+	"\x0fcpu_limit_cores\x18% \x01(\x01R\rcpuLimitCores\x12&\n" +
+	"\x0fmemory_limit_mb\x18& \x01(\x03R\rmemoryLimitMb\x1a6\n" +
 	"\bEnvEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\x1aD\n" +
