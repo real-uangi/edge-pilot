@@ -391,8 +391,8 @@ func (s *Service) SetTrafficPercent(id uuid.UUID, percent int, operator string) 
 	if release.Status != model.ReleaseStatusReadyToSwitch {
 		return nil, business.NewErrorWithCode("release is not ready for traffic adjustment", 409)
 	}
-	if release.PreviousLiveSlot == 0 {
-		return nil, business.NewErrorWithCode("release has no rollback target", 409)
+	if release.PreviousLiveSlot == 0 && percent < 100 {
+		return nil, business.NewErrorWithCode("release has no live baseline for traffic split", 409)
 	}
 	if percent == 0 {
 		if _, err := s.requireHealthyRuntimeInstance(release.ServiceID, release.PreviousLiveSlot, "previous live runtime instance is not healthy"); err != nil {
