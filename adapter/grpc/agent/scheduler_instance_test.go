@@ -61,7 +61,7 @@ func TestIsSchedulerReleaseContainer(t *testing.T) {
 }
 
 func TestApplyWantedReconnectsWhenTargetChanges(t *testing.T) {
-	connector := newSchedulerInstanceConnector(&config.AgentRuntimeConfig{AgentID: "agent-a"}, nil, nil)
+	connector := newSchedulerInstanceConnector(&config.AgentRuntimeConfig{AgentID: "agent-a"}, nil, nil, nil)
 	ctx := context.Background()
 	first := schedulerInstanceTarget{
 		executorID:  "exec-1",
@@ -89,7 +89,7 @@ func TestApplyWantedReconnectsWhenTargetChanges(t *testing.T) {
 }
 
 func TestApplyWantedKeepsSessionWhenTargetUnchanged(t *testing.T) {
-	connector := newSchedulerInstanceConnector(&config.AgentRuntimeConfig{AgentID: "agent-a"}, nil, nil)
+	connector := newSchedulerInstanceConnector(&config.AgentRuntimeConfig{AgentID: "agent-a"}, nil, nil, nil)
 	ctx := context.Background()
 	target := schedulerInstanceTarget{
 		executorID:  "exec-1",
@@ -114,7 +114,7 @@ func TestApplyWantedKeepsSessionWhenTargetUnchanged(t *testing.T) {
 }
 
 func TestForgetSessionIgnoresReplacedSession(t *testing.T) {
-	connector := newSchedulerInstanceConnector(&config.AgentRuntimeConfig{AgentID: "agent-a"}, nil, nil)
+	connector := newSchedulerInstanceConnector(&config.AgentRuntimeConfig{AgentID: "agent-a"}, nil, nil, nil)
 	targetA := schedulerInstanceTarget{executorID: "exec-1", group: "g1", port: 18080}
 	targetB := schedulerInstanceTarget{executorID: "exec-1", group: "g2", port: 18080}
 	connector.sessions["exec-1"] = schedulerInstanceSession{target: targetA, cancel: func() {}}
@@ -139,6 +139,9 @@ func (f *fakeDockerRuntime) InspectContainer(context.Context, string) (*agentdom
 	panic("not implemented")
 }
 func (f *fakeDockerRuntime) FindContainerByName(context.Context, string) (*agentdomain.ManagedContainer, error) {
+	panic("not implemented")
+}
+func (f *fakeDockerRuntime) FindManagedContainerByIdentity(context.Context, agentdomain.ManagedContainerIdentity) (*agentdomain.ManagedContainer, error) {
 	panic("not implemented")
 }
 func (f *fakeDockerRuntime) ResolveListenAddress(context.Context, string, int) (string, error) {

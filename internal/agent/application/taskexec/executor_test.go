@@ -41,7 +41,7 @@ func TestExecuteDeployReusesHealthyManagedContainer(t *testing.T) {
 			"container-1": "172.29.0.21:8080",
 		},
 	}
-	executor := NewExecutor(&config.AgentRuntimeConfig{AgentID: "agent-a"}, docker, &fakeProxyRuntime{})
+	executor := NewExecutor(&config.AgentRuntimeConfig{AgentID: "agent-a"}, docker, &fakeProxyRuntime{}, nil)
 	executor.httpProbe = func(string, string, map[string]string, int, int) error { return nil }
 
 	err := executor.Execute(context.Background(), newDeployTaskCommand("release-1"), func(update *grpcapi.TaskUpdate) error { return nil })
@@ -75,7 +75,7 @@ func TestExecuteDeployPreservesCurrentReleaseContainerUntilHealthy(t *testing.T)
 			"container-2": "172.29.0.22:8080",
 		},
 	}
-	executor := NewExecutor(&config.AgentRuntimeConfig{AgentID: "agent-a"}, docker, &fakeProxyRuntime{})
+	executor := NewExecutor(&config.AgentRuntimeConfig{AgentID: "agent-a"}, docker, &fakeProxyRuntime{}, nil)
 	executor.httpProbe = func(string, string, map[string]string, int, int) error { return nil }
 
 	err := executor.Execute(context.Background(), newDeployTaskCommand("release-2"), func(update *grpcapi.TaskUpdate) error { return nil })
@@ -100,7 +100,7 @@ func TestExecuteDeployFailsOnManagedContainerConflict(t *testing.T) {
 			},
 		},
 	}
-	executor := NewExecutor(&config.AgentRuntimeConfig{AgentID: "agent-a"}, docker, &fakeProxyRuntime{})
+	executor := NewExecutor(&config.AgentRuntimeConfig{AgentID: "agent-a"}, docker, &fakeProxyRuntime{}, nil)
 
 	err := executor.Execute(context.Background(), newDeployTaskCommand("release-3"), func(update *grpcapi.TaskUpdate) error { return nil })
 	if err == nil {
@@ -118,7 +118,7 @@ func TestExecuteDeployRetriesTransientHealthFailures(t *testing.T) {
 			"new-container": {State: "running", Running: true, Health: "healthy"},
 		},
 	}
-	executor := NewExecutor(&config.AgentRuntimeConfig{AgentID: "agent-a"}, docker, &fakeProxyRuntime{})
+	executor := NewExecutor(&config.AgentRuntimeConfig{AgentID: "agent-a"}, docker, &fakeProxyRuntime{}, nil)
 	attempts := 0
 	var capturedHeaders map[string]string
 	executor.httpProbe = func(_ string, _ string, headers map[string]string, _ int, _ int) error {
@@ -169,7 +169,7 @@ func TestExecuteDeployCollectsLogsAndCleansFailedContainer(t *testing.T) {
 			"new-container": "boot failed",
 		},
 	}
-	executor := NewExecutor(&config.AgentRuntimeConfig{AgentID: "agent-a"}, docker, &fakeProxyRuntime{})
+	executor := NewExecutor(&config.AgentRuntimeConfig{AgentID: "agent-a"}, docker, &fakeProxyRuntime{}, nil)
 	executor.httpProbe = func(string, string, map[string]string, int, int) error { return errors.New("probe failed") }
 
 	err := executor.Execute(context.Background(), &grpcapi.TaskCommand{
@@ -240,7 +240,7 @@ func TestExecuteTrafficSwitchCleansOnlyCurrentAgentManagedContainers(t *testing.
 			},
 		},
 	}
-	executor := NewExecutor(&config.AgentRuntimeConfig{AgentID: "agent-a"}, docker, &fakeProxyRuntime{})
+	executor := NewExecutor(&config.AgentRuntimeConfig{AgentID: "agent-a"}, docker, &fakeProxyRuntime{}, nil)
 
 	err := executor.Execute(context.Background(), &grpcapi.TaskCommand{
 		TaskId:          "task-3",
@@ -295,7 +295,7 @@ func TestExecuteTrafficSwitchWithoutReleaseIDFallsBackToSlotPreserve(t *testing.
 			},
 		},
 	}
-	executor := NewExecutor(&config.AgentRuntimeConfig{AgentID: "agent-a"}, docker, &fakeProxyRuntime{})
+	executor := NewExecutor(&config.AgentRuntimeConfig{AgentID: "agent-a"}, docker, &fakeProxyRuntime{}, nil)
 
 	err := executor.Execute(context.Background(), &grpcapi.TaskCommand{
 		TaskId:          "task-no-release-id",
@@ -366,7 +366,7 @@ func TestReconcileManagedContainersOnStartupConservativeScan(t *testing.T) {
 			"remove-terminal": errors.New("docker remove failed"),
 		},
 	}
-	executor := NewExecutor(&config.AgentRuntimeConfig{AgentID: "agent-a"}, docker, &fakeProxyRuntime{})
+	executor := NewExecutor(&config.AgentRuntimeConfig{AgentID: "agent-a"}, docker, &fakeProxyRuntime{}, nil)
 
 	stats, err := executor.ReconcileManagedContainersOnStartup(context.Background(), "agent-a")
 	if err != nil {
@@ -416,6 +416,11 @@ func (f *fakeDockerRuntime) InspectContainer(ctx context.Context, containerID st
 }
 
 func (f *fakeDockerRuntime) FindContainerByName(ctx context.Context, name string) (*ManagedContainer, error) {
+	return f.foundByName[name], nil
+}
+
+func (f *fakeDockerRuntime) FindManagedContainerByIdentity(ctx context.Context, identity agentdomain.ManagedContainerIdentity) (*ManagedContainer, error) {
+	name := agentdomain.ManagedContainerNameForTask(identity.ServiceKey, identity.ReleaseID, identity.Slot)
 	return f.foundByName[name], nil
 }
 

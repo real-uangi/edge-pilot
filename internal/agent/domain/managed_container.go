@@ -1,7 +1,9 @@
 package domain
 
 import (
+	"crypto/sha1"
 	"edge-pilot/internal/shared/grpcapi"
+	"encoding/hex"
 	"fmt"
 	"strings"
 )
@@ -29,7 +31,8 @@ type ManagedContainer struct {
 }
 
 func ManagedContainerName(serviceKey string, slot grpcapi.Slot) string {
-	return fmt.Sprintf("ep-%s-%s", sanitizeContainerToken(serviceKey, "service"), managedSlotName(slot))
+	serviceToken := sanitizeContainerToken(serviceKey, "service")
+	return fmt.Sprintf("ep-%s-%s", serviceToken, shortIdentityHash(serviceToken, "", slot))
 }
 
 func ManagedContainerNameForRelease(serviceKey string, releaseID string) string {
@@ -38,7 +41,7 @@ func ManagedContainerNameForRelease(serviceKey string, releaseID string) string 
 	if releaseToken == "" {
 		return ""
 	}
-	return fmt.Sprintf("ep-%s-%s", serviceToken, releaseToken)
+	return fmt.Sprintf("ep-%s-%s", serviceToken, shortIdentityHash(serviceToken, releaseToken, grpcapi.Slot_SLOT_UNSPECIFIED))
 }
 
 func ManagedContainerNameForTask(serviceKey string, releaseID string, slot grpcapi.Slot) string {
@@ -71,4 +74,9 @@ func managedSlotName(slot grpcapi.Slot) string {
 	default:
 		return "unknown"
 	}
+}
+
+func shortIdentityHash(serviceKey string, releaseID string, slot grpcapi.Slot) string {
+	sum := sha1.Sum([]byte(strings.Join([]string{serviceKey, releaseID, managedSlotName(slot)}, "|")))
+	return hex.EncodeToString(sum[:])[:10]
 }

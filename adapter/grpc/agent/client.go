@@ -2,6 +2,7 @@ package agent
 
 import (
 	"context"
+	"edge-pilot/internal/agent/application/containerindex"
 	"edge-pilot/internal/agent/application/taskexec"
 	agentdomain "edge-pilot/internal/agent/domain"
 	"edge-pilot/internal/shared/config"
@@ -28,7 +29,7 @@ type Client struct {
 	logger    *log.StdLogger
 }
 
-func NewClient(cfg *config.AgentRuntimeConfig, executor *taskexec.Executor, docker agentdomain.DockerRuntime, proxy agentdomain.ProxyRuntime, state *taskexec.RuntimeState, collector perf.Collector) *Client {
+func NewClient(cfg *config.AgentRuntimeConfig, executor *taskexec.Executor, docker agentdomain.DockerRuntime, proxy agentdomain.ProxyRuntime, state *taskexec.RuntimeState, collector perf.Collector, index *containerindex.ManagedContainerIndex) *Client {
 	relay := newSchedulerRelayBridge(cfg)
 	return &Client{
 		cfg:       cfg,
@@ -37,7 +38,7 @@ func NewClient(cfg *config.AgentRuntimeConfig, executor *taskexec.Executor, dock
 		state:     state,
 		collector: collector,
 		relay:     relay,
-		instances: newSchedulerInstanceConnector(cfg, docker, relay),
+		instances: newSchedulerInstanceConnector(cfg, docker, index, relay),
 		logger:    log.NewStdLogger("agent.grpc-client"),
 	}
 }

@@ -13,10 +13,18 @@ type DockerRuntime interface {
 	DeployContainer(context.Context, *grpcapi.TaskCommand) (*ContainerRuntime, error)
 	InspectContainer(context.Context, string) (*ContainerStatus, error)
 	FindContainerByName(context.Context, string) (*ManagedContainer, error)
+	FindManagedContainerByIdentity(context.Context, ManagedContainerIdentity) (*ManagedContainer, error)
 	ResolveListenAddress(context.Context, string, int) (string, error)
 	ReadContainerLogs(context.Context, string, int, int) (string, error)
 	RemoveContainer(context.Context, string) error
 	ListManagedContainers(context.Context, string, string) ([]*ManagedContainer, error)
+}
+
+type ManagedContainerIdentity struct {
+	AgentID    string
+	ServiceKey string
+	ReleaseID  string
+	Slot       grpcapi.Slot
 }
 
 type ProxyRuntime interface {

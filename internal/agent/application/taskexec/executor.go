@@ -2,6 +2,7 @@ package taskexec
 
 import (
 	"context"
+	"edge-pilot/internal/agent/application/containerindex"
 	agentdomain "edge-pilot/internal/agent/domain"
 	"edge-pilot/internal/shared/config"
 	"edge-pilot/internal/shared/grpcapi"
@@ -42,6 +43,7 @@ type Executor struct {
 	cfg       *config.AgentRuntimeConfig
 	docker    agentdomain.DockerRuntime
 	proxy     agentdomain.ProxyRuntime
+	index     *containerindex.ManagedContainerIndex
 	httpProbe func(string, string, map[string]string, int, int) error
 	logger    *log.StdLogger
 }
@@ -60,11 +62,12 @@ func (e *TaskExecutionError) Unwrap() error {
 	return e.Err
 }
 
-func NewExecutor(cfg *config.AgentRuntimeConfig, docker agentdomain.DockerRuntime, proxy agentdomain.ProxyRuntime) *Executor {
+func NewExecutor(cfg *config.AgentRuntimeConfig, docker agentdomain.DockerRuntime, proxy agentdomain.ProxyRuntime, index *containerindex.ManagedContainerIndex) *Executor {
 	return &Executor{
 		cfg:       cfg,
 		docker:    docker,
 		proxy:     proxy,
+		index:     index,
 		httpProbe: probeHTTP,
 		logger:    log.NewStdLogger("agent.executor"),
 	}
@@ -199,8 +202,13 @@ const (
 )
 
 func (e *Executor) ensureDeployContainer(ctx context.Context, task *grpcapi.TaskCommand) (*agentdomain.ContainerRuntime, deployDecision, error) {
-	name := agentdomain.ManagedContainerNameForTask(task.GetServiceKey(), task.GetReleaseId(), task.GetTargetSlot())
-	existing, err := e.docker.FindContainerByName(ctx, name)
+	identity := agentdomain.ManagedContainerIdentity{
+		AgentID:    task.GetAgentId(),
+		ServiceKey: task.GetServiceKey(),
+		ReleaseID:  task.GetReleaseId(),
+		Slot:       task.GetTargetSlot(),
+	}
+	existing, err := e.findManagedContainer(ctx, identity)
 	if err != nil {
 		return nil, deployDecisionStartNew, err
 	}
@@ -208,6 +216,7 @@ func (e *Executor) ensureDeployContainer(ctx context.Context, task *grpcapi.Task
 		return nil, deployDecisionStartNew, nil
 	}
 	if !existing.Managed || existing.AgentID != task.GetAgentId() {
+		name := agentdomain.ManagedContainerNameForTask(task.GetServiceKey(), task.GetReleaseId(), task.GetTargetSlot())
 		return nil, deployDecisionStartNew, &TaskExecutionError{
 			Step: "managed_container_conflict",
 			Err:  fmt.Errorf("managed container conflict: %s exists but is not owned by agent %s", name, task.GetAgentId()),
@@ -247,6 +256,23 @@ func (e *Executor) ensureDeployContainer(ctx context.Context, task *grpcapi.Task
 		return nil, deployDecisionStartNew, err
 	}
 	return nil, deployDecisionStartNew, nil
+}
+
+func (e *Executor) findManagedContainer(ctx context.Context, identity agentdomain.ManagedContainerIdentity) (*agentdomain.ManagedContainer, error) {
+	if e.index != nil {
+		if err := e.index.RefreshNow(ctx); err != nil {
+			e.logger.Errorf(err, "managed container index refresh before deploy lookup failed: agentId=%s serviceKey=%s releaseId=%s", identity.AgentID, identity.ServiceKey, identity.ReleaseID)
+		} else {
+			item, err := e.index.FindByIdentity(identity)
+			if err != nil {
+				return nil, err
+			}
+			if item != nil {
+				return item, nil
+			}
+		}
+	}
+	return e.docker.FindManagedContainerByIdentity(ctx, identity)
 }
 
 func (e *Executor) waitForHealth(ctx context.Context, task *grpcapi.TaskCommand, runtime *agentdomain.ContainerRuntime, report func(*grpcapi.TaskUpdate) error) error {

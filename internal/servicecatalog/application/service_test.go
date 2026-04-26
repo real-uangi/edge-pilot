@@ -103,6 +103,53 @@ func TestCreateServiceRejectsInvalidSchedulerSDKPort(t *testing.T) {
 	}
 }
 
+func TestCreateRejectsServiceKeyLongerThan24(t *testing.T) {
+	repo := newFakeServiceCatalogRepo()
+	svc := NewServiceWithPublisher(repo, nil, nil)
+
+	_, err := svc.Create(dto.UpsertServiceRequest{
+		Name:          "svc-too-long",
+		ServiceKey:    "svc-abcdefghijklmnopqrstuvwxyz",
+		AgentID:       "11111111-1111-1111-1111-111111111111",
+		ImageRepo:     "repo/app",
+		ContainerPort: 8080,
+		RouteHost:     "bad.example.com",
+	})
+	if err == nil {
+		t.Fatalf("expected serviceKey length validation error")
+	}
+}
+
+func TestUpdateRejectsServiceKeyLongerThan24(t *testing.T) {
+	repo := newFakeServiceCatalogRepo()
+	svc := NewServiceWithPublisher(repo, nil, nil)
+	id := uuid.MustParse("11111111-1111-1111-1111-111111111111")
+	enabled := true
+	repo.byID[id] = &model.Service{
+		ID:            id,
+		ServiceKey:    "svc-abcdefghijklmnopqrstuvwxyz",
+		Name:          "svc-a",
+		AgentID:       "11111111-1111-1111-1111-111111111111",
+		ImageRepo:     "repo/app",
+		ContainerPort: 8080,
+		RouteHost:     "a.example.com",
+		Enabled:       &enabled,
+	}
+	repo.byKey["svc-abcdefghijklmnopqrstuvwxyz"] = repo.byID[id]
+
+	_, err := svc.Update(id, dto.UpsertServiceRequest{
+		Name:          "svc-a",
+		ServiceKey:    "svc-abcdefghijklmnopqrstuvwxyz",
+		AgentID:       "11111111-1111-1111-1111-111111111111",
+		ImageRepo:     "repo/app",
+		ContainerPort: 8080,
+		RouteHost:     "a.example.com",
+	})
+	if err == nil {
+		t.Fatalf("expected serviceKey length validation error")
+	}
+}
+
 func TestBuildProxyServiceConfigsSortsLongestPathFirst(t *testing.T) {
 	enabled := true
 	configs := BuildProxyServiceConfigs([]model.Service{

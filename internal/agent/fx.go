@@ -2,6 +2,7 @@ package agent
 
 import (
 	"context"
+	"edge-pilot/internal/agent/application/containerindex"
 	"edge-pilot/internal/agent/application/proxyconfig"
 	"edge-pilot/internal/agent/application/registry"
 	"edge-pilot/internal/agent/application/taskexec"
@@ -10,6 +11,7 @@ import (
 	"edge-pilot/internal/agent/infra/runtime"
 	"edge-pilot/internal/shared/config"
 	"edge-pilot/internal/shared/perf"
+	"time"
 
 	"github.com/real-uangi/allingo/common/log"
 	"go.uber.org/fx"
@@ -44,6 +46,23 @@ func startManagedContainerStartupReconcile(lc fx.Lifecycle, cfg *config.AgentRun
 	})
 }
 
+func startManagedContainerIndex(lc fx.Lifecycle, cfg *config.AgentRuntimeConfig, index *containerindex.ManagedContainerIndex) {
+	ctx, cancel := context.WithCancel(context.Background())
+	lc.Append(fx.Hook{
+		OnStart: func(startCtx context.Context) error {
+			if err := index.RefreshNow(startCtx); err != nil {
+				return err
+			}
+			go index.Run(ctx, time.Duration(cfg.ManagedContainerScanIntervalS)*time.Second)
+			return nil
+		},
+		OnStop: func(context.Context) error {
+			cancel()
+			return nil
+		},
+	})
+}
+
 var ControlPlaneModule = fx.Module(
 	"agent-control-plane",
 	fx.Provide(
@@ -61,6 +80,7 @@ var RuntimeModule = fx.Module(
 		perf.NewCollector,
 		runtime.NewRawDockerClient,
 		func(client *runtime.DockerClient) agentdomain.DockerRuntime { return client },
+		containerindex.NewManagedContainerIndex,
 		runtime.NewManagedProxyRuntime,
 		func(runtime *runtime.ManagedProxyRuntime) agentdomain.ProxyRuntime { return runtime },
 		taskexec.NewExecutor,
@@ -68,6 +88,7 @@ var RuntimeModule = fx.Module(
 	),
 	fx.Invoke(
 		runtime.StartManagedProxyRuntime,
+		startManagedContainerIndex,
 		startManagedContainerStartupReconcile,
 	),
 )

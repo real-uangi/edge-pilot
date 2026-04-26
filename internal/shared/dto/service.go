@@ -20,7 +20,7 @@ type PublishedPort struct {
 
 type UpsertServiceRequest struct {
 	Name                    string            `json:"name" binding:"required"`
-	ServiceKey              string            `json:"serviceKey" binding:"required"`
+	ServiceKey              string            `json:"serviceKey" binding:"required,max=24"`
 	AgentID                 string            `json:"agentId" binding:"required"`
 	ImageRepo               string            `json:"imageRepo" binding:"required"`
 	ContainerPort           int               `json:"containerPort" binding:"required"`

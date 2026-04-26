@@ -2,6 +2,7 @@ package agent
 
 import (
 	"context"
+	"edge-pilot/internal/agent/application/containerindex"
 	"fmt"
 	"strings"
 	"sync"
@@ -23,6 +24,7 @@ const serviceInstanceMetadataKey = "edge_pilot_service_instance"
 type schedulerInstanceConnector struct {
 	cfg    *config.AgentRuntimeConfig
 	docker agentdomain.DockerRuntime
+	index  *containerindex.ManagedContainerIndex
 	bridge *schedulerRelayBridge
 	logger *log.StdLogger
 
@@ -58,10 +60,11 @@ func (t schedulerInstanceTarget) equal(other schedulerInstanceTarget) bool {
 		t.port == other.port
 }
 
-func newSchedulerInstanceConnector(cfg *config.AgentRuntimeConfig, docker agentdomain.DockerRuntime, bridge *schedulerRelayBridge) *schedulerInstanceConnector {
+func newSchedulerInstanceConnector(cfg *config.AgentRuntimeConfig, docker agentdomain.DockerRuntime, index *containerindex.ManagedContainerIndex, bridge *schedulerRelayBridge) *schedulerInstanceConnector {
 	return &schedulerInstanceConnector{
 		cfg:      cfg,
 		docker:   docker,
+		index:    index,
 		bridge:   bridge,
 		logger:   log.NewStdLogger("agent.scheduler-instance"),
 		services: make(map[string]*grpcapi.ProxyServiceConfig),
@@ -108,7 +111,7 @@ func (c *schedulerInstanceConnector) reconcile(ctx context.Context) {
 		c.stopAll()
 		return
 	}
-	containers, err := c.docker.ListManagedContainers(ctx, c.cfg.AgentID, "")
+	containers, err := c.listContainers(ctx)
 	if err != nil {
 		c.logger.Errorf(err, "list managed containers for scheduler sdk failed")
 		return
@@ -138,6 +141,16 @@ func (c *schedulerInstanceConnector) reconcile(ctx context.Context) {
 		wanted[target.executorID] = target
 	}
 	c.applyWanted(ctx, wanted)
+}
+
+func (c *schedulerInstanceConnector) listContainers(ctx context.Context) ([]*agentdomain.ManagedContainer, error) {
+	if c.index == nil {
+		return c.docker.ListManagedContainers(ctx, c.cfg.AgentID, "")
+	}
+	if err := c.index.RefreshNow(ctx); err != nil {
+		return nil, err
+	}
+	return c.index.List(), nil
 }
 
 func (c *schedulerInstanceConnector) snapshotServices() map[string]*grpcapi.ProxyServiceConfig {

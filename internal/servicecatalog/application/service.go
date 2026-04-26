@@ -15,6 +15,7 @@ import (
 )
 
 var networkAliasPattern = regexp.MustCompile(`^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$`)
+var serviceKeyPattern = regexp.MustCompile(`^[a-z0-9](?:[a-z0-9-]{0,22}[a-z0-9])?$`)
 
 type Service struct {
 	repo      domain.Repository
@@ -41,6 +42,11 @@ func NewServiceWithPublisherAndCodec(repo domain.Repository, publisher domain.Pr
 }
 
 func (s *Service) Create(req dto.UpsertServiceRequest) (*dto.ServiceOutput, error) {
+	serviceKey, err := normalizeServiceKey(req.ServiceKey)
+	if err != nil {
+		return nil, err
+	}
+	req.ServiceKey = serviceKey
 	existing, err := s.repo.GetByKey(req.ServiceKey)
 	if err != nil {
 		return nil, err
@@ -78,6 +84,11 @@ func (s *Service) Create(req dto.UpsertServiceRequest) (*dto.ServiceOutput, erro
 }
 
 func (s *Service) Update(id uuid.UUID, req dto.UpsertServiceRequest) (*dto.ServiceOutput, error) {
+	serviceKey, err := normalizeServiceKey(req.ServiceKey)
+	if err != nil {
+		return nil, err
+	}
+	req.ServiceKey = serviceKey
 	current, err := s.repo.GetByID(id)
 	if err != nil {
 		return nil, err
@@ -85,7 +96,7 @@ func (s *Service) Update(id uuid.UUID, req dto.UpsertServiceRequest) (*dto.Servi
 	if current == nil {
 		return nil, business.ErrNotFound
 	}
-	if strings.TrimSpace(req.ServiceKey) != current.ServiceKey {
+	if req.ServiceKey != current.ServiceKey {
 		return nil, business.NewBadRequest("serviceKey 不允许修改")
 	}
 	if strings.TrimSpace(req.AgentID) != current.AgentID {
@@ -193,6 +204,10 @@ func (s *Service) UpdateLiveSlot(id uuid.UUID, slot model.Slot) error {
 }
 
 func (s *Service) buildServiceEntity(id uuid.UUID, req dto.UpsertServiceRequest) (*model.Service, error) {
+	serviceKey, err := normalizeServiceKey(req.ServiceKey)
+	if err != nil {
+		return nil, err
+	}
 	if err := validateContainerPort(req.ContainerPort); err != nil {
 		return nil, err
 	}
@@ -251,7 +266,7 @@ func (s *Service) buildServiceEntity(id uuid.UUID, req dto.UpsertServiceRequest)
 
 	return &model.Service{
 		ID:                      id,
-		ServiceKey:              req.ServiceKey,
+		ServiceKey:              serviceKey,
 		Name:                    req.Name,
 		AgentID:                 req.AgentID,
 		ImageRepo:               req.ImageRepo,
@@ -279,6 +294,14 @@ func (s *Service) buildServiceEntity(id uuid.UUID, req dto.UpsertServiceRequest)
 		PublishedPorts:          commondb.NewJSONB(toModelPublishedPorts(req.PublishedPorts)),
 		Enabled:                 enabled,
 	}, nil
+}
+
+func normalizeServiceKey(value string) (string, error) {
+	serviceKey := strings.TrimSpace(value)
+	if !serviceKeyPattern.MatchString(serviceKey) {
+		return "", business.NewBadRequest("serviceKey 非法")
+	}
+	return serviceKey, nil
 }
 
 func (s *Service) ensureAgentAssignable(agentID string) error {

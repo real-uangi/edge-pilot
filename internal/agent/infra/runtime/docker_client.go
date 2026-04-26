@@ -350,6 +350,36 @@ func (c *DockerClient) FindContainerByName(ctx context.Context, name string) (*a
 	return toManagedContainer(&inspectResp), nil
 }
 
+func (c *DockerClient) FindManagedContainerByIdentity(ctx context.Context, identity agentdomain.ManagedContainerIdentity) (*agentdomain.ManagedContainer, error) {
+	filters := map[string][]string{
+		"label": {
+			agentdomain.ManagedLabelKey + "=" + agentdomain.ManagedLabelValue,
+			agentdomain.ManagedLabelAgentID + "=" + strings.TrimSpace(identity.AgentID),
+			agentdomain.ManagedLabelServiceKey + "=" + strings.TrimSpace(identity.ServiceKey),
+		},
+	}
+	releaseID := strings.TrimSpace(identity.ReleaseID)
+	if releaseID != "" {
+		filters["label"] = append(filters["label"], agentdomain.ManagedLabelReleaseID+"="+releaseID)
+	} else {
+		slot := strings.TrimSpace(agentdomain.ManagedSlotValue(identity.Slot))
+		if slot != "" && slot != "unknown" {
+			filters["label"] = append(filters["label"], agentdomain.ManagedLabelSlot+"="+slot)
+		}
+	}
+	items, err := c.listManagedContainersByFilters(ctx, filters)
+	if err != nil {
+		return nil, err
+	}
+	if len(items) == 0 {
+		return nil, nil
+	}
+	if len(items) > 1 {
+		return nil, fmt.Errorf("managed container conflict: found %d containers for serviceKey=%s releaseId=%s slot=%s", len(items), identity.ServiceKey, releaseID, identity.Slot.String())
+	}
+	return items[0], nil
+}
+
 func (c *DockerClient) ResolveListenAddress(ctx context.Context, containerID string, port int) (string, error) {
 	req, err := c.endpoint.newRequest(ctx, http.MethodGet, "/containers/"+url.PathEscape(containerID)+"/json", nil)
 	if err != nil {
@@ -394,7 +424,29 @@ func (c *DockerClient) RemoveContainer(ctx context.Context, containerID string) 
 }
 
 func (c *DockerClient) ListManagedContainers(ctx context.Context, agentID string, serviceKey string) ([]*agentdomain.ManagedContainer, error) {
-	req, err := c.endpoint.newRequest(ctx, http.MethodGet, "/containers/json?all=1", nil)
+	filters := map[string][]string{
+		"label": {
+			agentdomain.ManagedLabelKey + "=" + agentdomain.ManagedLabelValue,
+			agentdomain.ManagedLabelAgentID + "=" + strings.TrimSpace(agentID),
+		},
+	}
+	expectedServiceKey := strings.TrimSpace(serviceKey)
+	if expectedServiceKey != "" {
+		filters["label"] = append(filters["label"], agentdomain.ManagedLabelServiceKey+"="+expectedServiceKey)
+	}
+	return c.listManagedContainersByFilters(ctx, filters)
+}
+
+func (c *DockerClient) listManagedContainersByFilters(ctx context.Context, filters map[string][]string) ([]*agentdomain.ManagedContainer, error) {
+	path := "/containers/json?all=1"
+	if len(filters) > 0 {
+		encoded, err := json.Marshal(filters)
+		if err != nil {
+			return nil, err
+		}
+		path += "&filters=" + url.QueryEscape(string(encoded))
+	}
+	req, err := c.endpoint.newRequest(ctx, http.MethodGet, path, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -411,17 +463,7 @@ func (c *DockerClient) ListManagedContainers(ctx context.Context, agentID string
 		return nil, err
 	}
 	out := make([]*agentdomain.ManagedContainer, 0, len(items))
-	expectedServiceKey := strings.TrimSpace(serviceKey)
 	for _, item := range items {
-		if item.Labels[agentdomain.ManagedLabelKey] != agentdomain.ManagedLabelValue {
-			continue
-		}
-		if item.Labels[agentdomain.ManagedLabelAgentID] != agentID {
-			continue
-		}
-		if expectedServiceKey != "" && item.Labels[agentdomain.ManagedLabelServiceKey] != expectedServiceKey {
-			continue
-		}
 		out = append(out, summaryToManagedContainer(item))
 	}
 	return out, nil

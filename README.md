@@ -178,6 +178,7 @@ Edge Pilot 是一个面向单机 Docker 多服务场景的控制面，用来解�
 - `HAPROXY_DATAPLANE_USERNAME`：默认 `admin`
 - `HAPROXY_DATAPLANE_PASSWORD`：默认 `edge-pilot-internal`
 - `PROXY_SELF_HEAL_INTERVAL_SECONDS`：默认 `10`
+- `MANAGED_CONTAINER_SCAN_INTERVAL_SECONDS`：托管容器全局检测与内存索引刷新间隔，默认 `5`
 
 `AGENT_VERSION` 不再通过环境变量读取，而是直接使用编译时注入的 build info。
 

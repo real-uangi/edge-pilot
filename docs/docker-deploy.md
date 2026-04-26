@@ -125,6 +125,7 @@ docker run -d \
 - `HAPROXY_DATAPLANE_USERNAME`：默认 `admin`
 - `HAPROXY_DATAPLANE_PASSWORD`：默认 `edge-pilot-internal`
 - `PROXY_SELF_HEAL_INTERVAL_SECONDS`：默认 `10`
+- `MANAGED_CONTAINER_SCAN_INTERVAL_SECONDS`：托管容器全局检测与内存索引刷新间隔，默认 `5`
 
 ### 关键授权说明
 
