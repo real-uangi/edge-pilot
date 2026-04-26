@@ -485,7 +485,59 @@ func (m *ManagedProxyRuntime) reconcileLocked(ctx context.Context, snapshot *grp
 		return err
 	}
 	committed = true
+	m.cleanupStaleManagedContainers(ctx, snapshot)
 	return nil
+}
+
+func (m *ManagedProxyRuntime) cleanupStaleManagedContainers(ctx context.Context, snapshot *grpcapi.ProxyConfigSnapshot) {
+	if m.docker == nil || snapshot == nil {
+		return
+	}
+	items, err := m.docker.ListManagedContainers(ctx, strings.TrimSpace(m.cfg.AgentID), "")
+	if err != nil {
+		m.logger.Errorf(err, "list managed containers for stale cleanup failed: agentId=%s", m.cfg.AgentID)
+		return
+	}
+	staleContainerIDs := selectStaleManagedContainerIDs(items, snapshot)
+	for _, containerID := range staleContainerIDs {
+		m.logger.Infof("removing stale managed container after snapshot reconcile: agentId=%s containerId=%s", m.cfg.AgentID, containerID)
+		if err := m.docker.RemoveContainer(ctx, containerID); err != nil {
+			m.logger.Errorf(err, "remove stale managed container failed: agentId=%s containerId=%s", m.cfg.AgentID, containerID)
+		}
+	}
+}
+
+func selectStaleManagedContainerIDs(items []*agentdomain.ManagedContainer, snapshot *grpcapi.ProxyConfigSnapshot) []string {
+	if len(items) == 0 {
+		return nil
+	}
+	desiredServiceKeys := make(map[string]struct{}, len(snapshot.GetServices()))
+	for _, service := range snapshot.GetServices() {
+		serviceKey := strings.TrimSpace(service.GetServiceKey())
+		if serviceKey == "" {
+			continue
+		}
+		desiredServiceKeys[serviceKey] = struct{}{}
+	}
+	staleContainerIDs := make([]string, 0, len(items))
+	for _, item := range items {
+		if item == nil {
+			continue
+		}
+		serviceKey := strings.TrimSpace(item.ServiceKey)
+		if serviceKey == "" {
+			continue
+		}
+		if _, ok := desiredServiceKeys[serviceKey]; ok {
+			continue
+		}
+		containerID := strings.TrimSpace(item.ContainerID)
+		if containerID == "" {
+			continue
+		}
+		staleContainerIDs = append(staleContainerIDs, containerID)
+	}
+	return staleContainerIDs
 }
 
 type dataplaneFailureContext struct {

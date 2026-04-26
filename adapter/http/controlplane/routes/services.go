@@ -14,12 +14,31 @@ import (
 	"github.com/real-uangi/allingo/common/result"
 )
 
+type serviceAdminActions interface {
+	Create(dto.UpsertServiceRequest) (*dto.ServiceOutput, error)
+	Update(uuid.UUID, dto.UpsertServiceRequest) (*dto.ServiceOutput, error)
+	Delete(uuid.UUID) error
+	List() ([]dto.ServiceOutput, error)
+	Get(uuid.UUID) (*dto.ServiceOutput, error)
+}
+
 func SetAdminServiceRoutes(engine *gin.Engine, services *servicecatalogapp.Service, auth *adminauthapp.Service, cfg *config.AdminAuthConfig) {
 	admin := engine.Group("/api/admin")
 	admin.Use(adaptermiddleware.RequireAdminSession(auth, cfg))
+	registerAdminServiceRoutes(admin, services)
+}
+
+func registerAdminServiceRoutes(admin *gin.RouterGroup, services serviceAdminActions) {
 	admin.POST("/services", api.JsonFunc(func(input dto.UpsertServiceRequest) (*dto.ServiceOutput, error) {
 		return services.Create(input)
 	}))
+	admin.DELETE("/services/:id", api.SingleParamUUIDFunc(func(id uuid.UUID) (*gin.H, error) {
+		if err := services.Delete(id); err != nil {
+			return nil, err
+		}
+		output := gin.H{"deleted": true}
+		return &output, nil
+	}, "id"))
 	admin.PUT("/services/:id", func(c *gin.Context) {
 		id, err := uuid.Parse(c.Param("id"))
 		if err != nil {

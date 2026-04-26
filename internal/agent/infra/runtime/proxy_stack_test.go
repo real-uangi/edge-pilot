@@ -79,6 +79,44 @@ func TestReconcileLockedDeletesStaleBackendsInsideTransaction(t *testing.T) {
 	}
 }
 
+func TestSelectStaleManagedContainerIDsReturnsOnlyMissingServices(t *testing.T) {
+	items := []*agentdomain.ManagedContainer{
+		{ContainerRuntime: agentdomain.ContainerRuntime{ContainerID: "keep-live"}, ServiceKey: "svc-a"},
+		{ContainerRuntime: agentdomain.ContainerRuntime{ContainerID: "remove-stale"}, ServiceKey: "svc-legacy"},
+		{ContainerRuntime: agentdomain.ContainerRuntime{ContainerID: "skip-empty"}, ServiceKey: ""},
+	}
+	snapshot := &grpcapi.ProxyConfigSnapshot{
+		Services: []*grpcapi.ProxyServiceConfig{
+			{ServiceKey: "svc-a"},
+			{ServiceKey: "svc-b"},
+		},
+	}
+
+	stale := selectStaleManagedContainerIDs(items, snapshot)
+	expected := []string{"remove-stale"}
+	if !reflect.DeepEqual(stale, expected) {
+		t.Fatalf("expected stale container ids %v, got %v", expected, stale)
+	}
+}
+
+func TestSelectStaleManagedContainerIDsReturnsNoneWhenSnapshotKeepsService(t *testing.T) {
+	items := []*agentdomain.ManagedContainer{
+		{ContainerRuntime: agentdomain.ContainerRuntime{ContainerID: "keep-1"}, ServiceKey: "svc-a"},
+		{ContainerRuntime: agentdomain.ContainerRuntime{ContainerID: "keep-2"}, ServiceKey: "svc-b"},
+	}
+	snapshot := &grpcapi.ProxyConfigSnapshot{
+		Services: []*grpcapi.ProxyServiceConfig{
+			{ServiceKey: "svc-a"},
+			{ServiceKey: "svc-b"},
+		},
+	}
+
+	stale := selectStaleManagedContainerIDs(items, snapshot)
+	if len(stale) != 0 {
+		t.Fatalf("expected no stale container ids, got %v", stale)
+	}
+}
+
 func TestReconcileLockedAbortsTransactionWhenFrontendUpdateFails(t *testing.T) {
 	callLog := make([]string, 0, 16)
 	expectedErr := errors.New("replace frontend failed")

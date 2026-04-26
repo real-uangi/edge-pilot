@@ -18,6 +18,6 @@ var ControlPlaneModule = fx.Module(
 		func(repo domain.Repository) agentdomain.ServiceBindingChecker {
 			return infra.NewAgentServiceBindingChecker(repo)
 		},
-		application.NewServiceWithPublisherAndCodec,
+		application.NewServiceWithPublisherAndCodecAndReleases,
 	),
 )

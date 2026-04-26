@@ -71,6 +71,23 @@ export function ServiceEditorPage() {
     onError: (error) => setSubmitError(getErrorMessage(error)),
   });
 
+  const deleteMutation = useMutation({
+    mutationFn: async () => {
+      if (!serviceId) {
+        throw new Error("服务ID不存在");
+      }
+      return api.deleteService(serviceId);
+    },
+    onSuccess: async () => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["services"] }),
+        queryClient.invalidateQueries({ queryKey: ["overview"] }),
+      ]);
+      navigate("/services", { replace: true });
+    },
+    onError: (error) => setSubmitError(getErrorMessage(error)),
+  });
+
   if (isEdit && serviceQuery.isPending) {
     return (
       <div className={styles.page}>
@@ -259,6 +276,24 @@ export function ServiceEditorPage() {
               type="submit"
               variant="primary"
             />
+            {isEdit ? (
+              <ActionButton
+                label="删除服务"
+                pending={deleteMutation.isPending}
+                pendingLabel="删除中"
+                variant="danger"
+                onClick={() => {
+                  if (!serviceQuery.data) {
+                    return;
+                  }
+                  if (!window.confirm(`确认删除服务 ${serviceQuery.data.serviceKey}？将同步清理容器与代理配置。`)) {
+                    return;
+                  }
+                  setSubmitError(null);
+                  deleteMutation.mutate();
+                }}
+              />
+            ) : null}
             <ActionButton label="返回" onClick={() => navigate("/services")} />
           </div>
         </form>

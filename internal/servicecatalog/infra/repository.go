@@ -25,6 +25,10 @@ func (r *repository) Update(service *model.Service) error {
 	return r.conn.Model(service).Updates(service).Error
 }
 
+func (r *repository) Delete(id uuid.UUID) error {
+	return r.conn.Where("id = ?", id).Delete(&model.Service{}).Error
+}
+
 func (r *repository) GetByID(id uuid.UUID) (*model.Service, error) {
 	var service model.Service
 	result := r.conn.Where("id = ?", id).First(&service)

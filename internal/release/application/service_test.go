@@ -2287,6 +2287,17 @@ func (r *fakeServiceRepo) Update(service *model.Service) error {
 	return nil
 }
 
+func (r *fakeServiceRepo) Delete(id uuid.UUID) error {
+	r.ensure()
+	item := r.byID[id]
+	if item == nil {
+		return nil
+	}
+	delete(r.byID, id)
+	delete(r.byKey, item.ServiceKey)
+	return nil
+}
+
 func (r *fakeServiceRepo) GetByID(id uuid.UUID) (*model.Service, error) {
 	r.ensure()
 	return r.byID[id], nil

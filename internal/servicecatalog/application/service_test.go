@@ -468,6 +468,68 @@ func TestUpdateRejectsImmutableFields(t *testing.T) {
 	}
 }
 
+func TestDeleteServicePublishesAgentSnapshot(t *testing.T) {
+	repo := newFakeServiceCatalogRepo()
+	publisher := &fakeProxyPublisher{}
+	svc := NewServiceWithPublisher(repo, publisher, nil)
+
+	created, err := svc.Create(dto.UpsertServiceRequest{
+		Name:          "svc-a",
+		ServiceKey:    "svc-a",
+		AgentID:       "11111111-1111-1111-1111-111111111111",
+		ImageRepo:     "repo/app",
+		ContainerPort: 8080,
+		RouteHost:     "a.example.com",
+	})
+	if err != nil {
+		t.Fatalf("Create() error = %v", err)
+	}
+
+	publisher.published = nil
+	if err := svc.Delete(created.ID); err != nil {
+		t.Fatalf("Delete() error = %v", err)
+	}
+	if repo.byID[created.ID] != nil {
+		t.Fatalf("expected service to be deleted from repo")
+	}
+	if _, ok := repo.byKey[created.ServiceKey]; ok {
+		t.Fatalf("expected service key index to be removed")
+	}
+	if len(publisher.published) != 1 || publisher.published[0] != created.AgentID {
+		t.Fatalf("expected delete to publish agent snapshot, got %#v", publisher.published)
+	}
+}
+
+func TestDeleteServiceRejectsWhenReleaseActive(t *testing.T) {
+	repo := newFakeServiceCatalogRepo()
+	publisher := &fakeProxyPublisher{}
+	checker := &fakeReleaseStateChecker{active: true}
+	svc := NewServiceWithPublisherAndCodecAndReleases(repo, publisher, nil, nil, checker)
+
+	created, err := svc.Create(dto.UpsertServiceRequest{
+		Name:          "svc-a",
+		ServiceKey:    "svc-a",
+		AgentID:       "11111111-1111-1111-1111-111111111111",
+		ImageRepo:     "repo/app",
+		ContainerPort: 8080,
+		RouteHost:     "a.example.com",
+	})
+	if err != nil {
+		t.Fatalf("Create() error = %v", err)
+	}
+
+	publisher.published = nil
+	if err := svc.Delete(created.ID); err == nil {
+		t.Fatal("expected active release to block delete")
+	}
+	if repo.byID[created.ID] == nil {
+		t.Fatalf("expected service to be preserved when delete blocked")
+	}
+	if len(publisher.published) != 0 {
+		t.Fatalf("expected no publish when delete blocked, got %#v", publisher.published)
+	}
+}
+
 func TestCreateRejectsInvalidContainerPort(t *testing.T) {
 	repo := newFakeServiceCatalogRepo()
 	svc := NewService(repo)
@@ -564,6 +626,16 @@ func (r *fakeServiceCatalogRepo) Update(service *model.Service) error {
 	return nil
 }
 
+func (r *fakeServiceCatalogRepo) Delete(id uuid.UUID) error {
+	item := r.byID[id]
+	if item == nil {
+		return nil
+	}
+	delete(r.byID, id)
+	delete(r.byKey, item.ServiceKey)
+	return nil
+}
+
 func (r *fakeServiceCatalogRepo) GetByID(id uuid.UUID) (*model.Service, error) {
 	return r.byID[id], nil
 }
@@ -619,6 +691,19 @@ type fakeAgentLookup struct {
 	agents map[string]*dto.AgentOutput
 }
 
+type fakeReleaseStateChecker struct {
+	active bool
+	split  bool
+}
+
+func (f *fakeReleaseStateChecker) HasActiveRelease(uuid.UUID) (bool, error) {
+	return f.active, nil
+}
+
+func (f *fakeReleaseStateChecker) HasTrafficSplitRelease(uuid.UUID) (bool, error) {
+	return f.split, nil
+}
+
 func (f *fakeAgentLookup) GetAgent(id string) (*dto.AgentOutput, error) {
 	return f.agents[id], nil
 }
@@ -626,6 +711,7 @@ func (f *fakeAgentLookup) GetAgent(id string) (*dto.AgentOutput, error) {
 var _ domain.Repository = (*fakeServiceCatalogRepo)(nil)
 var _ domain.ProxyConfigPublisher = (*fakeProxyPublisher)(nil)
 var _ domain.AgentLookup = (*fakeAgentLookup)(nil)
+var _ domain.ReleaseStateChecker = (*fakeReleaseStateChecker)(nil)
 
 func newServiceSecretCodec() *secret.Codec {
 	return secret.NewCodec(&config.ServiceSecretConfig{

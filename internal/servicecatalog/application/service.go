@@ -21,22 +21,28 @@ type Service struct {
 	repo      domain.Repository
 	publisher domain.ProxyConfigPublisher
 	agents    domain.AgentLookup
+	releases  domain.ReleaseStateChecker
 	codec     *secret.Codec
 }
 
 func NewService(repo domain.Repository) *Service {
-	return NewServiceWithPublisherAndCodec(repo, nil, nil, nil)
+	return NewServiceWithPublisherAndCodecAndReleases(repo, nil, nil, nil, nil)
 }
 
 func NewServiceWithPublisher(repo domain.Repository, publisher domain.ProxyConfigPublisher, agents domain.AgentLookup) *Service {
-	return NewServiceWithPublisherAndCodec(repo, publisher, agents, nil)
+	return NewServiceWithPublisherAndCodecAndReleases(repo, publisher, agents, nil, nil)
 }
 
 func NewServiceWithPublisherAndCodec(repo domain.Repository, publisher domain.ProxyConfigPublisher, agents domain.AgentLookup, codec *secret.Codec) *Service {
+	return NewServiceWithPublisherAndCodecAndReleases(repo, publisher, agents, codec, nil)
+}
+
+func NewServiceWithPublisherAndCodecAndReleases(repo domain.Repository, publisher domain.ProxyConfigPublisher, agents domain.AgentLookup, codec *secret.Codec, releases domain.ReleaseStateChecker) *Service {
 	return &Service{
 		repo:      repo,
 		publisher: publisher,
 		agents:    agents,
+		releases:  releases,
 		codec:     codec,
 	}
 }
@@ -201,6 +207,23 @@ func (s *Service) GetSpecByID(id uuid.UUID) (*dto.ServiceDeploymentSpec, error) 
 
 func (s *Service) UpdateLiveSlot(id uuid.UUID, slot model.Slot) error {
 	return s.repo.UpdateLiveSlot(id, slot)
+}
+
+func (s *Service) Delete(id uuid.UUID) error {
+	current, err := s.repo.GetByID(id)
+	if err != nil {
+		return err
+	}
+	if current == nil {
+		return business.ErrNotFound
+	}
+	if err := s.ensureServiceDeletable(id); err != nil {
+		return err
+	}
+	if err := s.repo.Delete(id); err != nil {
+		return err
+	}
+	return s.publishAgent(current.AgentID)
 }
 
 func (s *Service) buildServiceEntity(id uuid.UUID, req dto.UpsertServiceRequest) (*model.Service, error) {
@@ -612,6 +635,27 @@ func (s *Service) publishAgent(agentID string) error {
 		return nil
 	}
 	return s.publisher.PublishAgent(agentID)
+}
+
+func (s *Service) ensureServiceDeletable(serviceID uuid.UUID) error {
+	if s.releases == nil {
+		return nil
+	}
+	active, err := s.releases.HasActiveRelease(serviceID)
+	if err != nil {
+		return err
+	}
+	if active {
+		return business.NewErrorWithCode("服务存在进行中的发布，禁止删除", 409)
+	}
+	split, err := s.releases.HasTrafficSplitRelease(serviceID)
+	if err != nil {
+		return err
+	}
+	if split {
+		return business.NewErrorWithCode("服务存在进行中的发布，禁止删除", 409)
+	}
+	return nil
 }
 
 func getJSON[T any](value *commondb.JSONB[T]) T {

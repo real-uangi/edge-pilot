@@ -12,6 +12,7 @@ var ControlPlaneModule = fx.Module(
 	"release",
 	fx.Provide(
 		infra.NewRepository,
+		application.NewServiceCatalogReleaseChecker,
 		func(reg *registry.RegistryService) application.AgentOnlineChecker { return reg },
 		application.NewServiceWithRegistryCredentialsAndCodec,
 	),

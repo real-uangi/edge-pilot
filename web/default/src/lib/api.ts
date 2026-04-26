@@ -396,6 +396,11 @@ export const api = {
       body: JSON.stringify(input),
     });
   },
+  deleteService(id: string) {
+    return request<{ deleted: boolean }>(`/api/admin/services/${id}`, {
+      method: "DELETE",
+    });
+  },
   getServiceObservability(id: string) {
     return request<ObservabilityRecord>(`/api/admin/services/${id}/observability`);
   },

@@ -10,6 +10,7 @@ import (
 type Repository interface {
 	Create(*model.Service) error
 	Update(*model.Service) error
+	Delete(uuid.UUID) error
 	GetByID(uuid.UUID) (*model.Service, error)
 	GetByKey(string) (*model.Service, error)
 	GetByRoute(string, string, string) (*model.Service, error)
@@ -20,4 +21,9 @@ type Repository interface {
 
 type AgentLookup interface {
 	GetAgent(string) (*dto.AgentOutput, error)
+}
+
+type ReleaseStateChecker interface {
+	HasActiveRelease(serviceID uuid.UUID) (bool, error)
+	HasTrafficSplitRelease(serviceID uuid.UUID) (bool, error)
 }
