@@ -296,28 +296,8 @@ export function ReleaseDetailPage() {
             </span>
           </div>
           <div className={styles.keyValue}>
-            <span className={styles.key}>目标槽位</span>
-            <span className={styles.value}>{slotLabel(release.targetSlot)}</span>
-          </div>
-          <div className={styles.keyValue}>
-            <span className={styles.key}>前一槽位</span>
-            <span className={styles.value}>{slotLabel(release.previousLiveSlot)}</span>
-          </div>
-          <div className={styles.keyValue}>
             <span className={styles.key}>创建时间</span>
             <span className={styles.value}>{formatDateTime(release.createdAt)}</span>
-          </div>
-          <div className={styles.keyValue}>
-            <span className={styles.key}>验证 Cookie</span>
-            <span className={styles.value}>{release.stickyCookieName || "—"}</span>
-          </div>
-          <div className={styles.keyValue}>
-            <span className={styles.key}>当前版本响应头</span>
-            <span className={styles.value}>{release.currentReleaseHeaderName || "—"}</span>
-          </div>
-          <div className={styles.keyValue}>
-            <span className={styles.key}>最新版本响应头</span>
-            <span className={styles.value}>{release.liveReleaseHeaderName || "—"}</span>
           </div>
         </div>
         <StatusPill
@@ -363,7 +343,7 @@ export function ReleaseDetailPage() {
         </div>
         {release.verificationUrl ? (
           <InlineNotice
-            message={`目标版本验证链接已就绪，浏览器将写入 ${release.stickyCookieName}，并可通过 ${release.currentReleaseHeaderName} / ${release.liveReleaseHeaderName} 对比当前命中版本与最新 live 版本。`}
+            message="目标版本验证链接已就绪"
             tone="info"
           />
         ) : null}

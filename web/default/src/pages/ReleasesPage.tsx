@@ -24,7 +24,7 @@ export function ReleasesPage() {
       <section className={styles.sectionHeader}>
         <div>
           <h1 className={styles.sectionTitle}>发布</h1>
-          <p className={styles.sectionCopy}>跟踪发布单进度、目标槽位与节点执行状态。</p>
+          <p className={styles.sectionCopy}>跟踪发布单进度与节点执行状态。</p>
         </div>
         <ActionButton label="刷新" onClick={() => releasesQuery.refetch()} />
       </section>
@@ -49,7 +49,6 @@ export function ReleasesPage() {
                   <th>状态</th>
                   <th>镜像</th>
                   <th>节点</th>
-                  <th>目标槽位</th>
                   <th>队列</th>
                   <th>创建时间</th>
                 </tr>
@@ -76,7 +75,6 @@ export function ReleasesPage() {
                         ip={agentsByID.get(release.agentId)?.ip}
                       />
                     </td>
-                    <td>{slotLabel(release.targetSlot)}</td>
                     <td>{release.queuePosition}</td>
                     <td>{formatDateTime(release.createdAt)}</td>
                   </tr>
