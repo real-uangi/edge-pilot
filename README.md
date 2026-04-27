@@ -230,7 +230,7 @@ Docker 部署和 Linux 用户授权说明见：[docs/docker-deploy.md](docs/dock
 
 Control-Plane CI 回调触发说明见：[docs/control-plane-ci-callback.md](docs/control-plane-ci-callback.md)
 
-业务前端如何根据 `X-Edge-Pilot-*` 响应头检查并刷新版本，见：[docs/edge-pilot-release-headers.md](docs/edge-pilot-release-headers.md)
+业务前端如何根据 `X-Edge-Pilot-*` 响应头识别发布信息，并通过 `__ep/normalize` 归位粘滞会话，见：[docs/edge-pilot-release-headers.md](docs/edge-pilot-release-headers.md)
 
 调度执行器 Go SDK 对接说明见：[docs/scheduler-executor-sdk.md](docs/scheduler-executor-sdk.md)
 
