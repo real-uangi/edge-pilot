@@ -226,6 +226,7 @@ func filterHTTPRequestRules(rules []httpRequestRule) []httpRequestRule {
 			rule.CondTest = strings.TrimSpace(strings.TrimPrefix(rule.CondTest, "unless "))
 		}
 		if rule.Type == "return" && rule.CondTest == "" {
+			// unconditional return rules (e.g. backend ep_normalize) are valid without cond_test
 			rule.Cond = ""
 		} else if rule.CondTest == "" {
 			continue
