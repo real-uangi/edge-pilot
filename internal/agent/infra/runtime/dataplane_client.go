@@ -82,7 +82,7 @@ type backendSection struct {
 	Name              string             `json:"name"`
 	Mode              string             `json:"mode"`
 	From              string             `json:"from,omitempty"`
-	Balance           backendBalance     `json:"balance,omitempty"`
+	Balance           *backendBalance    `json:"balance,omitempty"`
 	HTTPRequestRules  []httpRequestRule  `json:"http_request_rule_list,omitempty"`
 	HTTPResponseRules []httpResponseRule `json:"http_response_rule_list,omitempty"`
 }

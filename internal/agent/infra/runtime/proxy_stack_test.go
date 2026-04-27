@@ -260,8 +260,8 @@ func TestFormatDataplaneFailureContextIncludesCommitFailureDetails(t *testing.T)
 		DefaultBackend: "ep_default",
 		ServiceCount:   1,
 		Backends: []backendSection{
-			{Name: "be-api_blue", Mode: "http", Balance: backendBalance{Algorithm: "roundrobin"}},
-			{Name: "be-api_green", Mode: "http", Balance: backendBalance{Algorithm: "roundrobin"}},
+			{Name: "be-api_blue", Mode: "http", Balance: &backendBalance{Algorithm: "roundrobin"}},
+			{Name: "be-api_green", Mode: "http", Balance: &backendBalance{Algorithm: "roundrobin"}},
 		},
 		Servers: []dataplaneBackendServer{
 			{Backend: "be-api_blue", Server: backendServer{Name: "srv", Address: agentdomain.ManagedContainerNameForRelease("svc-a", "release-blue"), Port: 8080}},
@@ -299,7 +299,7 @@ func TestFormatDataplaneFailureContextIncludesFrontendDetails(t *testing.T) {
 				Name:              "be-api_blue",
 				Mode:              "http",
 				From:              managedProxyDefaultsName,
-				Balance:           backendBalance{Algorithm: "roundrobin"},
+				Balance:           &backendBalance{Algorithm: "roundrobin"},
 				HTTPResponseRules: serviceBackendResponseRules("svc-a", "/", "release-blue", "release-blue", servicecatalogapp.ReleaseRoleLive),
 			},
 		},

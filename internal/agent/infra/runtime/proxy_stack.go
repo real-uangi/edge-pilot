@@ -413,7 +413,7 @@ func (m *ManagedProxyRuntime) reconcileLocked(ctx context.Context, snapshot *grp
 				Name: target.BackendName,
 				Mode: "http",
 				From: managedProxyDefaultsName,
-				Balance: backendBalance{
+				Balance: &backendBalance{
 					Algorithm: "roundrobin",
 				},
 				HTTPResponseRules: serviceBackendResponseRules(
