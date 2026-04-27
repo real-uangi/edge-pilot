@@ -300,8 +300,8 @@ func TestFormatDataplaneFailureContextIncludesFrontendDetails(t *testing.T) {
 		},
 	})
 
-	if strings.Contains(contextText, `"http_after_response_rule_list"`) {
-		t.Fatalf("expected frontend context without response rules, got %s", contextText)
+	if !strings.Contains(contextText, `"http_after_response_rule_list"`) {
+		t.Fatalf("expected frontend context with normalize response rules, got %s", contextText)
 	}
 	if !strings.Contains(contextText, `"http_response_rule_list"`) {
 		t.Fatalf("expected backend response rules in context, got %s", contextText)
@@ -361,8 +361,8 @@ func TestFormatDataplaneFailureContextIncludesRenderedFrontendConfig(t *testing.
 	if !strings.Contains(contextText, "\"intendedFrontendConfig\":\"frontend ep_http") {
 		t.Fatalf("expected rendered frontend config in context, got %s", contextText)
 	}
-	if strings.Contains(contextText, "http-after-response") {
-		t.Fatalf("expected rendered frontend config without response rule lines, got %s", contextText)
+	if !strings.Contains(contextText, "http-after-response set-header Cache-Control") {
+		t.Fatalf("expected rendered frontend config with normalize cache-control response rule, got %s", contextText)
 	}
 	if !strings.Contains(contextText, "http-request return status 204") {
 		t.Fatalf("expected rendered frontend config with normalize return rule, got %s", contextText)
@@ -432,14 +432,23 @@ func TestFrontendSectionAddsStickyPreviewRoutingRules(t *testing.T) {
 	if section.BackendSwitchingRuleList[5].Name != "be-api_green" {
 		t.Fatalf("expected live green backend fallback, got %q", section.BackendSwitchingRuleList[5].Name)
 	}
-	if len(section.HTTPRequestRules) != 5 {
-		t.Fatalf("expected 5 normalize request rules, got %d", len(section.HTTPRequestRules))
+	if len(section.HTTPRequestRules) != 4 {
+		t.Fatalf("expected 4 normalize request rules, got %d", len(section.HTTPRequestRules))
 	}
 	if section.HTTPRequestRules[0].Type != "set-header" || !strings.Contains(section.HTTPRequestRules[0].CondTest, "normalize_path") {
 		t.Fatalf("expected normalize current release header rule first, got %#v", section.HTTPRequestRules[0])
 	}
-	if section.HTTPRequestRules[4].Type != "return" || section.HTTPRequestRules[4].Status != 204 {
-		t.Fatalf("expected normalize return rule last, got %#v", section.HTTPRequestRules[4])
+	if section.HTTPRequestRules[3].Type != "return" || section.HTTPRequestRules[3].Status != 204 {
+		t.Fatalf("expected normalize return rule last, got %#v", section.HTTPRequestRules[3])
+	}
+	if len(section.HTTPAfterResponseRules) != 5 {
+		t.Fatalf("expected 5 normalize response rules, got %d", len(section.HTTPAfterResponseRules))
+	}
+	if section.HTTPAfterResponseRules[0].Type != "set-header" || section.HTTPAfterResponseRules[0].Header != "Cache-Control" {
+		t.Fatalf("expected cache-control response rule first, got %#v", section.HTTPAfterResponseRules[0])
+	}
+	if section.HTTPAfterResponseRules[4].Type != "add-header" || section.HTTPAfterResponseRules[4].Header != "Set-Cookie" {
+		t.Fatalf("expected set-cookie response rule last, got %#v", section.HTTPAfterResponseRules[4])
 	}
 }
 
@@ -450,8 +459,8 @@ func TestFrontendSectionSkipsCandidateCookieRuleWhenSplitInactive(t *testing.T) 
 	snapshot.Services[0].CandidateTrafficPercent = 0
 	section := proxy.frontendSection(snapshot)
 
-	if len(section.HTTPRequestRules) != 5 {
-		t.Fatalf("expected 5 normalize request rules when split inactive, got %d", len(section.HTTPRequestRules))
+	if len(section.HTTPRequestRules) != 4 {
+		t.Fatalf("expected 4 normalize request rules when split inactive, got %d", len(section.HTTPRequestRules))
 	}
 	for _, rule := range section.BackendSwitchingRuleList {
 		if rule.Name != "be-api_blue" {

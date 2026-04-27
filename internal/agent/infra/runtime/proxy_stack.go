@@ -730,7 +730,8 @@ func (m *ManagedProxyRuntime) frontendSection(snapshot *grpcapi.ProxyConfigSnaps
 	})
 	acls := make([]frontendACL, 0, len(services)*9)
 	rules := make([]frontendSwitchRule, 0, len(services)*8)
-	requestRules := make([]httpRequestRule, 0, len(services)*5)
+	requestRules := make([]httpRequestRule, 0, len(services)*4)
+	afterResponseRules := make([]httpAfterResponseRule, 0, len(services)*5)
 	addACL := func(name string, criterion string, value string) {
 		acls = append(acls, frontendACL{
 			Name:      name,
@@ -769,6 +770,21 @@ func (m *ManagedProxyRuntime) frontendSection(snapshot *grpcapi.ProxyConfigSnaps
 			Index:       len(requestRules),
 		})
 	}
+	addAfterResponseRule := func(ruleType string, header string, format string, condTest string) {
+		condTest = strings.TrimSpace(condTest)
+		if condTest == "" {
+			return
+		}
+		afterResponseRules = append(afterResponseRules, httpAfterResponseRule{
+			Type:     strings.TrimSpace(ruleType),
+			Action:   strings.TrimSpace(ruleType),
+			Header:   strings.TrimSpace(header),
+			Format:   strings.TrimSpace(format),
+			Cond:     "if",
+			CondTest: condTest,
+			Index:    len(afterResponseRules),
+		})
+	}
 	for _, service := range services {
 		hostACL := aclName(service.GetServiceId(), "host")
 		pathACL := aclName(service.GetServiceId(), "path")
@@ -800,8 +816,12 @@ func (m *ManagedProxyRuntime) frontendSection(snapshot *grpcapi.ProxyConfigSnaps
 			addRequestRule("set-header", servicecatalogapp.CurrentReleaseIDHeaderName, liveRelease, 0, "", "", normalizeMatch)
 			addRequestRule("set-header", servicecatalogapp.LiveReleaseIDHeaderName, liveRelease, 0, "", "", normalizeMatch)
 			addRequestRule("set-header", servicecatalogapp.ReleaseRoleHeaderName, servicecatalogapp.ReleaseRoleLive, 0, "", "", normalizeMatch)
-			addRequestRule("add-header", "Set-Cookie", servicecatalogapp.BuildStickyCookie(cookieName, liveRelease, service.GetRoutePathPrefix()), 0, "", "", normalizeMatch)
 			addRequestRule("return", "", "", 204, "text/plain", "sticky-normalized", normalizeMatch)
+			addAfterResponseRule("set-header", "Cache-Control", "no-store, no-cache, must-revalidate, max-age=0, private", normalizeMatch)
+			addAfterResponseRule("set-header", "Surrogate-Control", "no-store, max-age=0", normalizeMatch)
+			addAfterResponseRule("set-header", "Pragma", "no-cache", normalizeMatch)
+			addAfterResponseRule("set-header", "Expires", "0", normalizeMatch)
+			addAfterResponseRule("add-header", "Set-Cookie", servicecatalogapp.BuildStickyCookie(cookieName, liveRelease, service.GetRoutePathPrefix()), normalizeMatch)
 		}
 		baseNoOverrideParts := []string{
 			baseMatch,
@@ -844,10 +864,11 @@ func (m *ManagedProxyRuntime) frontendSection(snapshot *grpcapi.ProxyConfigSnaps
 		addRule(liveBackend, baseNoOverride+" !"+splitACL)
 	}
 	return frontendSection{
-		Name:             snapshot.GetFrontendName(),
-		Mode:             "http",
-		DefaultBackend:   snapshot.GetDefaultBackend(),
-		HTTPRequestRules: requestRules,
+		Name:                   snapshot.GetFrontendName(),
+		Mode:                   "http",
+		DefaultBackend:         snapshot.GetDefaultBackend(),
+		HTTPRequestRules:       requestRules,
+		HTTPAfterResponseRules: afterResponseRules,
 		Binds: map[string]frontendBind{
 			"public": {
 				Name:    "public",
