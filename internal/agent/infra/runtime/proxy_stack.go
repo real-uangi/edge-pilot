@@ -1152,7 +1152,7 @@ func normalizeBackendResponseRules(services []*grpcapi.ProxyServiceConfig) []htt
 		}
 		cookieName := servicecatalogapp.StickyCookieName(svc.GetServiceKey())
 		normalizePath := servicecatalogapp.BuildStickyNormalizePath(svc.GetRoutePathPrefix())
-		condTest := fmt.Sprintf("hdr(host) -i %s path -i %s", svc.GetRouteHost(), normalizePath)
+		condTest := fmt.Sprintf("{ hdr(host) -i %s path -i %s }", svc.GetRouteHost(), normalizePath)
 		rules = append(rules,
 			httpResponseRule{
 				Type:     "set-header",
