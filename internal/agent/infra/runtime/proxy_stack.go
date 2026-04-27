@@ -30,6 +30,7 @@ var containerIDPattern = regexp.MustCompile(`[0-9a-f]{12,64}`)
 const managedProxyResolversName = "ep_dns"
 const managedProxyInitAddrFallback = "last,libc,none"
 const managedProxyDefaultsName = "unnamed_defaults_1"
+const normalizeBackendName = "ep_normalize"
 
 type managedProxyRuntimeAPI interface {
 	SetServerAddress(context.Context, string, string, string, int) error
@@ -446,6 +447,24 @@ func (m *ManagedProxyRuntime) reconcileLocked(ctx context.Context, snapshot *grp
 			}
 		}
 	}
+	normalizeBackend := backendSection{
+		Name: normalizeBackendName,
+		Mode: "http",
+		HTTPRequestRules: []httpRequestRule{
+			{
+				Type:        "return",
+				Status:      204,
+				ContentType: "text/plain",
+				String:      "sticky-normalized",
+			},
+		},
+		HTTPResponseRules: normalizeBackendResponseRules(snapshot.GetServices()),
+	}
+	failureContext.Backends = append(failureContext.Backends, normalizeBackend)
+	if err := m.dataplane.EnsureBackendInTransaction(ctx, transactionID, normalizeBackend); err != nil {
+		m.logDataplaneFailure(err, "dataplane ensure normalize backend failed", failureContext)
+		return err
+	}
 	if err := m.dataplane.ReplaceFrontendInTransaction(ctx, transactionID, frontend); err != nil {
 		m.logDataplaneFailure(err, "dataplane replace frontend failed", failureContext)
 		return err
@@ -456,6 +475,7 @@ func (m *ManagedProxyRuntime) reconcileLocked(ctx context.Context, snapshot *grp
 	}
 	desiredBackends := map[string]struct{}{
 		snapshot.GetDefaultBackend(): {},
+		normalizeBackendName:         {},
 	}
 	for _, service := range snapshot.GetServices() {
 		for _, name := range []string{
@@ -730,8 +750,6 @@ func (m *ManagedProxyRuntime) frontendSection(snapshot *grpcapi.ProxyConfigSnaps
 	})
 	acls := make([]frontendACL, 0, len(services)*9)
 	rules := make([]frontendSwitchRule, 0, len(services)*8)
-	requestRules := make([]httpRequestRule, 0, len(services)*4)
-	afterResponseRules := make([]httpAfterResponseRule, 0, len(services)*5)
 	addACL := func(name string, criterion string, value string) {
 		acls = append(acls, frontendACL{
 			Name:      name,
@@ -750,39 +768,6 @@ func (m *ManagedProxyRuntime) frontendSection(snapshot *grpcapi.ProxyConfigSnaps
 			Cond:     "if",
 			CondTest: strings.TrimSpace(condTest),
 			Index:    len(rules),
-		})
-	}
-	addRequestRule := func(ruleType string, header string, format string, status int, contentType string, body string, condTest string) {
-		condTest = strings.TrimSpace(condTest)
-		if condTest == "" {
-			return
-		}
-		requestRules = append(requestRules, httpRequestRule{
-			Type:        strings.TrimSpace(ruleType),
-			Action:      strings.TrimSpace(ruleType),
-			Header:      strings.TrimSpace(header),
-			Format:      strings.TrimSpace(format),
-			Status:      status,
-			ContentType: strings.TrimSpace(contentType),
-			String:      strings.TrimSpace(body),
-			Cond:        "if",
-			CondTest:    condTest,
-			Index:       len(requestRules),
-		})
-	}
-	addAfterResponseRule := func(ruleType string, header string, format string, condTest string) {
-		condTest = strings.TrimSpace(condTest)
-		if condTest == "" {
-			return
-		}
-		afterResponseRules = append(afterResponseRules, httpAfterResponseRule{
-			Type:     strings.TrimSpace(ruleType),
-			Action:   strings.TrimSpace(ruleType),
-			Header:   strings.TrimSpace(header),
-			Format:   strings.TrimSpace(format),
-			Cond:     "if",
-			CondTest: condTest,
-			Index:    len(afterResponseRules),
 		})
 	}
 	for _, service := range services {
@@ -813,15 +798,7 @@ func (m *ManagedProxyRuntime) frontendSection(snapshot *grpcapi.ProxyConfigSnaps
 		baseMatch := hostACL + " " + pathACL
 		normalizeMatch := baseMatch + " " + normalizePathACL
 		if liveRelease != "" {
-			addRequestRule("set-header", servicecatalogapp.CurrentReleaseIDHeaderName, liveRelease, 0, "", "", normalizeMatch)
-			addRequestRule("set-header", servicecatalogapp.LiveReleaseIDHeaderName, liveRelease, 0, "", "", normalizeMatch)
-			addRequestRule("set-header", servicecatalogapp.ReleaseRoleHeaderName, servicecatalogapp.ReleaseRoleLive, 0, "", "", normalizeMatch)
-			addRequestRule("return", "", "", 204, "text/plain", "sticky-normalized", normalizeMatch)
-			addAfterResponseRule("set-header", "Cache-Control", "no-store, no-cache, must-revalidate, max-age=0, private", normalizeMatch)
-			addAfterResponseRule("set-header", "Surrogate-Control", "no-store, max-age=0", normalizeMatch)
-			addAfterResponseRule("set-header", "Pragma", "no-cache", normalizeMatch)
-			addAfterResponseRule("set-header", "Expires", "0", normalizeMatch)
-			addAfterResponseRule("add-header", "Set-Cookie", servicecatalogapp.BuildStickyCookie(cookieName, liveRelease, service.GetRoutePathPrefix()), normalizeMatch)
+			addRule(normalizeBackendName, normalizeMatch)
 		}
 		baseNoOverrideParts := []string{
 			baseMatch,
@@ -864,11 +841,9 @@ func (m *ManagedProxyRuntime) frontendSection(snapshot *grpcapi.ProxyConfigSnaps
 		addRule(liveBackend, baseNoOverride+" !"+splitACL)
 	}
 	return frontendSection{
-		Name:                   snapshot.GetFrontendName(),
-		Mode:                   "http",
-		DefaultBackend:         snapshot.GetDefaultBackend(),
-		HTTPRequestRules:       requestRules,
-		HTTPAfterResponseRules: afterResponseRules,
+		Name:           snapshot.GetFrontendName(),
+		Mode:           "http",
+		DefaultBackend: snapshot.GetDefaultBackend(),
 		Binds: map[string]frontendBind{
 			"public": {
 				Name:    "public",
@@ -1164,6 +1139,86 @@ func serviceBackendResponseRules(serviceKey string, routePathPrefix string, curr
 			Header: servicecatalogapp.ReleaseRoleHeaderName,
 			Format: strings.TrimSpace(releaseRole),
 		},
+	}
+	return filterHTTPResponseRules(rules)
+}
+
+func normalizeBackendResponseRules(services []*grpcapi.ProxyServiceConfig) []httpResponseRule {
+	var rules []httpResponseRule
+	for _, svc := range services {
+		liveRelease := strings.TrimSpace(svc.GetLiveReleaseId())
+		if liveRelease == "" {
+			continue
+		}
+		cookieName := servicecatalogapp.StickyCookieName(svc.GetServiceKey())
+		normalizePath := servicecatalogapp.BuildStickyNormalizePath(svc.GetRoutePathPrefix())
+		condTest := fmt.Sprintf("hdr(host) -i %s path -i %s", svc.GetRouteHost(), normalizePath)
+		rules = append(rules,
+			httpResponseRule{
+				Type:     "set-header",
+				Action:   "set-header",
+				Header:   "Cache-Control",
+				Format:   "no-store, no-cache, must-revalidate, max-age=0, private",
+				Cond:     "if",
+				CondTest: condTest,
+			},
+			httpResponseRule{
+				Type:     "set-header",
+				Action:   "set-header",
+				Header:   "Surrogate-Control",
+				Format:   "no-store, max-age=0",
+				Cond:     "if",
+				CondTest: condTest,
+			},
+			httpResponseRule{
+				Type:     "set-header",
+				Action:   "set-header",
+				Header:   "Pragma",
+				Format:   "no-cache",
+				Cond:     "if",
+				CondTest: condTest,
+			},
+			httpResponseRule{
+				Type:     "set-header",
+				Action:   "set-header",
+				Header:   "Expires",
+				Format:   "0",
+				Cond:     "if",
+				CondTest: condTest,
+			},
+			httpResponseRule{
+				Type:     "add-header",
+				Action:   "add-header",
+				Header:   "Set-Cookie",
+				Format:   servicecatalogapp.BuildStickyCookie(cookieName, liveRelease, svc.GetRoutePathPrefix()),
+				Cond:     "if",
+				CondTest: condTest,
+			},
+			httpResponseRule{
+				Type:     "set-header",
+				Action:   "set-header",
+				Header:   servicecatalogapp.CurrentReleaseIDHeaderName,
+				Format:   liveRelease,
+				Cond:     "if",
+				CondTest: condTest,
+			},
+			httpResponseRule{
+				Type:     "set-header",
+				Action:   "set-header",
+				Header:   servicecatalogapp.LiveReleaseIDHeaderName,
+				Format:   liveRelease,
+				Cond:     "if",
+				CondTest: condTest,
+			},
+			httpResponseRule{
+				Type:     "set-header",
+				Action:   "set-header",
+				Header:   servicecatalogapp.ReleaseRoleHeaderName,
+				Format:   servicecatalogapp.ReleaseRoleLive,
+				Cond:     "if",
+				CondTest: condTest,
+			},
+		)
 	}
 	return filterHTTPResponseRules(rules)
 }

@@ -83,6 +83,7 @@ type backendSection struct {
 	Mode              string             `json:"mode"`
 	From              string             `json:"from,omitempty"`
 	Balance           backendBalance     `json:"balance,omitempty"`
+	HTTPRequestRules  []httpRequestRule  `json:"http_request_rule_list,omitempty"`
 	HTTPResponseRules []httpResponseRule `json:"http_response_rule_list,omitempty"`
 }
 
@@ -224,10 +225,11 @@ func filterHTTPRequestRules(rules []httpRequestRule) []httpRequestRule {
 			rule.Cond = "unless"
 			rule.CondTest = strings.TrimSpace(strings.TrimPrefix(rule.CondTest, "unless "))
 		}
-		if rule.CondTest == "" {
+		if rule.Type == "return" && rule.CondTest == "" {
+			rule.Cond = ""
+		} else if rule.CondTest == "" {
 			continue
-		}
-		if rule.Cond != "if" && rule.Cond != "unless" {
+		} else if rule.Cond != "if" && rule.Cond != "unless" {
 			rule.Cond = "if"
 		}
 		out = append(out, rule)
@@ -367,6 +369,7 @@ func decodeRawConfigResponse(respBody []byte) (string, error) {
 
 func (c *DataPlaneAPIClient) EnsureBackend(ctx context.Context, section backendSection) error {
 	section.From = strings.TrimSpace(section.From)
+	section.HTTPRequestRules = filterHTTPRequestRules(section.HTTPRequestRules)
 	section.HTTPResponseRules = filterHTTPResponseRules(section.HTTPResponseRules)
 	version, err := c.ConfigurationVersion(ctx)
 	if err != nil {
@@ -386,6 +389,7 @@ func (c *DataPlaneAPIClient) EnsureBackend(ctx context.Context, section backendS
 
 func (c *DataPlaneAPIClient) EnsureBackendInTransaction(ctx context.Context, transactionID string, section backendSection) error {
 	section.From = strings.TrimSpace(section.From)
+	section.HTTPRequestRules = filterHTTPRequestRules(section.HTTPRequestRules)
 	section.HTTPResponseRules = filterHTTPResponseRules(section.HTTPResponseRules)
 	path := c.configurationPath("/v3/services/haproxy/configuration/backends/"+url.PathEscape(section.Name), "", transactionID, true)
 	if _, err := c.do(ctx, http.MethodPut, path, section); err != nil {

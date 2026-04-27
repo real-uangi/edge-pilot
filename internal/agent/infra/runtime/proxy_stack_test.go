@@ -39,6 +39,7 @@ func TestReconcileLockedUsesTransactionAndAppliesLiveSlotAfterCommit(t *testing.
 		"ensure-server:be-api_blue/srv@tx-1",
 		"ensure-backend:be-api_green@tx-1",
 		"ensure-server:be-api_green/srv@tx-1",
+		"ensure-backend:ep_normalize@tx-1",
 		"replace-frontend:ep_http@tx-1",
 		"list-backends",
 		"commit:tx-1",
@@ -69,6 +70,7 @@ func TestReconcileLockedDeletesStaleBackendsInsideTransaction(t *testing.T) {
 	expected := []string{
 		"version",
 		"start-transaction:7",
+		"ensure-backend:ep_normalize@tx-9",
 		"replace-frontend:ep_http@tx-9",
 		"list-backends",
 		"delete-backend:stale-api@tx-9",
@@ -141,6 +143,7 @@ func TestReconcileLockedAbortsTransactionWhenFrontendUpdateFails(t *testing.T) {
 		"ensure-server:be-api_blue/srv@tx-3",
 		"ensure-backend:be-api_green@tx-3",
 		"ensure-server:be-api_green/srv@tx-3",
+		"ensure-backend:ep_normalize@tx-3",
 		"replace-frontend:ep_http@tx-3",
 		"abort:tx-3",
 	}
@@ -174,6 +177,7 @@ func TestReconcileLockedAbortsTransactionWhenCommitFails(t *testing.T) {
 		"ensure-server:be-api_green/srv@tx-4",
 		"ensure-backend:be-api_blue@tx-4",
 		"ensure-server:be-api_blue/srv@tx-4",
+		"ensure-backend:ep_normalize@tx-4",
 		"replace-frontend:ep_http@tx-4",
 		"list-backends",
 		"commit:tx-4",
@@ -209,6 +213,7 @@ func TestReconcileLockedPreservesPrimaryErrorWhenAbortFails(t *testing.T) {
 		"ensure-server:be-api_blue/srv@tx-5",
 		"ensure-backend:be-api_green@tx-5",
 		"ensure-server:be-api_green/srv@tx-5",
+		"ensure-backend:ep_normalize@tx-5",
 		"replace-frontend:ep_http@tx-5",
 		"abort:tx-5",
 	}
@@ -262,14 +267,14 @@ func TestFormatDataplaneFailureContextIncludesCommitFailureDetails(t *testing.T)
 			{Backend: "be-api_blue", Server: backendServer{Name: "srv", Address: agentdomain.ManagedContainerNameForRelease("svc-a", "release-blue"), Port: 8080}},
 			{Backend: "be-api_green", Server: backendServer{Name: "srv", Address: agentdomain.ManagedContainerNameForRelease("svc-a", "release-green"), Port: 8080}},
 		},
-		DesiredBackends: []string{"be-api_blue", "be-api_green", "ep_default"},
+		DesiredBackends: []string{"be-api_blue", "be-api_green", "ep_default", "ep_normalize"},
 		StaleBackends:   []string{"stale-api"},
 	})
 
 	if !strings.Contains(contextText, `"transactionId":"tx-4"`) {
 		t.Fatalf("expected transaction id in context, got %s", contextText)
 	}
-	if !strings.Contains(contextText, `"desiredBackends":["be-api_blue","be-api_green","ep_default"]`) {
+	if !strings.Contains(contextText, `"desiredBackends":["be-api_blue","be-api_green","ep_default","ep_normalize"]`) {
 		t.Fatalf("expected desired backends in context, got %s", contextText)
 	}
 	if !strings.Contains(contextText, `"staleBackends":["stale-api"]`) {
@@ -300,14 +305,11 @@ func TestFormatDataplaneFailureContextIncludesFrontendDetails(t *testing.T) {
 		},
 	})
 
-	if !strings.Contains(contextText, `"http_after_response_rule_list"`) {
-		t.Fatalf("expected frontend context with normalize response rules, got %s", contextText)
-	}
 	if !strings.Contains(contextText, `"http_response_rule_list"`) {
 		t.Fatalf("expected backend response rules in context, got %s", contextText)
 	}
 	if !strings.Contains(contextText, servicecatalogapp.CurrentReleaseIDHeaderName) {
-		t.Fatalf("expected current release header in frontend context, got %s", contextText)
+		t.Fatalf("expected current release header in context, got %s", contextText)
 	}
 }
 
@@ -361,11 +363,8 @@ func TestFormatDataplaneFailureContextIncludesRenderedFrontendConfig(t *testing.
 	if !strings.Contains(contextText, "\"intendedFrontendConfig\":\"frontend ep_http") {
 		t.Fatalf("expected rendered frontend config in context, got %s", contextText)
 	}
-	if !strings.Contains(contextText, "http-after-response set-header Cache-Control") {
-		t.Fatalf("expected rendered frontend config with normalize cache-control response rule, got %s", contextText)
-	}
-	if !strings.Contains(contextText, "http-request return status 204") {
-		t.Fatalf("expected rendered frontend config with normalize return rule, got %s", contextText)
+	if !strings.Contains(contextText, "use_backend ep_normalize") {
+		t.Fatalf("expected rendered frontend config with normalize backend rule, got %s", contextText)
 	}
 	if !strings.Contains(contextText, "use_backend be-api_blue") {
 		t.Fatalf("expected backend switching lines in rendered config, got %s", contextText)
@@ -407,6 +406,7 @@ func TestReconcileLockedPrecreatesServersWithResolversForEmptyInstances(t *testi
 		"ensure-server:be-api_blue/srv@tx-6",
 		"ensure-backend:be-api_green@tx-6",
 		"ensure-server:be-api_green/srv@tx-6",
+		"ensure-backend:ep_normalize@tx-6",
 		"replace-frontend:ep_http@tx-6",
 		"list-backends",
 		"commit:tx-6",
@@ -423,32 +423,23 @@ func TestFrontendSectionAddsStickyPreviewRoutingRules(t *testing.T) {
 	snapshot.Services[0].CandidateTrafficPercent = 30
 	section := proxy.frontendSection(snapshot)
 
-	if len(section.BackendSwitchingRuleList) != 6 {
-		t.Fatalf("expected 6 switching rules, got %d", len(section.BackendSwitchingRuleList))
+	if len(section.BackendSwitchingRuleList) != 7 {
+		t.Fatalf("expected 7 switching rules, got %d", len(section.BackendSwitchingRuleList))
 	}
-	if section.BackendSwitchingRuleList[0].Name != "be-api_blue" {
-		t.Fatalf("expected blue preview backend first, got %q", section.BackendSwitchingRuleList[0].Name)
+	if section.BackendSwitchingRuleList[0].Name != normalizeBackendName {
+		t.Fatalf("expected normalize backend first, got %q", section.BackendSwitchingRuleList[0].Name)
 	}
-	if section.BackendSwitchingRuleList[5].Name != "be-api_green" {
-		t.Fatalf("expected live green backend fallback, got %q", section.BackendSwitchingRuleList[5].Name)
+	if section.BackendSwitchingRuleList[1].Name != "be-api_blue" {
+		t.Fatalf("expected blue preview backend second, got %q", section.BackendSwitchingRuleList[1].Name)
 	}
-	if len(section.HTTPRequestRules) != 4 {
-		t.Fatalf("expected 4 normalize request rules, got %d", len(section.HTTPRequestRules))
+	if section.BackendSwitchingRuleList[6].Name != "be-api_green" {
+		t.Fatalf("expected live green backend fallback, got %q", section.BackendSwitchingRuleList[6].Name)
 	}
-	if section.HTTPRequestRules[0].Type != "set-header" || !strings.Contains(section.HTTPRequestRules[0].CondTest, "normalize_path") {
-		t.Fatalf("expected normalize current release header rule first, got %#v", section.HTTPRequestRules[0])
+	if len(section.HTTPRequestRules) != 0 {
+		t.Fatalf("expected 0 request rules after normalize move to backend, got %d", len(section.HTTPRequestRules))
 	}
-	if section.HTTPRequestRules[3].Type != "return" || section.HTTPRequestRules[3].Status != 204 {
-		t.Fatalf("expected normalize return rule last, got %#v", section.HTTPRequestRules[3])
-	}
-	if len(section.HTTPAfterResponseRules) != 5 {
-		t.Fatalf("expected 5 normalize response rules, got %d", len(section.HTTPAfterResponseRules))
-	}
-	if section.HTTPAfterResponseRules[0].Type != "set-header" || section.HTTPAfterResponseRules[0].Header != "Cache-Control" {
-		t.Fatalf("expected cache-control response rule first, got %#v", section.HTTPAfterResponseRules[0])
-	}
-	if section.HTTPAfterResponseRules[4].Type != "add-header" || section.HTTPAfterResponseRules[4].Header != "Set-Cookie" {
-		t.Fatalf("expected set-cookie response rule last, got %#v", section.HTTPAfterResponseRules[4])
+	if len(section.HTTPAfterResponseRules) != 0 {
+		t.Fatalf("expected 0 after-response rules after normalize move to backend, got %d", len(section.HTTPAfterResponseRules))
 	}
 }
 
@@ -459,8 +450,8 @@ func TestFrontendSectionSkipsCandidateCookieRuleWhenSplitInactive(t *testing.T) 
 	snapshot.Services[0].CandidateTrafficPercent = 0
 	section := proxy.frontendSection(snapshot)
 
-	if len(section.HTTPRequestRules) != 4 {
-		t.Fatalf("expected 4 normalize request rules when split inactive, got %d", len(section.HTTPRequestRules))
+	if len(section.HTTPRequestRules) != 0 {
+		t.Fatalf("expected 0 request rules after normalize move to backend, got %d", len(section.HTTPRequestRules))
 	}
 	for _, rule := range section.BackendSwitchingRuleList {
 		if rule.Name != "be-api_blue" {
@@ -507,6 +498,24 @@ func TestReconcileLockedBuildsBackendResponseHeaderRules(t *testing.T) {
 	assertBackendResponseRuleExact(t, green.HTTPResponseRules, servicecatalogapp.LiveReleaseIDHeaderName, "release-green")
 	assertBackendResponseRuleExact(t, blue.HTTPResponseRules, servicecatalogapp.ReleaseRoleHeaderName, servicecatalogapp.ReleaseRoleCanary)
 	assertBackendResponseRuleExact(t, green.HTTPResponseRules, servicecatalogapp.ReleaseRoleHeaderName, servicecatalogapp.ReleaseRoleLive)
+	normalizeBackend := findBackendConfig(dataplane.backendConfigs, normalizeBackendName)
+	if normalizeBackend == nil {
+		t.Fatalf("expected normalize backend config, got %#v", dataplane.backendConfigs)
+	}
+	if len(normalizeBackend.HTTPRequestRules) != 1 {
+		t.Fatalf("expected 1 normalize backend request rule, got %d", len(normalizeBackend.HTTPRequestRules))
+	}
+	if normalizeBackend.HTTPRequestRules[0].Type != "return" || normalizeBackend.HTTPRequestRules[0].Status != 204 {
+		t.Fatalf("expected unconditional return 204 in normalize backend, got %#v", normalizeBackend.HTTPRequestRules[0])
+	}
+	if len(normalizeBackend.HTTPResponseRules) != 8 {
+		t.Fatalf("expected 8 normalize backend response rules, got %d", len(normalizeBackend.HTTPResponseRules))
+	}
+	assertBackendResponseRuleExact(t, normalizeBackend.HTTPResponseRules, "Set-Cookie", normalizeBackend.HTTPResponseRules[4].Format)
+	assertBackendResponseRuleExact(t, normalizeBackend.HTTPResponseRules, servicecatalogapp.CurrentReleaseIDHeaderName, "release-green")
+	assertBackendResponseRuleExact(t, normalizeBackend.HTTPResponseRules, servicecatalogapp.ReleaseRoleHeaderName, servicecatalogapp.ReleaseRoleLive)
+	assertBackendResponseRule(t, normalizeBackend.HTTPResponseRules, "Set-Cookie", "release-green")
+	assertBackendResponseRule(t, normalizeBackend.HTTPResponseRules, "Cache-Control", "no-store, no-cache")
 	blueServer := findServerEntry(dataplane.serverEntries, "be-api_blue")
 	greenServer := findServerEntry(dataplane.serverEntries, "be-api_green")
 	if blueServer == nil || greenServer == nil {
@@ -591,6 +600,17 @@ func TestReconcileLockedFiltersInvalidBackendResponseHeaderRules(t *testing.T) {
 		t.Fatalf("green backend current release rule should be filtered when release id is empty, got %#v", green.HTTPResponseRules)
 	}
 	assertBackendResponseRuleExact(t, green.HTTPResponseRules, servicecatalogapp.LiveReleaseIDHeaderName, "release-blue")
+	normalizeBackend := findBackendConfig(dataplane.backendConfigs, normalizeBackendName)
+	if normalizeBackend == nil {
+		t.Fatalf("expected normalize backend in filtered test, got %#v", dataplane.backendConfigs)
+	}
+	if len(normalizeBackend.HTTPRequestRules) != 1 || normalizeBackend.HTTPRequestRules[0].Status != 204 {
+		t.Fatalf("expected unconditional return 204 in normalize backend, got %#v", normalizeBackend.HTTPRequestRules)
+	}
+	if len(normalizeBackend.HTTPResponseRules) != 8 {
+		t.Fatalf("expected 8 normalize backend response rules, got %d", len(normalizeBackend.HTTPResponseRules))
+	}
+	assertBackendResponseRule(t, normalizeBackend.HTTPResponseRules, "Set-Cookie", "release-blue")
 	blueServer := findServerEntry(dataplane.serverEntries, "be-api_blue")
 	greenServer := findServerEntry(dataplane.serverEntries, "be-api_green")
 	if blueServer == nil || greenServer == nil {
