@@ -213,6 +213,11 @@ func (e *Executor) ensureDeployContainer(ctx context.Context, task *grpcapi.Task
 		return nil, deployDecisionStartNew, err
 	}
 	if existing == nil {
+		if removed, err := e.cleanupStaleContainersOnSlot(ctx, task.GetAgentId(), task.GetServiceKey(), task.GetTargetSlot()); err != nil {
+			e.logger.Errorf(err, "stale container cleanup on slot failed: agentId=%s serviceKey=%s slot=%s", task.GetAgentId(), task.GetServiceKey(), task.GetTargetSlot().String())
+		} else if removed > 0 {
+			e.logger.Infof("cleaned up %d stale containers on slot before deploying release: agentId=%s serviceKey=%s slot=%s", removed, task.GetAgentId(), task.GetServiceKey(), task.GetTargetSlot().String())
+		}
 		return nil, deployDecisionStartNew, nil
 	}
 	if !existing.Managed || existing.AgentID != task.GetAgentId() {
@@ -449,6 +454,37 @@ func (e *Executor) cleanupManagedContainers(ctx context.Context, task *grpcapi.T
 		if shouldPreserveManagedContainerForSwitch(item, task) {
 			continue
 		}
+		if err := e.docker.RemoveContainer(ctx, item.ContainerID); err != nil {
+			errs = append(errs, err)
+			continue
+		}
+		removed++
+	}
+	if len(errs) > 0 {
+		return removed, errors.Join(errs...)
+	}
+	return removed, nil
+}
+
+func (e *Executor) cleanupStaleContainersOnSlot(ctx context.Context, agentID, serviceKey string, slot grpcapi.Slot) (int, error) {
+	var items []*agentdomain.ManagedContainer
+	if e.index != nil {
+		items = e.index.FindByServiceKeyAndSlot(serviceKey, slot)
+	}
+	if len(items) == 0 {
+		all, err := e.docker.ListManagedContainers(ctx, agentID, serviceKey)
+		if err != nil {
+			return 0, err
+		}
+		for _, item := range all {
+			if item != nil && item.Slot == slot {
+				items = append(items, item)
+			}
+		}
+	}
+	removed := 0
+	var errs []error
+	for _, item := range items {
 		if err := e.docker.RemoveContainer(ctx, item.ContainerID); err != nil {
 			errs = append(errs, err)
 			continue

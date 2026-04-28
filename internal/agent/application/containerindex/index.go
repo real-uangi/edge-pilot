@@ -112,6 +112,22 @@ func (i *ManagedContainerIndex) FindByIdentity(identity agentdomain.ManagedConta
 	return cloneContainer(items[0]), nil
 }
 
+func (i *ManagedContainerIndex) FindByServiceKeyAndSlot(serviceKey string, slot grpcapi.Slot) []*agentdomain.ManagedContainer {
+	serviceKey = strings.TrimSpace(serviceKey)
+	if serviceKey == "" {
+		return nil
+	}
+	i.mu.RLock()
+	defer i.mu.RUnlock()
+	var result []*agentdomain.ManagedContainer
+	for _, item := range i.containers {
+		if item != nil && item.ServiceKey == serviceKey && item.Slot == slot {
+			result = append(result, cloneContainer(item))
+		}
+	}
+	return result
+}
+
 func (i *ManagedContainerIndex) List() []*agentdomain.ManagedContainer {
 	i.mu.RLock()
 	defer i.mu.RUnlock()
