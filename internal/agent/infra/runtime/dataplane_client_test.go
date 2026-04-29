@@ -471,10 +471,10 @@ func TestDataPlaneClientReplaceFrontendInTransactionEncodesRequestRules(t *testi
 		Mode: "http",
 		HTTPRequestRules: []httpRequestRule{
 			{
-				Type:     "set-header",
-				Header:   "X-Test",
-				Format:   "release-1",
-				CondTest: "if normalize_acl",
+				Type:     "set-var",
+				VarScope: "txn",
+				VarName:  "ep_normalize_path",
+				VarExpr:  "path",
 			},
 			{
 				Type:        "return",
@@ -500,14 +500,17 @@ func TestDataPlaneClientReplaceFrontendInTransactionEncodesRequestRules(t *testi
 		t.Fatalf("expected 2 request rules, got %#v", payload["http_request_rule_list"])
 	}
 	first := rawRules[0].(map[string]any)
-	if got := first["type"]; got != "set-header" {
-		t.Fatalf("expected first request rule type set-header, got %#v", got)
+	if got := first["type"]; got != "set-var" {
+		t.Fatalf("expected first request rule type set-var, got %#v", got)
 	}
-	if got := first["hdr_name"]; got != "X-Test" {
-		t.Fatalf("expected first request rule hdr_name X-Test, got %#v", got)
+	if got := first["var_scope"]; got != "txn" {
+		t.Fatalf("expected first request rule var_scope txn, got %#v", got)
 	}
-	if got := first["cond_test"]; got != "normalize_acl" {
-		t.Fatalf("expected first request rule cond_test normalize_acl, got %#v", got)
+	if got := first["var_name"]; got != "ep_normalize_path" {
+		t.Fatalf("expected first request rule var_name ep_normalize_path, got %#v", got)
+	}
+	if got := first["var_expr"]; got != "path" {
+		t.Fatalf("expected first request rule var_expr path, got %#v", got)
 	}
 	second := rawRules[1].(map[string]any)
 	if got := second["type"]; got != "return" {

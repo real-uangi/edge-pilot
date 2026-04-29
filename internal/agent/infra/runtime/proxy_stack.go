@@ -452,6 +452,12 @@ func (m *ManagedProxyRuntime) reconcileLocked(ctx context.Context, snapshot *grp
 		Mode: "http",
 		HTTPRequestRules: []httpRequestRule{
 			{
+				Type:     "set-var",
+				VarScope: "txn",
+				VarName:  "ep_normalize_path",
+				VarExpr:  "path",
+			},
+			{
 				Type:        "return",
 				Status:      204,
 				ContentType: "text/plain",
@@ -1155,7 +1161,7 @@ func normalizeBackendResponseRules(services []*grpcapi.ProxyServiceConfig) []htt
 		}
 		cookieName := servicecatalogapp.StickyCookieName(svc.GetServiceKey())
 		normalizePath := servicecatalogapp.BuildStickyNormalizePath(svc.GetRoutePathPrefix())
-		condTest := fmt.Sprintf("{ hdr(host) -i %s path -i %s }", svc.GetRouteHost(), normalizePath)
+		condTest := fmt.Sprintf("{ req.hdr(host) -i %s } { var(txn.ep_normalize_path) -i %s }", svc.GetRouteHost(), normalizePath)
 		rules = append(rules,
 			httpResponseRule{
 				Type:     "set-header",

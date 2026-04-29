@@ -60,6 +60,9 @@ type httpRequestRule struct {
 	Action      string `json:"-"`
 	Header      string `json:"hdr_name,omitempty"`
 	Format      string `json:"hdr_format,omitempty"`
+	VarScope    string `json:"var_scope,omitempty"`
+	VarName     string `json:"var_name,omitempty"`
+	VarExpr     string `json:"var_expr,omitempty"`
 	Status      int    `json:"status,omitempty"`
 	ContentType string `json:"content_type,omitempty"`
 	String      string `json:"string,omitempty"`
@@ -207,6 +210,13 @@ func filterHTTPRequestRules(rules []httpRequestRule) []httpRequestRule {
 				continue
 			}
 			rule.Format = normalizeHAProxyFmt(rule.Format)
+		case "set-var":
+			rule.VarScope = strings.TrimSpace(rule.VarScope)
+			rule.VarName = strings.TrimSpace(rule.VarName)
+			rule.VarExpr = strings.TrimSpace(rule.VarExpr)
+			if rule.VarScope == "" || rule.VarName == "" || rule.VarExpr == "" {
+				continue
+			}
 		case "return":
 			if rule.Status <= 0 {
 				rule.Status = http.StatusOK
@@ -225,7 +235,7 @@ func filterHTTPRequestRules(rules []httpRequestRule) []httpRequestRule {
 			rule.Cond = "unless"
 			rule.CondTest = strings.TrimSpace(strings.TrimPrefix(rule.CondTest, "unless "))
 		}
-		if rule.Type == "return" && rule.CondTest == "" {
+		if (rule.Type == "return" || rule.Type == "set-var") && rule.CondTest == "" {
 			// unconditional return rules (e.g. backend ep_normalize) are valid without cond_test
 			rule.Cond = ""
 		} else if rule.CondTest == "" {

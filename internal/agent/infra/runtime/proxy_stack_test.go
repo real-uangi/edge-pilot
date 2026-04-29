@@ -483,6 +483,7 @@ func TestReconcileLockedBuildsBackendResponseHeaderRules(t *testing.T) {
 	if err := proxy.reconcileLocked(context.Background(), snapshot); err != nil {
 		t.Fatalf("reconcileLocked() error = %v", err)
 	}
+	expectedNormalizeCondRoot := expectedNormalizeCondTest(snapshot.Services[0].RouteHost, servicecatalogapp.BuildStickyNormalizePath(snapshot.Services[0].RoutePathPrefix))
 
 	blue := findBackendConfig(dataplane.backendConfigs, "be-api_blue")
 	green := findBackendConfig(dataplane.backendConfigs, "be-api_green")
@@ -504,14 +505,26 @@ func TestReconcileLockedBuildsBackendResponseHeaderRules(t *testing.T) {
 	if normalizeBackend == nil {
 		t.Fatalf("expected normalize backend config, got %#v", dataplane.backendConfigs)
 	}
-	if len(normalizeBackend.HTTPRequestRules) != 1 {
-		t.Fatalf("expected 1 normalize backend request rule, got %d", len(normalizeBackend.HTTPRequestRules))
+	if len(normalizeBackend.HTTPRequestRules) != 2 {
+		t.Fatalf("expected 2 normalize backend request rules, got %d", len(normalizeBackend.HTTPRequestRules))
 	}
-	if normalizeBackend.HTTPRequestRules[0].Type != "return" || normalizeBackend.HTTPRequestRules[0].Status != 204 {
-		t.Fatalf("expected unconditional return 204 in normalize backend, got %#v", normalizeBackend.HTTPRequestRules[0])
+	if normalizeBackend.HTTPRequestRules[0].Type != "set-var" {
+		t.Fatalf("expected first normalize backend request rule set-var, got %#v", normalizeBackend.HTTPRequestRules[0])
+	}
+	if normalizeBackend.HTTPRequestRules[0].VarScope != "txn" || normalizeBackend.HTTPRequestRules[0].VarName != "ep_normalize_path" || normalizeBackend.HTTPRequestRules[0].VarExpr != "path" {
+		t.Fatalf("expected set-var txn.ep_normalize_path=path, got %#v", normalizeBackend.HTTPRequestRules[0])
+	}
+	if normalizeBackend.HTTPRequestRules[1].Type != "return" || normalizeBackend.HTTPRequestRules[1].Status != 204 {
+		t.Fatalf("expected second normalize backend request rule return 204, got %#v", normalizeBackend.HTTPRequestRules[1])
 	}
 	if len(normalizeBackend.HTTPResponseRules) != 8 {
 		t.Fatalf("expected 8 normalize backend response rules, got %d", len(normalizeBackend.HTTPResponseRules))
+	}
+	for i, rule := range normalizeBackend.HTTPResponseRules {
+		if rule.Cond != "if" {
+			t.Fatalf("expected normalize response rule[%d] cond if, got %#v", i, rule)
+		}
+		assertNormalizeCondTestExact(t, rule, expectedNormalizeCondRoot)
 	}
 	assertBackendResponseRuleExact(t, normalizeBackend.HTTPResponseRules, "Set-Cookie", normalizeBackend.HTTPResponseRules[4].Format)
 	assertBackendResponseRuleExact(t, normalizeBackend.HTTPResponseRules, servicecatalogapp.CurrentReleaseIDHeaderName, "release-green")
@@ -579,10 +592,12 @@ func TestReconcileLockedFiltersInvalidBackendResponseHeaderRules(t *testing.T) {
 	proxy := newTestManagedProxyRuntime(dataplane, runtime)
 	snapshot := testProxySnapshotWithService(grpcapi.Slot_SLOT_BLUE)
 	snapshot.Services[0].CandidateReleaseId = ""
+	snapshot.Services[0].RoutePathPrefix = "/v1"
 
 	if err := proxy.reconcileLocked(context.Background(), snapshot); err != nil {
 		t.Fatalf("reconcileLocked() error = %v", err)
 	}
+	expectedNormalizeCondPrefixed := expectedNormalizeCondTest(snapshot.Services[0].RouteHost, servicecatalogapp.BuildStickyNormalizePath(snapshot.Services[0].RoutePathPrefix))
 
 	blue := findBackendConfig(dataplane.backendConfigs, "be-api_blue")
 	green := findBackendConfig(dataplane.backendConfigs, "be-api_green")
@@ -606,11 +621,23 @@ func TestReconcileLockedFiltersInvalidBackendResponseHeaderRules(t *testing.T) {
 	if normalizeBackend == nil {
 		t.Fatalf("expected normalize backend in filtered test, got %#v", dataplane.backendConfigs)
 	}
-	if len(normalizeBackend.HTTPRequestRules) != 1 || normalizeBackend.HTTPRequestRules[0].Status != 204 {
+	if len(normalizeBackend.HTTPRequestRules) != 2 {
+		t.Fatalf("expected set-var + return in normalize backend request rules, got %#v", normalizeBackend.HTTPRequestRules)
+	}
+	if normalizeBackend.HTTPRequestRules[0].Type != "set-var" {
+		t.Fatalf("expected first normalize backend request rule set-var, got %#v", normalizeBackend.HTTPRequestRules[0])
+	}
+	if normalizeBackend.HTTPRequestRules[1].Type != "return" || normalizeBackend.HTTPRequestRules[1].Status != 204 {
 		t.Fatalf("expected unconditional return 204 in normalize backend, got %#v", normalizeBackend.HTTPRequestRules)
 	}
 	if len(normalizeBackend.HTTPResponseRules) != 8 {
 		t.Fatalf("expected 8 normalize backend response rules, got %d", len(normalizeBackend.HTTPResponseRules))
+	}
+	for i, rule := range normalizeBackend.HTTPResponseRules {
+		if rule.Cond != "if" {
+			t.Fatalf("expected normalize response rule[%d] cond if, got %#v", i, rule)
+		}
+		assertNormalizeCondTestExact(t, rule, expectedNormalizeCondPrefixed)
 	}
 	assertBackendResponseRule(t, normalizeBackend.HTTPResponseRules, "Set-Cookie", "release-blue")
 	blueServer := findServerEntry(dataplane.serverEntries, "be-api_blue")
@@ -694,6 +721,17 @@ func assertBackendResponseRuleExact(t *testing.T, rules []httpResponseRule, head
 	}
 	if strings.TrimSpace(rule.Format) != strings.TrimSpace(expected) {
 		t.Fatalf("expected response header %q format %q, got %#v", header, expected, *rule)
+	}
+}
+
+func expectedNormalizeCondTest(host string, normalizePath string) string {
+	return "{ req.hdr(host) -i " + host + " } { var(txn.ep_normalize_path) -i " + normalizePath + " }"
+}
+
+func assertNormalizeCondTestExact(t *testing.T, rule httpResponseRule, expected string) {
+	t.Helper()
+	if strings.TrimSpace(rule.CondTest) != strings.TrimSpace(expected) {
+		t.Fatalf("expected normalize condTest %q, got %#v", expected, rule)
 	}
 }
 
