@@ -1,0 +1,89 @@
+.backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: grid;
+  place-items: center;
+  padding: 16px;
+  z-index: 1200;
+}
+
+.dialog {
+  width: min(540px, 100%);
+  background: rgba(29, 32, 38, 0.9);
+  border-radius: var(--ep-radius-lg);
+  box-shadow: var(--ep-shadow-soft), var(--ep-shadow-ambient);
+  border: 1px solid var(--ep-outline-ghost);
+  padding: 18px;
+  display: grid;
+  gap: 12px;
+  animation: dialog-in var(--ep-motion-base) var(--ep-ease-standard);
+  backdrop-filter: blur(12px);
+}
+
+@keyframes dialog-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.title {
+  margin: 0;
+  font-size: 20px;
+  line-height: 1.2;
+  color: var(--ep-text);
+}
+
+.message {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--ep-text-muted);
+  white-space: pre-wrap;
+}
+
+.promptField {
+  display: grid;
+  gap: 6px;
+}
+
+.promptLabel {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--ep-text);
+}
+
+.input {
+  width: 100%;
+  border: 0;
+  border-bottom: 2px solid var(--ep-outline);
+  border-radius: var(--ep-radius-sm) var(--ep-radius-sm) 0 0;
+  padding: 10px;
+  background: var(--ep-surface-high);
+  color: var(--ep-text);
+  font-size: 13px;
+}
+
+.input:focus {
+  border-bottom-color: var(--ep-primary-strong);
+  outline: none;
+}
+
+.actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+@media (max-width: 600px) {
+  .dialog {
+    padding: 14px;
+    gap: 10px;
+  }
+}

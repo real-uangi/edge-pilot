@@ -1,0 +1,127 @@
+.page {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  background:
+    radial-gradient(circle at 10% 10%, rgba(76, 214, 255, 0.1), transparent 40%),
+    radial-gradient(circle at 90% 84%, rgba(78, 222, 163, 0.08), transparent 38%),
+    var(--ep-bg);
+}
+
+.panel {
+  width: min(980px, 100%);
+  display: grid;
+  grid-template-columns: 1.1fr 0.9fr;
+  gap: 14px;
+  background: rgba(16, 19, 26, 0.85);
+  border-radius: var(--ep-radius-xl);
+  border: 1px solid var(--ep-outline-ghost);
+  overflow: hidden;
+  backdrop-filter: blur(12px);
+}
+
+.copy {
+  background:
+    linear-gradient(135deg, rgba(164, 230, 255, 0.18), rgba(0, 209, 255, 0.14)),
+    var(--ep-surface-low);
+  color: var(--ep-text);
+  padding: 30px;
+  display: grid;
+  align-content: center;
+  gap: 10px;
+}
+
+.eyebrow {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--ep-text-dim);
+}
+
+.title {
+  margin: 0;
+  font-size: clamp(30px, 4.4vw, 46px);
+  line-height: 1.04;
+}
+
+.subtitle {
+  margin: 0;
+  color: var(--ep-text-muted);
+  line-height: 1.5;
+  font-size: 14px;
+}
+
+.form {
+  padding: 30px;
+  display: grid;
+  align-content: center;
+  gap: 14px;
+  background: var(--ep-surface-low);
+}
+
+.field {
+  display: grid;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--ep-text-muted);
+}
+
+.field input {
+  border: 0;
+  border-bottom: 2px solid var(--ep-outline);
+  border-radius: var(--ep-radius-sm) var(--ep-radius-sm) 0 0;
+  padding: 10px;
+  background: var(--ep-surface-mid);
+  color: var(--ep-text);
+}
+
+.field input:hover {
+  background: var(--ep-surface-high);
+}
+
+.field input:focus {
+  border-bottom-color: var(--ep-primary-strong);
+  outline: none;
+}
+
+.submit {
+  border: 0;
+  border-radius: var(--ep-radius-sm);
+  padding: 10px 14px;
+  background: linear-gradient(135deg, var(--ep-primary), var(--ep-primary-strong));
+  color: var(--ep-primary-ink);
+  font-weight: 700;
+  font-size: 13px;
+}
+
+.submit:hover:not(:disabled) {
+  transform: translateY(-1px);
+  box-shadow: var(--ep-shadow-ambient);
+}
+
+.submit:disabled {
+  cursor: not-allowed;
+  opacity: 0.44;
+}
+
+.error {
+  border-radius: var(--ep-radius-md);
+  background: var(--ep-danger-soft);
+  color: var(--ep-danger);
+  padding: 10px 12px;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+@media (max-width: 960px) {
+  .panel {
+    grid-template-columns: 1fr;
+  }
+
+  .copy,
+  .form {
+    padding: 20px;
+  }
+}
