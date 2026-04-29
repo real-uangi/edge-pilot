@@ -443,7 +443,7 @@ func TestFrontendSectionAddsStickyPreviewRoutingRules(t *testing.T) {
 	}
 }
 
-func TestFrontendSectionSkipsCandidateCookieRuleWhenSplitInactive(t *testing.T) {
+func TestFrontendSectionKeepsCandidateCookieRuleForStickyWhenSplitInactive(t *testing.T) {
 	proxy := newTestManagedProxyRuntime(&fakeManagedProxyDataplane{}, &fakeManagedProxyRuntime{})
 
 	snapshot := testProxySnapshotWithService(grpcapi.Slot_SLOT_GREEN)
@@ -453,13 +453,15 @@ func TestFrontendSectionSkipsCandidateCookieRuleWhenSplitInactive(t *testing.T) 
 	if len(section.HTTPRequestRules) != 0 {
 		t.Fatalf("expected 0 request rules after normalize move to backend, got %d", len(section.HTTPRequestRules))
 	}
+	foundCandidateCookieRule := false
 	for _, rule := range section.BackendSwitchingRuleList {
-		if rule.Name != "be-api_blue" {
-			continue
+		if rule.Name == "be-api_blue" && strings.Contains(rule.CondTest, "cookie_candidate") {
+			foundCandidateCookieRule = true
+			break
 		}
-		if strings.Contains(rule.CondTest, "cookie_candidate") {
-			t.Fatalf("expected candidate cookie override rule to be absent when split inactive, got %q", rule.CondTest)
-		}
+	}
+	if !foundCandidateCookieRule {
+		t.Fatalf("expected candidate cookie override rule to be present for sticky when split inactive")
 	}
 }
 

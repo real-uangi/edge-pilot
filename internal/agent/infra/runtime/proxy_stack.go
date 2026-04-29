@@ -829,6 +829,9 @@ func (m *ManagedProxyRuntime) frontendSection(snapshot *grpcapi.ProxyConfigSnaps
 			continue
 		}
 		if trafficPercent <= 0 {
+			if candidateRelease != "" {
+				addRule(candidateBackend, baseMatch+" !"+queryLiveACL+" !"+queryCandidateACL+" "+cookieCandidateACL)
+			}
 			addRule(liveBackend, baseNoOverride)
 			continue
 		}
