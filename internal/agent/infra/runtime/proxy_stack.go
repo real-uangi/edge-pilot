@@ -1153,7 +1153,32 @@ func serviceBackendResponseRules(serviceKey string, routePathPrefix string, curr
 }
 
 func normalizeBackendResponseRules(services []*grpcapi.ProxyServiceConfig) []httpResponseRule {
-	var rules []httpResponseRule
+	rules := []httpResponseRule{
+		{
+			Type:   "set-header",
+			Action: "set-header",
+			Header: "Cache-Control",
+			Format: "no-store, no-cache, must-revalidate, max-age=0, private",
+		},
+		{
+			Type:   "set-header",
+			Action: "set-header",
+			Header: "Surrogate-Control",
+			Format: "no-store, max-age=0",
+		},
+		{
+			Type:   "set-header",
+			Action: "set-header",
+			Header: "Pragma",
+			Format: "no-cache",
+		},
+		{
+			Type:   "set-header",
+			Action: "set-header",
+			Header: "Expires",
+			Format: "0",
+		},
+	}
 	for _, svc := range services {
 		liveRelease := strings.TrimSpace(svc.GetLiveReleaseId())
 		if liveRelease == "" {
@@ -1163,38 +1188,6 @@ func normalizeBackendResponseRules(services []*grpcapi.ProxyServiceConfig) []htt
 		normalizePath := servicecatalogapp.BuildStickyNormalizePath(svc.GetRoutePathPrefix())
 		condTest := fmt.Sprintf("{ req.hdr(host) -i %s } { var(txn.ep_normalize_path) -m str -i %s }", svc.GetRouteHost(), normalizePath)
 		rules = append(rules,
-			httpResponseRule{
-				Type:     "set-header",
-				Action:   "set-header",
-				Header:   "Cache-Control",
-				Format:   "no-store, no-cache, must-revalidate, max-age=0, private",
-				Cond:     "if",
-				CondTest: condTest,
-			},
-			httpResponseRule{
-				Type:     "set-header",
-				Action:   "set-header",
-				Header:   "Surrogate-Control",
-				Format:   "no-store, max-age=0",
-				Cond:     "if",
-				CondTest: condTest,
-			},
-			httpResponseRule{
-				Type:     "set-header",
-				Action:   "set-header",
-				Header:   "Pragma",
-				Format:   "no-cache",
-				Cond:     "if",
-				CondTest: condTest,
-			},
-			httpResponseRule{
-				Type:     "set-header",
-				Action:   "set-header",
-				Header:   "Expires",
-				Format:   "0",
-				Cond:     "if",
-				CondTest: condTest,
-			},
 			httpResponseRule{
 				Type:     "add-header",
 				Action:   "add-header",
