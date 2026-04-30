@@ -525,6 +525,7 @@ func TestReconcileLockedBuildsBackendResponseHeaderRules(t *testing.T) {
 			t.Fatalf("expected normalize response rule[%d] cond if, got %#v", i, rule)
 		}
 		assertNormalizeCondTestExact(t, rule, expectedNormalizeCondRoot)
+		assertNoLegacyVarMatchSyntax(t, rule)
 	}
 	assertBackendResponseRuleExact(t, normalizeBackend.HTTPResponseRules, "Set-Cookie", normalizeBackend.HTTPResponseRules[4].Format)
 	assertBackendResponseRuleExact(t, normalizeBackend.HTTPResponseRules, servicecatalogapp.CurrentReleaseIDHeaderName, "release-green")
@@ -638,6 +639,7 @@ func TestReconcileLockedFiltersInvalidBackendResponseHeaderRules(t *testing.T) {
 			t.Fatalf("expected normalize response rule[%d] cond if, got %#v", i, rule)
 		}
 		assertNormalizeCondTestExact(t, rule, expectedNormalizeCondPrefixed)
+		assertNoLegacyVarMatchSyntax(t, rule)
 	}
 	assertBackendResponseRule(t, normalizeBackend.HTTPResponseRules, "Set-Cookie", "release-blue")
 	blueServer := findServerEntry(dataplane.serverEntries, "be-api_blue")
@@ -725,13 +727,20 @@ func assertBackendResponseRuleExact(t *testing.T, rules []httpResponseRule, head
 }
 
 func expectedNormalizeCondTest(host string, normalizePath string) string {
-	return "{ req.hdr(host) -i " + host + " } { var(txn.ep_normalize_path) -i " + normalizePath + " }"
+	return "{ req.hdr(host) -i " + host + " } { var(txn.ep_normalize_path) -m str -i " + normalizePath + " }"
 }
 
 func assertNormalizeCondTestExact(t *testing.T, rule httpResponseRule, expected string) {
 	t.Helper()
 	if strings.TrimSpace(rule.CondTest) != strings.TrimSpace(expected) {
 		t.Fatalf("expected normalize condTest %q, got %#v", expected, rule)
+	}
+}
+
+func assertNoLegacyVarMatchSyntax(t *testing.T, rule httpResponseRule) {
+	t.Helper()
+	if strings.Contains(rule.CondTest, "var(txn.ep_normalize_path) -i ") {
+		t.Fatalf("expected normalize condTest to avoid legacy var matcher syntax, got %#v", rule)
 	}
 }
 
