@@ -505,37 +505,37 @@ func TestReconcileLockedBuildsBackendResponseHeaderRules(t *testing.T) {
 	if normalizeBackend == nil {
 		t.Fatalf("expected normalize backend config, got %#v", dataplane.backendConfigs)
 	}
-	if len(normalizeBackend.HTTPRequestRules) != 2 {
-		t.Fatalf("expected 2 normalize backend request rules, got %d", len(normalizeBackend.HTTPRequestRules))
-	}
 	if normalizeBackend.HTTPRequestRules[0].Type != "set-var" {
 		t.Fatalf("expected first normalize backend request rule set-var, got %#v", normalizeBackend.HTTPRequestRules[0])
 	}
 	if normalizeBackend.HTTPRequestRules[0].VarScope != "txn" || normalizeBackend.HTTPRequestRules[0].VarName != "ep_normalize_path" || normalizeBackend.HTTPRequestRules[0].VarExpr != "path" {
 		t.Fatalf("expected set-var txn.ep_normalize_path=path, got %#v", normalizeBackend.HTTPRequestRules[0])
 	}
-	lastRequestRule := normalizeBackend.HTTPRequestRules[len(normalizeBackend.HTTPRequestRules)-1]
-	if lastRequestRule.Type != "return" || lastRequestRule.Status != 204 {
-		t.Fatalf("expected last normalize backend request rule return 204, got %#v", lastRequestRule)
+	if len(normalizeBackend.HTTPRequestRules) != 3 {
+		t.Fatalf("expected set-var + service return + fallback return in normalize backend request rules, got %#v", normalizeBackend.HTTPRequestRules)
 	}
-	expectedNormalizeConditionalRules := 4 * countServicesWithLiveRelease(snapshot.Services)
-	expectedNormalizeResponseRules := 4 + expectedNormalizeConditionalRules
-	if len(normalizeBackend.HTTPResponseRules) != expectedNormalizeResponseRules {
-		t.Fatalf("expected %d normalize backend response rules, got %d", expectedNormalizeResponseRules, len(normalizeBackend.HTTPResponseRules))
+	conditionalReturnRule := normalizeBackend.HTTPRequestRules[1]
+	if conditionalReturnRule.Type != "return" || conditionalReturnRule.ReturnStatusCode != 204 {
+		t.Fatalf("expected conditional normalize return 204, got %#v", conditionalReturnRule)
 	}
-	assertNormalizeStaticNoCacheRules(t, normalizeBackend.HTTPResponseRules)
-	for i, rule := range normalizeBackend.HTTPResponseRules[4:] {
-		if rule.Cond != "if" {
-			t.Fatalf("expected normalize conditional response rule[%d] cond if, got %#v", i, rule)
-		}
-		assertNormalizeCondTestExact(t, rule, expectedNormalizeCondRoot)
-		assertNoLegacyVarMatchSyntax(t, rule)
+	assertNormalizeCondTestExact(t, conditionalReturnRule, expectedNormalizeCondRoot)
+	assertNoLegacyVarMatchSyntax(t, conditionalReturnRule)
+	assertNormalizeStaticNoCacheReturnHeaders(t, conditionalReturnRule.ReturnHeaders)
+	assertReturnHeaderExact(t, conditionalReturnRule.ReturnHeaders, servicecatalogapp.CurrentReleaseIDHeaderName, "release-green")
+	assertReturnHeaderExact(t, conditionalReturnRule.ReturnHeaders, servicecatalogapp.LiveReleaseIDHeaderName, "release-green")
+	assertReturnHeaderExact(t, conditionalReturnRule.ReturnHeaders, servicecatalogapp.ReleaseRoleHeaderName, servicecatalogapp.ReleaseRoleLive)
+	assertReturnHeaderContains(t, conditionalReturnRule.ReturnHeaders, "Set-Cookie", "release-green")
+	fallbackReturnRule := normalizeBackend.HTTPRequestRules[2]
+	if fallbackReturnRule.Type != "return" || fallbackReturnRule.ReturnStatusCode != 204 {
+		t.Fatalf("expected fallback normalize return 204, got %#v", fallbackReturnRule)
 	}
-	assertBackendResponseRuleExact(t, normalizeBackend.HTTPResponseRules, "Set-Cookie", normalizeBackend.HTTPResponseRules[4].Format)
-	assertBackendResponseRuleExact(t, normalizeBackend.HTTPResponseRules, servicecatalogapp.CurrentReleaseIDHeaderName, "release-green")
-	assertBackendResponseRuleExact(t, normalizeBackend.HTTPResponseRules, servicecatalogapp.ReleaseRoleHeaderName, servicecatalogapp.ReleaseRoleLive)
-	assertBackendResponseRule(t, normalizeBackend.HTTPResponseRules, "Set-Cookie", "release-green")
-	assertBackendResponseRule(t, normalizeBackend.HTTPResponseRules, "Cache-Control", "no-store, no-cache")
+	if strings.TrimSpace(fallbackReturnRule.Cond) != "" || strings.TrimSpace(fallbackReturnRule.CondTest) != "" {
+		t.Fatalf("expected fallback normalize return rule to be unconditional, got %#v", fallbackReturnRule)
+	}
+	assertNormalizeStaticNoCacheReturnHeaders(t, fallbackReturnRule.ReturnHeaders)
+	if findReturnHeader(fallbackReturnRule.ReturnHeaders, "Set-Cookie") != nil {
+		t.Fatalf("fallback normalize return rule should not include Set-Cookie, got %#v", fallbackReturnRule.ReturnHeaders)
+	}
 	blueServer := findServerEntry(dataplane.serverEntries, "be-api_blue")
 	greenServer := findServerEntry(dataplane.serverEntries, "be-api_green")
 	if blueServer == nil || greenServer == nil {
@@ -626,30 +626,31 @@ func TestReconcileLockedFiltersInvalidBackendResponseHeaderRules(t *testing.T) {
 	if normalizeBackend == nil {
 		t.Fatalf("expected normalize backend in filtered test, got %#v", dataplane.backendConfigs)
 	}
-	if len(normalizeBackend.HTTPRequestRules) != 2 {
-		t.Fatalf("expected set-var + return in normalize backend request rules, got %#v", normalizeBackend.HTTPRequestRules)
-	}
 	if normalizeBackend.HTTPRequestRules[0].Type != "set-var" {
 		t.Fatalf("expected first normalize backend request rule set-var, got %#v", normalizeBackend.HTTPRequestRules[0])
 	}
-	lastRequestRule := normalizeBackend.HTTPRequestRules[len(normalizeBackend.HTTPRequestRules)-1]
-	if lastRequestRule.Type != "return" || lastRequestRule.Status != 204 {
-		t.Fatalf("expected unconditional return 204 in normalize backend last request rule, got %#v", normalizeBackend.HTTPRequestRules)
+	if len(normalizeBackend.HTTPRequestRules) != 3 {
+		t.Fatalf("expected set-var + service return + fallback return in normalize backend request rules, got %#v", normalizeBackend.HTTPRequestRules)
 	}
-	expectedNormalizeConditionalRules := 4 * countServicesWithLiveRelease(snapshot.Services)
-	expectedNormalizeResponseRules := 4 + expectedNormalizeConditionalRules
-	if len(normalizeBackend.HTTPResponseRules) != expectedNormalizeResponseRules {
-		t.Fatalf("expected %d normalize backend response rules, got %d", expectedNormalizeResponseRules, len(normalizeBackend.HTTPResponseRules))
+	conditionalReturnRule := normalizeBackend.HTTPRequestRules[1]
+	if conditionalReturnRule.Type != "return" || conditionalReturnRule.ReturnStatusCode != 204 {
+		t.Fatalf("expected conditional normalize return 204, got %#v", conditionalReturnRule)
 	}
-	assertNormalizeStaticNoCacheRules(t, normalizeBackend.HTTPResponseRules)
-	for i, rule := range normalizeBackend.HTTPResponseRules[4:] {
-		if rule.Cond != "if" {
-			t.Fatalf("expected normalize conditional response rule[%d] cond if, got %#v", i, rule)
-		}
-		assertNormalizeCondTestExact(t, rule, expectedNormalizeCondPrefixed)
-		assertNoLegacyVarMatchSyntax(t, rule)
+	assertNormalizeCondTestExact(t, conditionalReturnRule, expectedNormalizeCondPrefixed)
+	assertNoLegacyVarMatchSyntax(t, conditionalReturnRule)
+	assertNormalizeStaticNoCacheReturnHeaders(t, conditionalReturnRule.ReturnHeaders)
+	assertReturnHeaderContains(t, conditionalReturnRule.ReturnHeaders, "Set-Cookie", "release-blue")
+	fallbackReturnRule := normalizeBackend.HTTPRequestRules[len(normalizeBackend.HTTPRequestRules)-1]
+	if fallbackReturnRule.Type != "return" || fallbackReturnRule.ReturnStatusCode != 204 {
+		t.Fatalf("expected fallback normalize return 204, got %#v", fallbackReturnRule)
 	}
-	assertBackendResponseRule(t, normalizeBackend.HTTPResponseRules, "Set-Cookie", "release-blue")
+	if strings.TrimSpace(fallbackReturnRule.Cond) != "" || strings.TrimSpace(fallbackReturnRule.CondTest) != "" {
+		t.Fatalf("expected fallback normalize return rule to be unconditional, got %#v", fallbackReturnRule)
+	}
+	assertNormalizeStaticNoCacheReturnHeaders(t, fallbackReturnRule.ReturnHeaders)
+	if findReturnHeader(fallbackReturnRule.ReturnHeaders, "Set-Cookie") != nil {
+		t.Fatalf("fallback normalize return rule should not include Set-Cookie, got %#v", fallbackReturnRule.ReturnHeaders)
+	}
 	blueServer := findServerEntry(dataplane.serverEntries, "be-api_blue")
 	greenServer := findServerEntry(dataplane.serverEntries, "be-api_green")
 	if blueServer == nil || greenServer == nil {
@@ -738,31 +739,52 @@ func expectedNormalizeCondTest(host string, normalizePath string) string {
 	return "{ req.hdr(host) -i " + host + " } { var(txn.ep_normalize_path) -m str -i " + normalizePath + " }"
 }
 
-func assertNormalizeCondTestExact(t *testing.T, rule httpResponseRule, expected string) {
+func assertNormalizeCondTestExact(t *testing.T, rule httpRequestRule, expected string) {
 	t.Helper()
 	if strings.TrimSpace(rule.CondTest) != strings.TrimSpace(expected) {
 		t.Fatalf("expected normalize condTest %q, got %#v", expected, rule)
 	}
 }
 
-func assertNoLegacyVarMatchSyntax(t *testing.T, rule httpResponseRule) {
+func assertNoLegacyVarMatchSyntax(t *testing.T, rule httpRequestRule) {
 	t.Helper()
 	if strings.Contains(rule.CondTest, "var(txn.ep_normalize_path) -i ") {
 		t.Fatalf("expected normalize condTest to avoid legacy var matcher syntax, got %#v", rule)
 	}
 }
 
-func countServicesWithLiveRelease(items []*grpcapi.ProxyServiceConfig) int {
-	count := 0
-	for _, item := range items {
-		if strings.TrimSpace(item.GetLiveReleaseId()) != "" {
-			count++
+func findReturnHeader(headers []returnHeader, name string) *returnHeader {
+	for i := range headers {
+		if strings.EqualFold(strings.TrimSpace(headers[i].Name), strings.TrimSpace(name)) {
+			return &headers[i]
 		}
 	}
-	return count
+	return nil
 }
 
-func assertNormalizeStaticNoCacheRules(t *testing.T, rules []httpResponseRule) {
+func assertReturnHeaderExact(t *testing.T, headers []returnHeader, name string, expected string) {
+	t.Helper()
+	header := findReturnHeader(headers, name)
+	if header == nil {
+		t.Fatalf("expected return header %q, got %#v", name, headers)
+	}
+	if strings.TrimSpace(header.Format) != strings.TrimSpace(expected) {
+		t.Fatalf("expected return header %q format %q, got %#v", name, expected, *header)
+	}
+}
+
+func assertReturnHeaderContains(t *testing.T, headers []returnHeader, name string, expectedContains string) {
+	t.Helper()
+	header := findReturnHeader(headers, name)
+	if header == nil {
+		t.Fatalf("expected return header %q, got %#v", name, headers)
+	}
+	if !strings.Contains(strings.TrimSpace(header.Format), strings.TrimSpace(expectedContains)) {
+		t.Fatalf("expected return header %q format contains %q, got %#v", name, expectedContains, *header)
+	}
+}
+
+func assertNormalizeStaticNoCacheReturnHeaders(t *testing.T, headers []returnHeader) {
 	t.Helper()
 	expected := []struct {
 		header string
@@ -773,20 +795,14 @@ func assertNormalizeStaticNoCacheRules(t *testing.T, rules []httpResponseRule) {
 		{header: "Pragma", format: "no-cache"},
 		{header: "Expires", format: "0"},
 	}
-	if len(rules) < len(expected) {
-		t.Fatalf("expected at least %d normalize response rules, got %d", len(expected), len(rules))
-	}
-	for i, item := range expected {
-		rule := rules[i]
-		if !strings.EqualFold(strings.TrimSpace(rule.Header), item.header) {
-			t.Fatalf("expected normalize static response rule[%d] header %q, got %#v", i, item.header, rule)
+	for _, item := range expected {
+		header := findReturnHeader(headers, item.header)
+		if header == nil {
+			t.Fatalf("expected normalize no-cache return header %q, got %#v", item.header, headers)
 		}
 		expectedFormat := normalizeHAProxyFmt(item.format)
-		if strings.TrimSpace(rule.Format) != expectedFormat {
-			t.Fatalf("expected normalize static response rule[%d] format %q, got %#v", i, expectedFormat, rule)
-		}
-		if strings.TrimSpace(rule.Cond) != "" || strings.TrimSpace(rule.CondTest) != "" {
-			t.Fatalf("expected normalize static response rule[%d] to be unconditional, got %#v", i, rule)
+		if strings.TrimSpace(header.Format) != expectedFormat {
+			t.Fatalf("expected normalize no-cache return header %q format %q, got %#v", item.header, expectedFormat, *header)
 		}
 	}
 }

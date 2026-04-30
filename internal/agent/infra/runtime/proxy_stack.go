@@ -448,23 +448,9 @@ func (m *ManagedProxyRuntime) reconcileLocked(ctx context.Context, snapshot *grp
 		}
 	}
 	normalizeBackend := backendSection{
-		Name: normalizeBackendName,
-		Mode: "http",
-		HTTPRequestRules: []httpRequestRule{
-			{
-				Type:     "set-var",
-				VarScope: "txn",
-				VarName:  "ep_normalize_path",
-				VarExpr:  "path",
-			},
-			{
-				Type:        "return",
-				Status:      204,
-				ContentType: "text/plain",
-				String:      "sticky-normalized",
-			},
-		},
-		HTTPResponseRules: normalizeBackendResponseRules(snapshot.GetServices()),
+		Name:             normalizeBackendName,
+		Mode:             "http",
+		HTTPRequestRules: normalizeBackendRequestRules(snapshot.GetServices()),
 	}
 	failureContext.Backends = append(failureContext.Backends, normalizeBackend)
 	if err := m.dataplane.EnsureBackendInTransaction(ctx, transactionID, normalizeBackend); err != nil {
@@ -657,12 +643,27 @@ func renderIntendedFrontendConfig(frontend frontendSection) string {
 		case "set-header", "add-header":
 			actionLine = fmt.Sprintf("  http-request %s %s %s", action, strings.TrimSpace(rule.Header), strings.TrimSpace(rule.Format))
 		case "return":
-			actionLine = fmt.Sprintf("  http-request return status %d", rule.Status)
-			if strings.TrimSpace(rule.ContentType) != "" {
-				actionLine += " content-type " + strings.TrimSpace(rule.ContentType)
+			status := rule.ReturnStatusCode
+			if status <= 0 {
+				status = rule.Status
 			}
-			if strings.TrimSpace(rule.String) != "" {
-				actionLine += " string " + strings.TrimSpace(rule.String)
+			actionLine = fmt.Sprintf("  http-request return status %d", status)
+			contentType := strings.TrimSpace(firstNonEmpty(rule.ReturnContentType, rule.ContentType))
+			if contentType != "" {
+				actionLine += " content-type " + contentType
+			}
+			contentFormat := strings.TrimSpace(rule.ReturnContentFormat)
+			content := strings.TrimSpace(firstNonEmpty(rule.ReturnContent, rule.String))
+			if contentFormat != "" && content != "" {
+				actionLine += " " + contentFormat + " " + content
+			}
+			for _, header := range rule.ReturnHeaders {
+				name := strings.TrimSpace(header.Name)
+				format := strings.TrimSpace(header.Format)
+				if name == "" || format == "" {
+					continue
+				}
+				actionLine += " hdr " + name + " " + format
 			}
 		default:
 			continue
@@ -1152,31 +1153,13 @@ func serviceBackendResponseRules(serviceKey string, routePathPrefix string, curr
 	return filterHTTPResponseRules(rules)
 }
 
-func normalizeBackendResponseRules(services []*grpcapi.ProxyServiceConfig) []httpResponseRule {
-	rules := []httpResponseRule{
+func normalizeBackendRequestRules(services []*grpcapi.ProxyServiceConfig) []httpRequestRule {
+	rules := []httpRequestRule{
 		{
-			Type:   "set-header",
-			Action: "set-header",
-			Header: "Cache-Control",
-			Format: "no-store, no-cache, must-revalidate, max-age=0, private",
-		},
-		{
-			Type:   "set-header",
-			Action: "set-header",
-			Header: "Surrogate-Control",
-			Format: "no-store, max-age=0",
-		},
-		{
-			Type:   "set-header",
-			Action: "set-header",
-			Header: "Pragma",
-			Format: "no-cache",
-		},
-		{
-			Type:   "set-header",
-			Action: "set-header",
-			Header: "Expires",
-			Format: "0",
+			Type:     "set-var",
+			VarScope: "txn",
+			VarName:  "ep_normalize_path",
+			VarExpr:  "path",
 		},
 	}
 	for _, svc := range services {
@@ -1187,42 +1170,67 @@ func normalizeBackendResponseRules(services []*grpcapi.ProxyServiceConfig) []htt
 		cookieName := servicecatalogapp.StickyCookieName(svc.GetServiceKey())
 		normalizePath := servicecatalogapp.BuildStickyNormalizePath(svc.GetRoutePathPrefix())
 		condTest := fmt.Sprintf("{ req.hdr(host) -i %s } { var(txn.ep_normalize_path) -m str -i %s }", svc.GetRouteHost(), normalizePath)
-		rules = append(rules,
-			httpResponseRule{
-				Type:     "add-header",
-				Action:   "add-header",
-				Header:   "Set-Cookie",
-				Format:   servicecatalogapp.BuildStickyCookie(cookieName, liveRelease, svc.GetRoutePathPrefix()),
-				Cond:     "if",
-				CondTest: condTest,
-			},
-			httpResponseRule{
-				Type:     "set-header",
-				Action:   "set-header",
-				Header:   servicecatalogapp.CurrentReleaseIDHeaderName,
-				Format:   liveRelease,
-				Cond:     "if",
-				CondTest: condTest,
-			},
-			httpResponseRule{
-				Type:     "set-header",
-				Action:   "set-header",
-				Header:   servicecatalogapp.LiveReleaseIDHeaderName,
-				Format:   liveRelease,
-				Cond:     "if",
-				CondTest: condTest,
-			},
-			httpResponseRule{
-				Type:     "set-header",
-				Action:   "set-header",
-				Header:   servicecatalogapp.ReleaseRoleHeaderName,
-				Format:   servicecatalogapp.ReleaseRoleLive,
-				Cond:     "if",
-				CondTest: condTest,
-			},
-		)
+		rules = append(rules, httpRequestRule{
+			Type:             "return",
+			ReturnStatusCode: 204,
+			ReturnHeaders: normalizeReturnHeaders(
+				servicecatalogapp.BuildStickyCookie(cookieName, liveRelease, svc.GetRoutePathPrefix()),
+				liveRelease,
+			),
+			Cond:     "if",
+			CondTest: condTest,
+		})
 	}
-	return filterHTTPResponseRules(rules)
+	rules = append(rules, httpRequestRule{
+		Type:             "return",
+		ReturnStatusCode: 204,
+		ReturnHeaders:    normalizeNoCacheHeaders(),
+	})
+	return filterHTTPRequestRules(rules)
+}
+
+func normalizeReturnHeaders(cookie string, liveRelease string) []returnHeader {
+	headers := append([]returnHeader{}, normalizeNoCacheHeaders()...)
+	headers = append(headers,
+		returnHeader{
+			Name:   "Set-Cookie",
+			Format: cookie,
+		},
+		returnHeader{
+			Name:   servicecatalogapp.CurrentReleaseIDHeaderName,
+			Format: liveRelease,
+		},
+		returnHeader{
+			Name:   servicecatalogapp.LiveReleaseIDHeaderName,
+			Format: liveRelease,
+		},
+		returnHeader{
+			Name:   servicecatalogapp.ReleaseRoleHeaderName,
+			Format: servicecatalogapp.ReleaseRoleLive,
+		},
+	)
+	return headers
+}
+
+func normalizeNoCacheHeaders() []returnHeader {
+	return []returnHeader{
+		{
+			Name:   "Cache-Control",
+			Format: "no-store, no-cache, must-revalidate, max-age=0, private",
+		},
+		{
+			Name:   "Surrogate-Control",
+			Format: "no-store, max-age=0",
+		},
+		{
+			Name:   "Pragma",
+			Format: "no-cache",
+		},
+		{
+			Name:   "Expires",
+			Format: "0",
+		},
+	}
 }
 
 func releaseRoleForTarget(target serviceBackendTarget, service *grpcapi.ProxyServiceConfig) string {

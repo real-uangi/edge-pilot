@@ -477,11 +477,22 @@ func TestDataPlaneClientReplaceFrontendInTransactionEncodesRequestRules(t *testi
 				VarExpr:  "path",
 			},
 			{
-				Type:        "return",
-				Status:      204,
-				ContentType: "text/plain",
-				String:      "sticky-normalized",
-				CondTest:    "normalize_acl",
+				Type:                "return",
+				ReturnStatusCode:    204,
+				ReturnContentType:   "text/plain",
+				ReturnContentFormat: "string",
+				ReturnContent:       "sticky-normalized",
+				ReturnHeaders: []returnHeader{
+					{
+						Name:   "Cache-Control",
+						Format: "no-store, no-cache, must-revalidate, max-age=0, private",
+					},
+					{
+						Name:   "Set-Cookie",
+						Format: `%[str(ep_release_id_svc_a=release-blue;Max-Age=600;Path=/;HttpOnly;SameSite=Lax)]`,
+					},
+				},
+				CondTest: "normalize_acl",
 			},
 		},
 	}); err != nil {
@@ -516,14 +527,35 @@ func TestDataPlaneClientReplaceFrontendInTransactionEncodesRequestRules(t *testi
 	if got := second["type"]; got != "return" {
 		t.Fatalf("expected second request rule type return, got %#v", got)
 	}
-	if got := second["status"]; got != float64(204) {
-		t.Fatalf("expected second request rule status 204, got %#v", got)
+	if got := second["return_status_code"]; got != float64(204) {
+		t.Fatalf("expected second request rule return_status_code 204, got %#v", got)
 	}
-	if got := second["content_type"]; got != "text/plain" {
-		t.Fatalf("expected second request rule content_type text/plain, got %#v", got)
+	if got := second["return_content_type"]; got != "text/plain" {
+		t.Fatalf("expected second request rule return_content_type text/plain, got %#v", got)
 	}
-	if got := second["string"]; got != "sticky-normalized" {
-		t.Fatalf("expected second request rule string sticky-normalized, got %#v", got)
+	if got := second["return_content_format"]; got != "string" {
+		t.Fatalf("expected second request rule return_content_format string, got %#v", got)
+	}
+	if got := second["return_content"]; got != "sticky-normalized" {
+		t.Fatalf("expected second request rule return_content sticky-normalized, got %#v", got)
+	}
+	rawHeaders, ok := second["return_hdrs"].([]any)
+	if !ok || len(rawHeaders) != 2 {
+		t.Fatalf("expected second request rule return_hdrs size 2, got %#v", second["return_hdrs"])
+	}
+	firstHeader := rawHeaders[0].(map[string]any)
+	if got := firstHeader["name"]; got != "Cache-Control" {
+		t.Fatalf("expected first return header name Cache-Control, got %#v", got)
+	}
+	if got := firstHeader["fmt"]; got != `"no-store, no-cache, must-revalidate, max-age=0, private"` {
+		t.Fatalf("expected first return header fmt quoted no-cache value, got %#v", got)
+	}
+	secondHeader := rawHeaders[1].(map[string]any)
+	if got := secondHeader["name"]; got != "Set-Cookie" {
+		t.Fatalf("expected second return header name Set-Cookie, got %#v", got)
+	}
+	if got := secondHeader["fmt"]; got != `%[str(ep_release_id_svc_a=release-blue;Max-Age=600;Path=/;HttpOnly;SameSite=Lax)]` {
+		t.Fatalf("expected second return header fmt expression preserved, got %#v", got)
 	}
 }
 func assertServerPayload(t *testing.T, request recordedRequest, resolvers string, initAddr string) {

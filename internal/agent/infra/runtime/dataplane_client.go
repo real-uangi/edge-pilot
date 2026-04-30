@@ -56,19 +56,29 @@ type frontendSwitchRule struct {
 }
 
 type httpRequestRule struct {
-	Type        string `json:"type"`
-	Action      string `json:"-"`
-	Header      string `json:"hdr_name,omitempty"`
-	Format      string `json:"hdr_format,omitempty"`
-	VarScope    string `json:"var_scope,omitempty"`
-	VarName     string `json:"var_name,omitempty"`
-	VarExpr     string `json:"var_expr,omitempty"`
-	Status      int    `json:"status,omitempty"`
-	ContentType string `json:"content_type,omitempty"`
-	String      string `json:"string,omitempty"`
-	Cond        string `json:"cond,omitempty"`
-	CondTest    string `json:"cond_test,omitempty"`
-	Index       int    `json:"index"`
+	Type                string         `json:"type"`
+	Action              string         `json:"-"`
+	Header              string         `json:"hdr_name,omitempty"`
+	Format              string         `json:"hdr_format,omitempty"`
+	VarScope            string         `json:"var_scope,omitempty"`
+	VarName             string         `json:"var_name,omitempty"`
+	VarExpr             string         `json:"var_expr,omitempty"`
+	ReturnStatusCode    int            `json:"return_status_code,omitempty"`
+	ReturnContentType   string         `json:"return_content_type,omitempty"`
+	ReturnContentFormat string         `json:"return_content_format,omitempty"`
+	ReturnContent       string         `json:"return_content,omitempty"`
+	ReturnHeaders       []returnHeader `json:"return_hdrs,omitempty"`
+	Status              int            `json:"-"`
+	ContentType         string         `json:"-"`
+	String              string         `json:"-"`
+	Cond                string         `json:"cond,omitempty"`
+	CondTest            string         `json:"cond_test,omitempty"`
+	Index               int            `json:"index"`
+}
+
+type returnHeader struct {
+	Name   string `json:"name"`
+	Format string `json:"fmt"`
 }
 
 type httpAfterResponseRule struct {
@@ -218,11 +228,34 @@ func filterHTTPRequestRules(rules []httpRequestRule) []httpRequestRule {
 				continue
 			}
 		case "return":
-			if rule.Status <= 0 {
-				rule.Status = http.StatusOK
+			if rule.ReturnStatusCode <= 0 {
+				rule.ReturnStatusCode = rule.Status
 			}
-			rule.ContentType = strings.TrimSpace(rule.ContentType)
-			rule.String = strings.TrimSpace(rule.String)
+			if rule.ReturnStatusCode <= 0 {
+				rule.ReturnStatusCode = http.StatusOK
+			}
+			rule.ReturnContentType = strings.TrimSpace(firstNonEmpty(rule.ReturnContentType, rule.ContentType))
+			rule.ReturnContentFormat = strings.TrimSpace(rule.ReturnContentFormat)
+			rule.ReturnContent = strings.TrimSpace(firstNonEmpty(rule.ReturnContent, rule.String))
+			if rule.ReturnContentFormat == "" && rule.ReturnContent != "" {
+				rule.ReturnContentFormat = "string"
+			}
+			if len(rule.ReturnHeaders) > 0 {
+				normalizedHeaders := make([]returnHeader, 0, len(rule.ReturnHeaders))
+				for _, header := range rule.ReturnHeaders {
+					header.Name = strings.TrimSpace(header.Name)
+					header.Format = strings.TrimSpace(header.Format)
+					if header.Name == "" || header.Format == "" {
+						continue
+					}
+					header.Format = normalizeHAProxyFmt(header.Format)
+					normalizedHeaders = append(normalizedHeaders, header)
+				}
+				rule.ReturnHeaders = normalizedHeaders
+			}
+			if len(rule.ReturnHeaders) == 0 {
+				rule.ReturnHeaders = nil
+			}
 		default:
 			continue
 		}
@@ -342,6 +375,15 @@ func normalizeHAProxyFmt(value string) string {
 		return strconv.Quote(value)
 	}
 	return value
+}
+
+func firstNonEmpty(values ...string) string {
+	for _, value := range values {
+		if strings.TrimSpace(value) != "" {
+			return value
+		}
+	}
+	return ""
 }
 
 func isQuotedHAProxyString(value string) bool {
