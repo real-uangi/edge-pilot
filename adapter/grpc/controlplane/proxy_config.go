@@ -56,6 +56,7 @@ func (p *ProxyConfigPublisher) buildProxyConfigSnapshot(agentID string, services
 			ServiceId:               item.ServiceID.String(),
 			ServiceKey:              item.ServiceKey,
 			RouteHost:               item.RouteHost,
+			RouteHosts:              item.RouteHosts,
 			RoutePathPrefix:         item.RoutePathPrefix,
 			BackendName:             item.BackendName,
 			ContainerPort:           int32(item.ContainerPort),

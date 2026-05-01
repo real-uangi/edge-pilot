@@ -744,14 +744,48 @@ func (m *ManagedProxyRuntime) ensureReservedProxyIPLocked(ctx context.Context) e
 	return nil
 }
 
+func proxyRouteHosts(service *grpcapi.ProxyServiceConfig) []string {
+	if service == nil {
+		return nil
+	}
+	hosts := make([]string, 0, len(service.GetRouteHosts())+1)
+	seen := make(map[string]struct{}, len(service.GetRouteHosts())+1)
+	add := func(value string) {
+		host := servicecatalogapp.NormalizeRouteHost(value)
+		if host == "" {
+			return
+		}
+		if _, ok := seen[host]; ok {
+			return
+		}
+		seen[host] = struct{}{}
+		hosts = append(hosts, host)
+	}
+	add(service.GetRouteHost())
+	for _, host := range service.GetRouteHosts() {
+		add(host)
+	}
+	return hosts
+}
+
+func proxyRouteHostKey(service *grpcapi.ProxyServiceConfig) string {
+	hosts := proxyRouteHosts(service)
+	if len(hosts) == 0 {
+		return ""
+	}
+	return hosts[0]
+}
+
 func (m *ManagedProxyRuntime) frontendSection(snapshot *grpcapi.ProxyConfigSnapshot) frontendSection {
 	services := append([]*grpcapi.ProxyServiceConfig(nil), snapshot.GetServices()...)
 	sort.Slice(services, func(i, j int) bool {
-		if services[i].GetRouteHost() != services[j].GetRouteHost() {
-			return services[i].GetRouteHost() < services[j].GetRouteHost()
-		}
 		if len(services[i].GetRoutePathPrefix()) != len(services[j].GetRoutePathPrefix()) {
 			return len(services[i].GetRoutePathPrefix()) > len(services[j].GetRoutePathPrefix())
+		}
+		leftHost := proxyRouteHostKey(services[i])
+		rightHost := proxyRouteHostKey(services[j])
+		if leftHost != rightHost {
+			return leftHost < rightHost
 		}
 		return services[i].GetServiceKey() < services[j].GetServiceKey()
 	})
@@ -794,7 +828,7 @@ func (m *ManagedProxyRuntime) frontendSection(snapshot *grpcapi.ProxyConfigSnaps
 		trafficPercent := clampTrafficPercent(int(service.GetCandidateTrafficPercent()))
 		normalizePath := servicecatalogapp.BuildStickyNormalizePath(service.GetRoutePathPrefix())
 
-		addACL(hostACL, "hdr(host)", "-i "+service.GetRouteHost())
+		addACL(hostACL, "hdr(host)", exactMatchValue(strings.Join(proxyRouteHosts(service), " ")))
 		addACL(pathACL, "path_beg", service.GetRoutePathPrefix())
 		addACL(normalizePathACL, "path", exactPathMatchValue(normalizePath))
 		addACL(queryLiveACL, "url_param("+servicecatalogapp.PreviewReleaseIDQueryParam+")", exactMatchValue(liveRelease))
@@ -1102,6 +1136,7 @@ func cloneSnapshot(snapshot *grpcapi.ProxyConfigSnapshot) *grpcapi.ProxyConfigSn
 			ServiceId:               item.GetServiceId(),
 			ServiceKey:              item.GetServiceKey(),
 			RouteHost:               item.GetRouteHost(),
+			RouteHosts:              append([]string(nil), item.GetRouteHosts()...),
 			RoutePathPrefix:         item.GetRoutePathPrefix(),
 			BackendName:             item.GetBackendName(),
 			ContainerPort:           item.GetContainerPort(),
@@ -1169,7 +1204,7 @@ func normalizeBackendRequestRules(services []*grpcapi.ProxyServiceConfig) []http
 		}
 		cookieName := servicecatalogapp.StickyCookieName(svc.GetServiceKey())
 		normalizePath := servicecatalogapp.BuildStickyNormalizePath(svc.GetRoutePathPrefix())
-		condTest := fmt.Sprintf("{ req.hdr(host) -i %s } { var(txn.ep_normalize_path) -m str -i %s }", svc.GetRouteHost(), normalizePath)
+		condTest := fmt.Sprintf("{ req.hdr(host) -i %s } { var(txn.ep_normalize_path) -m str -i %s }", strings.Join(proxyRouteHosts(svc), " "), normalizePath)
 		rules = append(rules, httpRequestRule{
 			Type:             "return",
 			ReturnStatusCode: 204,

@@ -80,7 +80,10 @@ export function ServicesPage() {
                         ip={agentsByID.get(service.agentId)?.ip}
                       />
                     </td>
-                    <td>{service.routeHost + service.routePathPrefix}</td>
+                    <td>
+                      {service.routeHost + service.routePathPrefix}
+                      {service.routeHosts.length > 1 ? ` 等 ${service.routeHosts.length} 个域名` : ""}
+                    </td>
                     <td>{slotLabel(service.currentLiveSlot)}</td>
                     <td>
                       <StatusPill

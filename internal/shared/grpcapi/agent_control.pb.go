@@ -1440,6 +1440,7 @@ type ProxyServiceConfig struct {
 	CandidateTrafficPercent int32                  `protobuf:"varint,14,opt,name=candidate_traffic_percent,json=candidateTrafficPercent,proto3" json:"candidate_traffic_percent,omitempty"`
 	SchedulerSdkPort        int32                  `protobuf:"varint,15,opt,name=scheduler_sdk_port,json=schedulerSdkPort,proto3" json:"scheduler_sdk_port,omitempty"`
 	SchedulerExecutorGroup  string                 `protobuf:"bytes,16,opt,name=scheduler_executor_group,json=schedulerExecutorGroup,proto3" json:"scheduler_executor_group,omitempty"`
+	RouteHosts              []string               `protobuf:"bytes,17,rep,name=route_hosts,json=routeHosts,proto3" json:"route_hosts,omitempty"`
 	unknownFields           protoimpl.UnknownFields
 	sizeCache               protoimpl.SizeCache
 }
@@ -1570,6 +1571,13 @@ func (x *ProxyServiceConfig) GetSchedulerExecutorGroup() string {
 		return x.SchedulerExecutorGroup
 	}
 	return ""
+}
+
+func (x *ProxyServiceConfig) GetRouteHosts() []string {
+	if x != nil {
+		return x.RouteHosts
+	}
+	return nil
 }
 
 type ProxyConfigSnapshot struct {
@@ -2114,7 +2122,7 @@ const file_internal_shared_grpcapi_agent_control_proto_rawDesc = "" +
 	"\x11cleanup_completed\x18\f \x01(\bR\x10cleanupCompleted\x1a:\n" +
 	"\fMetricsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\x03R\x05value:\x028\x01\"\x8e\x05\n" +
+	"\x05value\x18\x02 \x01(\x03R\x05value:\x028\x01\"\xaf\x05\n" +
 	"\x12ProxyServiceConfig\x12\x1d\n" +
 	"\n" +
 	"service_id\x18\x01 \x01(\tR\tserviceId\x12\x1f\n" +
@@ -2133,7 +2141,9 @@ const file_internal_shared_grpcapi_agent_control_proto_rawDesc = "" +
 	"\x16candidate_backend_name\x18\r \x01(\tR\x14candidateBackendName\x12:\n" +
 	"\x19candidate_traffic_percent\x18\x0e \x01(\x05R\x17candidateTrafficPercent\x12,\n" +
 	"\x12scheduler_sdk_port\x18\x0f \x01(\x05R\x10schedulerSdkPort\x128\n" +
-	"\x18scheduler_executor_group\x18\x10 \x01(\tR\x16schedulerExecutorGroup\"\xde\x01\n" +
+	"\x18scheduler_executor_group\x18\x10 \x01(\tR\x16schedulerExecutorGroup\x12\x1f\n" +
+	"\vroute_hosts\x18\x11 \x03(\tR\n" +
+	"routeHosts\"\xde\x01\n" +
 	"\x13ProxyConfigSnapshot\x12\x19\n" +
 	"\bagent_id\x18\x01 \x01(\tR\aagentId\x12#\n" +
 	"\rfrontend_name\x18\x02 \x01(\tR\ffrontendName\x12'\n" +

@@ -29,6 +29,7 @@ type ProxyServiceConfig struct {
 	ServiceID              uuid.UUID
 	ServiceKey             string
 	RouteHost              string
+	RouteHosts             []string
 	RoutePathPrefix        string
 	BackendName            string
 	CurrentLiveSlot        model.Slot
@@ -146,6 +147,7 @@ func BuildProxyServiceConfigs(services []model.Service) []ProxyServiceConfig {
 			ServiceID:              item.ID,
 			ServiceKey:             item.ServiceKey,
 			RouteHost:              NormalizeRouteHost(item.RouteHost),
+			RouteHosts:             routeHostsFromService(&item),
 			RoutePathPrefix:        NormalizeRoutePathPrefix(item.RoutePathPrefix),
 			BackendName:            BackendName(item.ID),
 			CurrentLiveSlot:        item.CurrentLiveSlot,
@@ -155,11 +157,11 @@ func BuildProxyServiceConfigs(services []model.Service) []ProxyServiceConfig {
 		})
 	}
 	sort.Slice(out, func(i, j int) bool {
-		if out[i].RouteHost != out[j].RouteHost {
-			return out[i].RouteHost < out[j].RouteHost
-		}
 		if len(out[i].RoutePathPrefix) != len(out[j].RoutePathPrefix) {
 			return len(out[i].RoutePathPrefix) > len(out[j].RoutePathPrefix)
+		}
+		if out[i].RouteHost != out[j].RouteHost {
+			return out[i].RouteHost < out[j].RouteHost
 		}
 		return out[i].ServiceKey < out[j].ServiceKey
 	})

@@ -67,6 +67,10 @@ function parseNetworkAliases(text: string): string[] {
   return lineList(text);
 }
 
+function parseRouteHosts(text: string): string[] {
+  return lineList(text);
+}
+
 export const serviceFormSchema = z.object({
   name: z.string().min(1, "必填"),
   serviceKey: z.string().min(1, "必填"),
@@ -86,6 +90,7 @@ export const serviceFormSchema = z.object({
   schedulerSdkPort: z.coerce.number().int().min(0).max(65535),
   schedulerExecutorGroup: z.string().trim(),
   routeHost: z.string().min(1, "必填"),
+  routeHostsText: z.string(),
   routePathPrefix: z.string().trim(),
   enabled: z.boolean(),
   httpHealthHeadersText: z.string(),
@@ -121,6 +126,7 @@ export function toServicePayload(values: ServiceFormValues): UpsertServiceInput 
     schedulerSdkPort: values.schedulerSdkPort,
     schedulerExecutorGroup: values.schedulerSdkPort > 0 && !values.schedulerExecutorGroup.trim() ? "default" : values.schedulerExecutorGroup.trim(),
     routeHost: values.routeHost.trim(),
+    routeHosts: parseRouteHosts(values.routeHostsText),
     routePathPrefix: values.routePathPrefix.trim(),
     enabled: values.enabled,
     env: parseEnv(values.envText),
@@ -152,6 +158,7 @@ export function toServiceFormDefaults(service?: ServiceRecord): ServiceFormInput
     schedulerSdkPort: service?.schedulerSdkPort ?? 0,
     schedulerExecutorGroup: service?.schedulerExecutorGroup ?? "default",
     routeHost: service?.routeHost ?? "",
+    routeHostsText: (service?.routeHosts?.length ? service.routeHosts : service?.routeHost ? [service.routeHost] : []).join("\n"),
     routePathPrefix: service?.routePathPrefix ?? "/",
     enabled: service?.enabled ?? true,
     httpHealthHeadersText: Object.entries(service?.httpHealthHeaders ?? {})

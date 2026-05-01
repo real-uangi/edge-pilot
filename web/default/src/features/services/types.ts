@@ -20,6 +20,7 @@ export interface ServiceRecord {
   httpProbeIntervalSecond: number;
   httpSuccessThreshold: number;
   routeHost: string;
+  routeHosts: string[];
   routePathPrefix: string;
   env: Record<string, string>;
   command: string[];
@@ -52,6 +53,7 @@ export interface UpsertServiceInput {
   schedulerSdkPort: number;
   schedulerExecutorGroup: string;
   routeHost: string;
+  routeHosts: string[];
   routePathPrefix: string;
   env: Record<string, string>;
   command: string[];

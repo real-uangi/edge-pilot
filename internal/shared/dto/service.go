@@ -37,7 +37,8 @@ type UpsertServiceRequest struct {
 	HTTPSuccessThreshold    int               `json:"httpSuccessThreshold"`
 	SchedulerSDKPort        int               `json:"schedulerSdkPort"`
 	SchedulerExecutorGroup  string            `json:"schedulerExecutorGroup"`
-	RouteHost               string            `json:"routeHost" binding:"required"`
+	RouteHost               string            `json:"routeHost"`
+	RouteHosts              []string          `json:"routeHosts"`
 	RoutePathPrefix         string            `json:"routePathPrefix"`
 	Env                     map[string]string `json:"env"`
 	Command                 []string          `json:"command"`
@@ -70,6 +71,7 @@ type ServiceOutput struct {
 	SchedulerSDKPort        int               `json:"schedulerSdkPort"`
 	SchedulerExecutorGroup  string            `json:"schedulerExecutorGroup"`
 	RouteHost               string            `json:"routeHost"`
+	RouteHosts              []string          `json:"routeHosts"`
 	RoutePathPrefix         string            `json:"routePathPrefix"`
 	Env                     map[string]string `json:"env"`
 	Command                 []string          `json:"command"`
@@ -104,6 +106,7 @@ type ServiceDeploymentSpec struct {
 	SchedulerSDKPort        int
 	SchedulerExecutorGroup  string
 	RouteHost               string
+	RouteHosts              []string
 	RoutePathPrefix         string
 	Env                     map[string]string
 	EnvEncrypted            bool

@@ -70,7 +70,7 @@ func (s *Service) Create(req dto.UpsertServiceRequest) (*dto.ServiceOutput, erro
 	if err := s.ensureAgentAssignable(entity.AgentID); err != nil {
 		return nil, err
 	}
-	if err := s.ensureRouteAvailable(entity.AgentID, entity.RouteHost, entity.RoutePathPrefix, entity.ID); err != nil {
+	if err := s.ensureRouteAvailable(entity.AgentID, routeHostsFromService(entity), entity.RoutePathPrefix, entity.ID); err != nil {
 		return nil, err
 	}
 	if err := s.ensurePublishedPortsAvailable(entity.AgentID, entity.PublishedPorts.Get(), entity.ID); err != nil {
@@ -120,7 +120,7 @@ func (s *Service) Update(id uuid.UUID, req dto.UpsertServiceRequest) (*dto.Servi
 	if err := s.ensureAgentAssignable(updated.AgentID); err != nil {
 		return nil, err
 	}
-	if err := s.ensureRouteAvailable(updated.AgentID, updated.RouteHost, updated.RoutePathPrefix, updated.ID); err != nil {
+	if err := s.ensureRouteAvailable(updated.AgentID, routeHostsFromService(updated), updated.RoutePathPrefix, updated.ID); err != nil {
 		return nil, err
 	}
 	if err := s.ensurePublishedPortsAvailable(updated.AgentID, updated.PublishedPorts.Get(), updated.ID); err != nil {
@@ -237,6 +237,10 @@ func (s *Service) buildServiceEntity(id uuid.UUID, req dto.UpsertServiceRequest)
 	if err := validateResourceLimits(req.CPULimitCores, req.MemoryLimitMB); err != nil {
 		return nil, err
 	}
+	primaryRouteHost, routeHosts, err := normalizeRouteHosts(req.RouteHost, req.RouteHosts)
+	if err != nil {
+		return nil, err
+	}
 	normalizedPathPrefix := NormalizeRoutePathPrefix(req.RoutePathPrefix)
 	if err := validateRoutePathPrefix(normalizedPathPrefix); err != nil {
 		return nil, err
@@ -310,7 +314,8 @@ func (s *Service) buildServiceEntity(id uuid.UUID, req dto.UpsertServiceRequest)
 		HTTPProbeTimeoutSecond:  httpProbeTimeoutSecond,
 		HTTPProbeIntervalSecond: httpProbeIntervalSecond,
 		HTTPSuccessThreshold:    httpSuccessThreshold,
-		RouteHost:               NormalizeRouteHost(req.RouteHost),
+		RouteHost:               primaryRouteHost,
+		RouteHosts:              commondb.NewJSONB(routeHosts),
 		RoutePathPrefix:         normalizedPathPrefix,
 		Env:                     nil,
 		EnvCiphertext:           envCiphertext,
@@ -330,6 +335,45 @@ func normalizeServiceKey(value string) (string, error) {
 		return "", business.NewBadRequest("serviceKey 非法")
 	}
 	return serviceKey, nil
+}
+
+func normalizeRouteHosts(primary string, hosts []string) (string, []string, error) {
+	primary = NormalizeRouteHost(primary)
+	normalized := make([]string, 0, len(hosts)+1)
+	seen := make(map[string]struct{}, len(hosts)+1)
+	add := func(value string) {
+		host := NormalizeRouteHost(value)
+		if host == "" {
+			return
+		}
+		if _, ok := seen[host]; ok {
+			return
+		}
+		seen[host] = struct{}{}
+		normalized = append(normalized, host)
+	}
+	add(primary)
+	for _, host := range hosts {
+		add(host)
+	}
+	if len(normalized) == 0 {
+		return "", nil, business.NewBadRequest("routeHost 必填")
+	}
+	if primary == "" {
+		primary = normalized[0]
+	}
+	return primary, normalized, nil
+}
+
+func routeHostsFromService(service *model.Service) []string {
+	if service == nil {
+		return nil
+	}
+	_, hosts, err := normalizeRouteHosts(service.RouteHost, getJSON(service.RouteHosts))
+	if err != nil {
+		return nil
+	}
+	return hosts
 }
 
 func (s *Service) ensureAgentAssignable(agentID string) error {
@@ -382,6 +426,7 @@ func (s *Service) toServiceOutput(service *model.Service) (dto.ServiceOutput, er
 		HTTPProbeIntervalSecond: service.HTTPProbeIntervalSecond,
 		HTTPSuccessThreshold:    service.HTTPSuccessThreshold,
 		RouteHost:               service.RouteHost,
+		RouteHosts:              routeHostsFromService(service),
 		RoutePathPrefix:         service.RoutePathPrefix,
 		Env:                     env,
 		Command:                 getJSON(service.Command),
@@ -422,6 +467,7 @@ func (s *Service) toDeploymentSpec(service *model.Service) (dto.ServiceDeploymen
 		HTTPProbeIntervalSecond: service.HTTPProbeIntervalSecond,
 		HTTPSuccessThreshold:    service.HTTPSuccessThreshold,
 		RouteHost:               service.RouteHost,
+		RouteHosts:              routeHostsFromService(service),
 		RoutePathPrefix:         service.RoutePathPrefix,
 		Env:                     env,
 		EnvEncrypted:            strings.TrimSpace(service.EnvCiphertext) != "",
@@ -615,13 +661,27 @@ func validateRoutePathPrefix(path string) error {
 	return nil
 }
 
-func (s *Service) ensureRouteAvailable(agentID string, routeHost string, routePathPrefix string, selfID uuid.UUID) error {
-	existing, err := s.repo.GetByRoute(agentID, routeHost, routePathPrefix)
+func (s *Service) ensureRouteAvailable(agentID string, routeHosts []string, routePathPrefix string, selfID uuid.UUID) error {
+	if len(routeHosts) == 0 {
+		return business.NewBadRequest("routeHost 必填")
+	}
+	services, err := s.repo.ListByAgent(agentID)
 	if err != nil {
 		return err
 	}
-	if existing != nil && existing.ID != selfID {
-		return business.NewBadRequest("routeHost + routePathPrefix 已存在")
+	requested := make(map[string]struct{}, len(routeHosts))
+	for _, host := range routeHosts {
+		requested[host] = struct{}{}
+	}
+	for i := range services {
+		if services[i].ID == selfID || NormalizeRoutePathPrefix(services[i].RoutePathPrefix) != routePathPrefix {
+			continue
+		}
+		for _, host := range routeHostsFromService(&services[i]) {
+			if _, ok := requested[host]; ok {
+				return business.NewBadRequest("routeHost + routePathPrefix 已存在")
+			}
+		}
 	}
 	return nil
 }

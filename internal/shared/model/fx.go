@@ -105,5 +105,10 @@ func backfillServiceHealthConfig(conn *gorm.DB) error {
 		Update("scheduler_executor_group", "default").Error; err != nil {
 		return err
 	}
+	if err := conn.Model(&Service{}).
+		Where("route_host <> '' AND (route_hosts IS NULL OR route_hosts = '[]'::jsonb)").
+		Update("route_hosts", gorm.Expr("jsonb_build_array(route_host)")).Error; err != nil {
+		return err
+	}
 	return nil
 }

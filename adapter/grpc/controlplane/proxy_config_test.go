@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
+	commondb "github.com/real-uangi/allingo/common/db"
 )
 
 func TestBuildProxyConfigSnapshotCarriesSortedRoutesAndLiveSlot(t *testing.T) {
@@ -44,6 +45,38 @@ func TestBuildProxyConfigSnapshotCarriesSortedRoutesAndLiveSlot(t *testing.T) {
 	}
 	if snapshot.GetServices()[0].GetCurrentLiveSlot() != toProtoSlot(model.SlotGreen) {
 		t.Fatalf("expected current live slot to be preserved")
+	}
+}
+
+func TestBuildProxyConfigSnapshotCarriesRouteHosts(t *testing.T) {
+	enabled := true
+	services := []model.Service{
+		{
+			ID:              uuid.MustParse("11111111-1111-1111-1111-111111111111"),
+			ServiceKey:      "svc-api",
+			AgentID:         "agent-a",
+			RouteHost:       "api.example.com",
+			RouteHosts:      commondb.NewJSONB([]string{"api.example.com", "api-alt.example.com"}),
+			RoutePathPrefix: "/api",
+			CurrentLiveSlot: model.SlotBlue,
+			ContainerPort:   8080,
+			Enabled:         &enabled,
+		},
+	}
+
+	snapshot := buildProxyConfigSnapshot("agent-a", services)
+	if len(snapshot.GetServices()) != 1 {
+		t.Fatalf("expected one service, got %d", len(snapshot.GetServices()))
+	}
+	got := snapshot.GetServices()[0].GetRouteHosts()
+	want := []string{"api.example.com", "api-alt.example.com"}
+	if len(got) != len(want) {
+		t.Fatalf("expected route hosts %#v, got %#v", want, got)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("expected route hosts %#v, got %#v", want, got)
+		}
 	}
 }
 

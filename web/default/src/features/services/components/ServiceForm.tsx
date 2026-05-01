@@ -98,8 +98,13 @@ export function ServiceForm({
             <span className={styles.hint}>默认 0，不限制</span>
           </label>
           <label className={styles.field}>
-            <span className={styles.label}>路由 Host</span>
+            <span className={styles.label}>主域名</span>
             <input className={styles.input} {...form.register("routeHost")} />
+          </label>
+          <label className={`${styles.field} ${styles.fieldWide}`}>
+            <span className={styles.label}>接入域名</span>
+            <textarea className={styles.textarea} {...form.register("routeHostsText")} />
+            <span className={styles.hint}>每行一个域名，需包含主域名</span>
           </label>
           <label className={styles.field}>
             <span className={styles.label}>路由前缀</span>

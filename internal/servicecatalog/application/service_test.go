@@ -53,6 +53,97 @@ func TestCreateRejectsDuplicateRouteOnSameAgent(t *testing.T) {
 	}
 }
 
+func TestCreateNormalizesRouteHosts(t *testing.T) {
+	repo := newFakeServiceCatalogRepo()
+	svc := NewServiceWithPublisher(repo, nil, nil)
+
+	created, err := svc.Create(dto.UpsertServiceRequest{
+		Name:          "svc-a",
+		ServiceKey:    "svc-a",
+		AgentID:       "11111111-1111-1111-1111-111111111111",
+		ImageRepo:     "repo/app",
+		ContainerPort: 8080,
+		RouteHost:     "Primary.EXAMPLE.com",
+		RouteHosts: []string{
+			" primary.example.com ",
+			"ALT.example.com",
+			"alt.example.com",
+			"",
+		},
+	})
+	if err != nil {
+		t.Fatalf("Create() error = %v", err)
+	}
+	if created.RouteHost != "primary.example.com" {
+		t.Fatalf("expected normalized primary host, got %q", created.RouteHost)
+	}
+	want := []string{"primary.example.com", "alt.example.com"}
+	if len(created.RouteHosts) != len(want) {
+		t.Fatalf("expected routeHosts %#v, got %#v", want, created.RouteHosts)
+	}
+	for i := range want {
+		if created.RouteHosts[i] != want[i] {
+			t.Fatalf("expected routeHosts %#v, got %#v", want, created.RouteHosts)
+		}
+	}
+}
+
+func TestCreateRouteHostsFallbackToRouteHost(t *testing.T) {
+	repo := newFakeServiceCatalogRepo()
+	svc := NewServiceWithPublisher(repo, nil, nil)
+
+	created, err := svc.Create(dto.UpsertServiceRequest{
+		Name:          "svc-a",
+		ServiceKey:    "svc-a",
+		AgentID:       "11111111-1111-1111-1111-111111111111",
+		ImageRepo:     "repo/app",
+		ContainerPort: 8080,
+		RouteHost:     "Single.EXAMPLE.com",
+	})
+	if err != nil {
+		t.Fatalf("Create() error = %v", err)
+	}
+	if created.RouteHost != "single.example.com" {
+		t.Fatalf("expected normalized routeHost, got %q", created.RouteHost)
+	}
+	if len(created.RouteHosts) != 1 || created.RouteHosts[0] != "single.example.com" {
+		t.Fatalf("expected single routeHosts fallback, got %#v", created.RouteHosts)
+	}
+}
+
+func TestCreateRejectsDuplicateRouteHostFromRouteHosts(t *testing.T) {
+	repo := newFakeServiceCatalogRepo()
+	svc := NewServiceWithPublisher(repo, nil, nil)
+
+	_, err := svc.Create(dto.UpsertServiceRequest{
+		Name:            "svc-a",
+		ServiceKey:      "svc-a",
+		AgentID:         "11111111-1111-1111-1111-111111111111",
+		ImageRepo:       "repo/app",
+		ContainerPort:   8080,
+		RouteHost:       "api.example.com",
+		RouteHosts:      []string{"api.example.com", "shared.example.com"},
+		RoutePathPrefix: "/api",
+	})
+	if err != nil {
+		t.Fatalf("Create() first error = %v", err)
+	}
+
+	_, err = svc.Create(dto.UpsertServiceRequest{
+		Name:            "svc-b",
+		ServiceKey:      "svc-b",
+		AgentID:         "11111111-1111-1111-1111-111111111111",
+		ImageRepo:       "repo/app",
+		ContainerPort:   8080,
+		RouteHost:       "other.example.com",
+		RouteHosts:      []string{"other.example.com", "shared.example.com"},
+		RoutePathPrefix: "/api",
+	})
+	if err == nil {
+		t.Fatalf("expected duplicate route host validation error")
+	}
+}
+
 func TestCreateServiceSchedulerSDKConfig(t *testing.T) {
 	repo := newFakeServiceCatalogRepo()
 	agents := &fakeAgentLookup{agents: map[string]*dto.AgentOutput{

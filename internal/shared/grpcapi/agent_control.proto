@@ -176,6 +176,7 @@ message ProxyServiceConfig {
   int32 candidate_traffic_percent = 14;
   int32 scheduler_sdk_port = 15;
   string scheduler_executor_group = 16;
+  repeated string route_hosts = 17;
 }
 
 message ProxyConfigSnapshot {

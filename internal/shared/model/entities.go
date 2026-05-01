@@ -155,6 +155,7 @@ type Service struct {
 	HTTPProbeIntervalSecond int                                `json:"httpProbeIntervalSecond"`
 	HTTPSuccessThreshold    int                                `json:"httpSuccessThreshold"`
 	RouteHost               string                             `json:"routeHost" gorm:"size:255;index;not null"`
+	RouteHosts              *commondb.JSONB[[]string]          `json:"routeHosts" gorm:"type:jsonb"`
 	RoutePathPrefix         string                             `json:"routePathPrefix" gorm:"size:255;index;not null"`
 	Env                     *commondb.JSONB[map[string]string] `json:"env" gorm:"type:jsonb"`
 	EnvCiphertext           string                             `json:"envCiphertext" gorm:"type:text"`

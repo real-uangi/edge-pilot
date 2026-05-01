@@ -583,6 +583,75 @@ func TestFrontendSectionNormalizeRuleUsesServicePath(t *testing.T) {
 	}
 }
 
+func TestFrontendSectionHostACLUsesRouteHosts(t *testing.T) {
+	proxy := newTestManagedProxyRuntime(&fakeManagedProxyDataplane{}, &fakeManagedProxyRuntime{})
+
+	snapshot := testProxySnapshotWithService(grpcapi.Slot_SLOT_BLUE)
+	snapshot.Services[0].RouteHosts = []string{"api.example.com", "api-alt.example.com"}
+	section := proxy.frontendSection(snapshot)
+
+	for _, acl := range section.ACLList {
+		if strings.Contains(acl.Name, "host") {
+			if acl.Value != "-i api.example.com api-alt.example.com" {
+				t.Fatalf("expected multi-host acl value, got %q", acl.Value)
+			}
+			return
+		}
+	}
+	t.Fatal("expected host acl")
+}
+
+func TestFrontendSectionOrdersLongerPathBeforeSharedAliasRoot(t *testing.T) {
+	proxy := newTestManagedProxyRuntime(&fakeManagedProxyDataplane{}, &fakeManagedProxyRuntime{})
+	snapshot := testProxySnapshotWithService(grpcapi.Slot_SLOT_BLUE)
+	snapshot.Services = []*grpcapi.ProxyServiceConfig{
+		{
+			ServiceId:            "svc-root",
+			ServiceKey:           "svc-root",
+			RouteHost:            "a.example.com",
+			RouteHosts:           []string{"a.example.com", "shared.example.com"},
+			RoutePathPrefix:      "/",
+			LiveBackendName:      "be-root",
+			LiveReleaseId:        "release-root",
+			ContainerPort:        8080,
+			CurrentLiveSlot:      grpcapi.Slot_SLOT_BLUE,
+			CandidateBackendName: "",
+		},
+		{
+			ServiceId:            "svc-api",
+			ServiceKey:           "svc-api",
+			RouteHost:            "b.example.com",
+			RouteHosts:           []string{"b.example.com", "shared.example.com"},
+			RoutePathPrefix:      "/api",
+			LiveBackendName:      "be-api",
+			LiveReleaseId:        "release-api",
+			ContainerPort:        8080,
+			CurrentLiveSlot:      grpcapi.Slot_SLOT_BLUE,
+			CandidateBackendName: "",
+		},
+	}
+
+	section := proxy.frontendSection(snapshot)
+	if len(section.BackendSwitchingRuleList) < 2 {
+		t.Fatalf("expected backend switching rules, got %#v", section.BackendSwitchingRuleList)
+	}
+	if !strings.Contains(section.BackendSwitchingRuleList[0].CondTest, "svc_api") {
+		t.Fatalf("expected longer /api route first for shared alias, got %#v", section.BackendSwitchingRuleList[:2])
+	}
+}
+
+func TestNormalizeBackendRequestRulesUseRouteHosts(t *testing.T) {
+	snapshot := testProxySnapshotWithService(grpcapi.Slot_SLOT_GREEN)
+	snapshot.Services[0].RouteHosts = []string{"api.example.com", "api-alt.example.com"}
+	rules := normalizeBackendRequestRules(snapshot.Services)
+
+	if len(rules) != 3 {
+		t.Fatalf("expected set-var + service return + fallback return, got %#v", rules)
+	}
+	expected := expectedNormalizeCondTest("api.example.com api-alt.example.com", servicecatalogapp.BuildStickyNormalizePath(snapshot.Services[0].RoutePathPrefix))
+	assertNormalizeCondTestExact(t, rules[1], expected)
+}
+
 func TestReconcileLockedFiltersInvalidBackendResponseHeaderRules(t *testing.T) {
 	callLog := make([]string, 0, 16)
 	dataplane := &fakeManagedProxyDataplane{
