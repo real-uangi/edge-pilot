@@ -36,3 +36,4 @@ go.work.sum
 /icebreaker
 # Added by goreleaser init:
 dist/
+.worktrees/
