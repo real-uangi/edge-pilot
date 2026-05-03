@@ -16,8 +16,10 @@ const (
 	SharedFrontendBindPort     = 80
 	PreviewReleaseIDQueryParam = "__ep_release_id"
 	NormalizeStickyPathSuffix  = "/__ep/normalize"
+	BetaStickyPathSuffix       = "/__ep/beta"
 	CurrentReleaseIDHeaderName = "X-Edge-Pilot-Current-Release-Id"
 	LiveReleaseIDHeaderName    = "X-Edge-Pilot-Live-Release-Id"
+	BetaReleaseIDHeaderName    = "X-Edge-Pilot-Beta-Release-Id"
 	ReleaseRoleHeaderName      = "X-Edge-Pilot-Release-Role"
 	ReleaseRoleLive            = "live"
 	ReleaseRoleCanary          = "canary"
@@ -124,6 +126,14 @@ func BuildStickyNormalizePath(routePathPrefix string) string {
 		return NormalizeStickyPathSuffix
 	}
 	return prefix + NormalizeStickyPathSuffix
+}
+
+func BuildStickyBetaPath(routePathPrefix string) string {
+	prefix := NormalizeRoutePathPrefix(routePathPrefix)
+	if prefix == "/" {
+		return BetaStickyPathSuffix
+	}
+	return prefix + BetaStickyPathSuffix
 }
 
 func ServerName(slot model.Slot) string {

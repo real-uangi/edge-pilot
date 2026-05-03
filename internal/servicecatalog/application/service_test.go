@@ -53,6 +53,21 @@ func TestCreateRejectsDuplicateRouteOnSameAgent(t *testing.T) {
 	}
 }
 
+func TestBuildStickyBetaPath(t *testing.T) {
+	for _, item := range []struct {
+		prefix string
+		want   string
+	}{
+		{prefix: "/", want: "/__ep/beta"},
+		{prefix: "/v1", want: "/v1/__ep/beta"},
+		{prefix: "v1/", want: "/v1/__ep/beta"},
+	} {
+		if got := BuildStickyBetaPath(item.prefix); got != item.want {
+			t.Fatalf("BuildStickyBetaPath(%q) = %q, want %q", item.prefix, got, item.want)
+		}
+	}
+}
+
 func TestCreateNormalizesRouteHosts(t *testing.T) {
 	repo := newFakeServiceCatalogRepo()
 	svc := NewServiceWithPublisher(repo, nil, nil)
