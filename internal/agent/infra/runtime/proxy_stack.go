@@ -421,6 +421,7 @@ func (m *ManagedProxyRuntime) reconcileLocked(ctx context.Context, snapshot *grp
 					service.GetRoutePathPrefix(),
 					target.ReleaseID,
 					strings.TrimSpace(service.GetLiveReleaseId()),
+					strings.TrimSpace(service.GetCandidateReleaseId()),
 					releaseRoleForTarget(target, service),
 				),
 			}
@@ -815,6 +816,7 @@ func (m *ManagedProxyRuntime) frontendSection(snapshot *grpcapi.ProxyConfigSnaps
 		hostACL := aclName(service.GetServiceId(), "host")
 		pathACL := aclName(service.GetServiceId(), "path")
 		normalizePathACL := aclName(service.GetServiceId(), "normalize_path")
+		betaPathACL := aclName(service.GetServiceId(), "beta_path")
 		queryLiveACL := aclName(service.GetServiceId(), "query_live")
 		queryCandidateACL := aclName(service.GetServiceId(), "query_candidate")
 		cookieLiveACL := aclName(service.GetServiceId(), "cookie_live")
@@ -827,10 +829,12 @@ func (m *ManagedProxyRuntime) frontendSection(snapshot *grpcapi.ProxyConfigSnaps
 		candidateBackend := strings.TrimSpace(service.GetCandidateBackendName())
 		trafficPercent := clampTrafficPercent(int(service.GetCandidateTrafficPercent()))
 		normalizePath := servicecatalogapp.BuildStickyNormalizePath(service.GetRoutePathPrefix())
+		betaPath := servicecatalogapp.BuildStickyBetaPath(service.GetRoutePathPrefix())
 
 		addACL(hostACL, "hdr(host)", exactMatchValue(strings.Join(proxyRouteHosts(service), " ")))
 		addACL(pathACL, "path_beg", service.GetRoutePathPrefix())
 		addACL(normalizePathACL, "path", exactPathMatchValue(normalizePath))
+		addACL(betaPathACL, "path", exactPathMatchValue(betaPath))
 		addACL(queryLiveACL, "url_param("+servicecatalogapp.PreviewReleaseIDQueryParam+")", exactMatchValue(liveRelease))
 		addACL(queryCandidateACL, "url_param("+servicecatalogapp.PreviewReleaseIDQueryParam+")", exactMatchValue(candidateRelease))
 		addACL(cookieLiveACL, "cook("+cookieName+")", exactMatchValue(liveRelease))
@@ -841,9 +845,12 @@ func (m *ManagedProxyRuntime) frontendSection(snapshot *grpcapi.ProxyConfigSnaps
 		if liveRelease != "" {
 			addRule(normalizeBackendName, normalizeMatch)
 		}
+		betaMatch := baseMatch + " " + betaPathACL
+		addRule(normalizeBackendName, betaMatch)
 		baseNoOverrideParts := []string{
 			baseMatch,
 			"!" + normalizePathACL,
+			"!" + betaPathACL,
 			"!" + queryLiveACL,
 			"!" + queryCandidateACL,
 			"!" + cookieLiveACL,
@@ -1157,7 +1164,7 @@ type serviceBackendTarget struct {
 	Slot        grpcapi.Slot
 }
 
-func serviceBackendResponseRules(serviceKey string, routePathPrefix string, currentReleaseID string, liveReleaseID string, releaseRole string) []httpResponseRule {
+func serviceBackendResponseRules(serviceKey string, routePathPrefix string, currentReleaseID string, liveReleaseID string, betaReleaseID string, releaseRole string) []httpResponseRule {
 	cookieName := servicecatalogapp.StickyCookieName(serviceKey)
 	rules := []httpResponseRule{
 		{
@@ -1177,6 +1184,12 @@ func serviceBackendResponseRules(serviceKey string, routePathPrefix string, curr
 			Action: "set-header",
 			Header: servicecatalogapp.LiveReleaseIDHeaderName,
 			Format: liveReleaseID,
+		},
+		{
+			Type:   "set-header",
+			Action: "set-header",
+			Header: servicecatalogapp.BetaReleaseIDHeaderName,
+			Format: strings.TrimSpace(betaReleaseID),
 		},
 		{
 			Type:   "set-header",
@@ -1215,6 +1228,24 @@ func normalizeBackendRequestRules(services []*grpcapi.ProxyServiceConfig) []http
 			Cond:     "if",
 			CondTest: condTest,
 		})
+		candidateRelease := strings.TrimSpace(svc.GetCandidateReleaseId())
+		if candidateRelease == "" {
+			continue
+		}
+		betaPath := servicecatalogapp.BuildStickyBetaPath(svc.GetRoutePathPrefix())
+		betaCondTest := fmt.Sprintf("{ req.hdr(host) -i %s } { var(txn.ep_normalize_path) -m str -i %s }", strings.Join(proxyRouteHosts(svc), " "), betaPath)
+		rules = append(rules, httpRequestRule{
+			Type:             "return",
+			ReturnStatusCode: 204,
+			ReturnHeaders: betaReturnHeaders(
+				servicecatalogapp.BuildStickyCookie(cookieName, candidateRelease, svc.GetRoutePathPrefix()),
+				candidateRelease,
+				liveRelease,
+				releaseRoleForBeta(svc),
+			),
+			Cond:     "if",
+			CondTest: betaCondTest,
+		})
 	}
 	rules = append(rules, httpRequestRule{
 		Type:             "return",
@@ -1222,6 +1253,33 @@ func normalizeBackendRequestRules(services []*grpcapi.ProxyServiceConfig) []http
 		ReturnHeaders:    normalizeNoCacheHeaders(),
 	})
 	return filterHTTPRequestRules(rules)
+}
+
+func betaReturnHeaders(cookie string, candidateRelease string, liveRelease string, releaseRole string) []returnHeader {
+	headers := append([]returnHeader{}, normalizeNoCacheHeaders()...)
+	headers = append(headers,
+		returnHeader{
+			Name:   "Set-Cookie",
+			Format: cookie,
+		},
+		returnHeader{
+			Name:   servicecatalogapp.CurrentReleaseIDHeaderName,
+			Format: candidateRelease,
+		},
+		returnHeader{
+			Name:   servicecatalogapp.LiveReleaseIDHeaderName,
+			Format: liveRelease,
+		},
+		returnHeader{
+			Name:   servicecatalogapp.BetaReleaseIDHeaderName,
+			Format: candidateRelease,
+		},
+		returnHeader{
+			Name:   servicecatalogapp.ReleaseRoleHeaderName,
+			Format: strings.TrimSpace(releaseRole),
+		},
+	)
+	return headers
 }
 
 func normalizeReturnHeaders(cookie string, liveRelease string) []returnHeader {
@@ -1283,6 +1341,13 @@ func releaseRoleForTarget(target serviceBackendTarget, service *grpcapi.ProxySer
 			return servicecatalogapp.ReleaseRoleCanary
 		}
 		return servicecatalogapp.ReleaseRoleHistorical
+	}
+	return servicecatalogapp.ReleaseRoleHistorical
+}
+
+func releaseRoleForBeta(service *grpcapi.ProxyServiceConfig) string {
+	if splitActiveForService(service) {
+		return servicecatalogapp.ReleaseRoleCanary
 	}
 	return servicecatalogapp.ReleaseRoleHistorical
 }

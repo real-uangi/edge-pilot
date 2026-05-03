@@ -300,7 +300,7 @@ func TestFormatDataplaneFailureContextIncludesFrontendDetails(t *testing.T) {
 				Mode:              "http",
 				From:              managedProxyDefaultsName,
 				Balance:           &backendBalance{Algorithm: "roundrobin"},
-				HTTPResponseRules: serviceBackendResponseRules("svc-a", "/", "release-blue", "release-blue", servicecatalogapp.ReleaseRoleLive),
+				HTTPResponseRules: serviceBackendResponseRules("svc-a", "/", "release-blue", "release-blue", "", servicecatalogapp.ReleaseRoleLive),
 			},
 		},
 	})
@@ -423,17 +423,20 @@ func TestFrontendSectionAddsStickyPreviewRoutingRules(t *testing.T) {
 	snapshot.Services[0].CandidateTrafficPercent = 30
 	section := proxy.frontendSection(snapshot)
 
-	if len(section.BackendSwitchingRuleList) != 7 {
-		t.Fatalf("expected 7 switching rules, got %d", len(section.BackendSwitchingRuleList))
+	if len(section.BackendSwitchingRuleList) != 8 {
+		t.Fatalf("expected 8 switching rules, got %d", len(section.BackendSwitchingRuleList))
 	}
 	if section.BackendSwitchingRuleList[0].Name != normalizeBackendName {
 		t.Fatalf("expected normalize backend first, got %q", section.BackendSwitchingRuleList[0].Name)
 	}
-	if section.BackendSwitchingRuleList[1].Name != "be-api_blue" {
-		t.Fatalf("expected blue preview backend second, got %q", section.BackendSwitchingRuleList[1].Name)
+	if section.BackendSwitchingRuleList[1].Name != normalizeBackendName {
+		t.Fatalf("expected beta backend second, got %q", section.BackendSwitchingRuleList[1].Name)
 	}
-	if section.BackendSwitchingRuleList[6].Name != "be-api_green" {
-		t.Fatalf("expected live green backend fallback, got %q", section.BackendSwitchingRuleList[6].Name)
+	if section.BackendSwitchingRuleList[2].Name != "be-api_blue" {
+		t.Fatalf("expected blue preview backend third, got %q", section.BackendSwitchingRuleList[2].Name)
+	}
+	if section.BackendSwitchingRuleList[7].Name != "be-api_green" {
+		t.Fatalf("expected live green backend fallback, got %q", section.BackendSwitchingRuleList[7].Name)
 	}
 	if len(section.HTTPRequestRules) != 0 {
 		t.Fatalf("expected 0 request rules after normalize move to backend, got %d", len(section.HTTPRequestRules))
@@ -499,6 +502,8 @@ func TestReconcileLockedBuildsBackendResponseHeaderRules(t *testing.T) {
 	assertBackendResponseRuleExact(t, green.HTTPResponseRules, servicecatalogapp.CurrentReleaseIDHeaderName, "release-green")
 	assertBackendResponseRuleExact(t, blue.HTTPResponseRules, servicecatalogapp.LiveReleaseIDHeaderName, "release-green")
 	assertBackendResponseRuleExact(t, green.HTTPResponseRules, servicecatalogapp.LiveReleaseIDHeaderName, "release-green")
+	assertBackendResponseRuleExact(t, blue.HTTPResponseRules, servicecatalogapp.BetaReleaseIDHeaderName, "release-blue")
+	assertBackendResponseRuleExact(t, green.HTTPResponseRules, servicecatalogapp.BetaReleaseIDHeaderName, "release-blue")
 	assertBackendResponseRuleExact(t, blue.HTTPResponseRules, servicecatalogapp.ReleaseRoleHeaderName, servicecatalogapp.ReleaseRoleCanary)
 	assertBackendResponseRuleExact(t, green.HTTPResponseRules, servicecatalogapp.ReleaseRoleHeaderName, servicecatalogapp.ReleaseRoleLive)
 	normalizeBackend := findBackendConfig(dataplane.backendConfigs, normalizeBackendName)
@@ -511,8 +516,8 @@ func TestReconcileLockedBuildsBackendResponseHeaderRules(t *testing.T) {
 	if normalizeBackend.HTTPRequestRules[0].VarScope != "txn" || normalizeBackend.HTTPRequestRules[0].VarName != "ep_normalize_path" || normalizeBackend.HTTPRequestRules[0].VarExpr != "path" {
 		t.Fatalf("expected set-var txn.ep_normalize_path=path, got %#v", normalizeBackend.HTTPRequestRules[0])
 	}
-	if len(normalizeBackend.HTTPRequestRules) != 3 {
-		t.Fatalf("expected set-var + service return + fallback return in normalize backend request rules, got %#v", normalizeBackend.HTTPRequestRules)
+	if len(normalizeBackend.HTTPRequestRules) != 4 {
+		t.Fatalf("expected set-var + normalize return + beta return + fallback return in normalize backend request rules, got %#v", normalizeBackend.HTTPRequestRules)
 	}
 	conditionalReturnRule := normalizeBackend.HTTPRequestRules[1]
 	if conditionalReturnRule.Type != "return" || conditionalReturnRule.ReturnStatusCode != 204 {
@@ -525,7 +530,7 @@ func TestReconcileLockedBuildsBackendResponseHeaderRules(t *testing.T) {
 	assertReturnHeaderExact(t, conditionalReturnRule.ReturnHeaders, servicecatalogapp.LiveReleaseIDHeaderName, "release-green")
 	assertReturnHeaderExact(t, conditionalReturnRule.ReturnHeaders, servicecatalogapp.ReleaseRoleHeaderName, servicecatalogapp.ReleaseRoleLive)
 	assertReturnHeaderContains(t, conditionalReturnRule.ReturnHeaders, "Set-Cookie", "release-green")
-	fallbackReturnRule := normalizeBackend.HTTPRequestRules[2]
+	fallbackReturnRule := normalizeBackend.HTTPRequestRules[3]
 	if fallbackReturnRule.Type != "return" || fallbackReturnRule.ReturnStatusCode != 204 {
 		t.Fatalf("expected fallback normalize return 204, got %#v", fallbackReturnRule)
 	}
@@ -581,6 +586,43 @@ func TestFrontendSectionNormalizeRuleUsesServicePath(t *testing.T) {
 	if !foundNormalizePathACL {
 		t.Fatal("expected normalize path acl")
 	}
+}
+
+func TestFrontendSectionBetaRuleUsesServicePath(t *testing.T) {
+	proxy := newTestManagedProxyRuntime(&fakeManagedProxyDataplane{}, &fakeManagedProxyRuntime{})
+
+	snapshot := testProxySnapshotWithService(grpcapi.Slot_SLOT_BLUE)
+	snapshot.Services[0].RoutePathPrefix = "/v1"
+	section := proxy.frontendSection(snapshot)
+
+	foundBetaPathACL := false
+	for _, acl := range section.ACLList {
+		if strings.Contains(acl.Name, "beta_path") {
+			foundBetaPathACL = true
+			if acl.Value != "-i /v1/__ep/beta" {
+				t.Fatalf("expected beta path acl value -i /v1/__ep/beta, got %q", acl.Value)
+			}
+		}
+	}
+	if !foundBetaPathACL {
+		t.Fatal("expected beta path acl")
+	}
+}
+
+func TestFrontendSectionRoutesBetaPathWhenCandidateMissing(t *testing.T) {
+	proxy := newTestManagedProxyRuntime(&fakeManagedProxyDataplane{}, &fakeManagedProxyRuntime{})
+
+	snapshot := testProxySnapshotWithService(grpcapi.Slot_SLOT_BLUE)
+	snapshot.Services[0].CandidateReleaseId = ""
+	snapshot.Services[0].CandidateBackendName = ""
+	section := proxy.frontendSection(snapshot)
+
+	for _, rule := range section.BackendSwitchingRuleList {
+		if rule.Name == normalizeBackendName && strings.Contains(rule.CondTest, "beta_path") {
+			return
+		}
+	}
+	t.Fatalf("expected beta path to route to normalize backend fallback, got %#v", section.BackendSwitchingRuleList)
 }
 
 func TestFrontendSectionHostACLUsesRouteHosts(t *testing.T) {
@@ -645,11 +687,60 @@ func TestNormalizeBackendRequestRulesUseRouteHosts(t *testing.T) {
 	snapshot.Services[0].RouteHosts = []string{"api.example.com", "api-alt.example.com"}
 	rules := normalizeBackendRequestRules(snapshot.Services)
 
-	if len(rules) != 3 {
-		t.Fatalf("expected set-var + service return + fallback return, got %#v", rules)
+	if len(rules) != 4 {
+		t.Fatalf("expected set-var + normalize return + beta return + fallback return, got %#v", rules)
 	}
 	expected := expectedNormalizeCondTest("api.example.com api-alt.example.com", servicecatalogapp.BuildStickyNormalizePath(snapshot.Services[0].RoutePathPrefix))
 	assertNormalizeCondTestExact(t, rules[1], expected)
+}
+
+func TestBetaBackendRequestRulesSetCandidateCookie(t *testing.T) {
+	snapshot := testProxySnapshotWithService(grpcapi.Slot_SLOT_GREEN)
+	rules := normalizeBackendRequestRules(snapshot.Services)
+
+	if len(rules) != 4 {
+		t.Fatalf("expected set-var + normalize return + beta return + fallback return, got %#v", rules)
+	}
+
+	betaRule := rules[2]
+	if betaRule.Type != "return" || betaRule.ReturnStatusCode != 204 {
+		t.Fatalf("expected beta return 204, got %#v", betaRule)
+	}
+	expectedBetaCond := expectedNormalizeCondTest(snapshot.Services[0].RouteHost, servicecatalogapp.BuildStickyBetaPath(snapshot.Services[0].RoutePathPrefix))
+	assertNormalizeCondTestExact(t, betaRule, expectedBetaCond)
+	assertReturnHeaderContains(t, betaRule.ReturnHeaders, "Set-Cookie", "release-blue")
+	assertReturnHeaderExact(t, betaRule.ReturnHeaders, servicecatalogapp.CurrentReleaseIDHeaderName, "release-blue")
+	assertReturnHeaderExact(t, betaRule.ReturnHeaders, servicecatalogapp.LiveReleaseIDHeaderName, "release-green")
+	assertReturnHeaderExact(t, betaRule.ReturnHeaders, servicecatalogapp.BetaReleaseIDHeaderName, "release-blue")
+	assertReturnHeaderExact(t, betaRule.ReturnHeaders, servicecatalogapp.ReleaseRoleHeaderName, servicecatalogapp.ReleaseRoleHistorical)
+}
+
+func TestBetaBackendRequestRulesUseCanaryRoleWhenSplitActive(t *testing.T) {
+	snapshot := testProxySnapshotWithService(grpcapi.Slot_SLOT_GREEN)
+	snapshot.Services[0].CandidateTrafficPercent = 30
+	rules := normalizeBackendRequestRules(snapshot.Services)
+
+	if len(rules) != 4 {
+		t.Fatalf("expected set-var + normalize return + beta return + fallback return, got %#v", rules)
+	}
+	betaRule := rules[2]
+	assertReturnHeaderExact(t, betaRule.ReturnHeaders, servicecatalogapp.ReleaseRoleHeaderName, servicecatalogapp.ReleaseRoleCanary)
+}
+
+func TestBetaBackendRequestRulesSkipBetaWhenCandidateMissing(t *testing.T) {
+	snapshot := testProxySnapshotWithService(grpcapi.Slot_SLOT_BLUE)
+	snapshot.Services[0].CandidateReleaseId = ""
+	snapshot.Services[0].CandidateBackendName = ""
+	rules := normalizeBackendRequestRules(snapshot.Services)
+
+	if len(rules) != 3 {
+		t.Fatalf("expected set-var + normalize return + fallback return, got %#v", rules)
+	}
+	for _, rule := range rules {
+		if findReturnHeader(rule.ReturnHeaders, servicecatalogapp.BetaReleaseIDHeaderName) != nil {
+			t.Fatalf("expected no beta release header without candidate, got %#v", rule)
+		}
+	}
 }
 
 func TestReconcileLockedFiltersInvalidBackendResponseHeaderRules(t *testing.T) {

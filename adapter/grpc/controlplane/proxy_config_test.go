@@ -1,8 +1,10 @@
 package controlplane
 
 import (
+	"edge-pilot/internal/shared/grpcapi"
 	"edge-pilot/internal/shared/model"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	commondb "github.com/real-uangi/allingo/common/db"
@@ -114,3 +116,163 @@ func TestCandidateTrafficPercentAllowsSwitchedPartialRelease(t *testing.T) {
 		t.Fatalf("expected switched partial traffic percent 30, got %d", got)
 	}
 }
+
+func TestBuildProxyConfigSnapshotFiltersNonBetaCandidateRelease(t *testing.T) {
+	enabled := true
+	serviceID := uuid.MustParse("11111111-1111-1111-1111-111111111111")
+	liveReleaseID := uuid.MustParse("22222222-2222-2222-2222-222222222222")
+	completedCandidateID := uuid.MustParse("33333333-3333-3333-3333-333333333333")
+	services := []model.Service{
+		{
+			ID:              serviceID,
+			ServiceKey:      "svc-api",
+			AgentID:         "agent-a",
+			RouteHost:       "api.example.com",
+			RoutePathPrefix: "/",
+			CurrentLiveSlot: model.SlotBlue,
+			ContainerPort:   8080,
+			Enabled:         &enabled,
+		},
+	}
+	publisher := &ProxyConfigPublisher{releases: &fakeProxyReleaseRepo{
+		runtimeInstances: []model.RuntimeInstance{
+			{ServiceID: serviceID, Slot: model.SlotBlue, ReleaseID: liveReleaseID},
+			{ServiceID: serviceID, Slot: model.SlotGreen, ReleaseID: completedCandidateID},
+		},
+		releases: map[uuid.UUID]*model.Release{
+			completedCandidateID: {ID: completedCandidateID, ServiceID: serviceID, Status: model.ReleaseStatusCompleted, TrafficPercent: 0},
+		},
+	}}
+
+	snapshot, err := publisher.buildProxyConfigSnapshot("agent-a", services)
+	if err != nil {
+		t.Fatalf("buildProxyConfigSnapshot() error = %v", err)
+	}
+	if got := snapshot.GetServices()[0].GetCandidateReleaseId(); got != "" {
+		t.Fatalf("expected completed opposite slot release to be hidden from beta, got %q", got)
+	}
+	if got := snapshot.GetServices()[0].GetCandidateTrafficPercent(); got != 0 {
+		t.Fatalf("expected completed opposite slot release traffic percent 0, got %d", got)
+	}
+}
+
+func TestBuildProxyConfigSnapshotKeepsReadyToSwitchCandidateRelease(t *testing.T) {
+	snapshot := buildSnapshotWithCandidateStatus(t, model.ReleaseStatusReadyToSwitch, 0)
+	if got := snapshot.GetServices()[0].GetCandidateReleaseId(); got != "33333333-3333-3333-3333-333333333333" {
+		t.Fatalf("expected ready-to-switch release to be beta candidate, got %q", got)
+	}
+}
+
+func TestBuildProxyConfigSnapshotKeepsSwitchedPartialCandidateRelease(t *testing.T) {
+	snapshot := buildSnapshotWithCandidateStatus(t, model.ReleaseStatusSwitched, 30)
+	if got := snapshot.GetServices()[0].GetCandidateReleaseId(); got != "33333333-3333-3333-3333-333333333333" {
+		t.Fatalf("expected switched partial release to be beta candidate, got %q", got)
+	}
+	if got := snapshot.GetServices()[0].GetCandidateTrafficPercent(); got != 30 {
+		t.Fatalf("expected switched partial traffic percent 30, got %d", got)
+	}
+}
+
+func TestBuildProxyConfigSnapshotFiltersSwitchedFullCandidateRelease(t *testing.T) {
+	snapshot := buildSnapshotWithCandidateStatus(t, model.ReleaseStatusSwitched, 100)
+	if got := snapshot.GetServices()[0].GetCandidateReleaseId(); got != "" {
+		t.Fatalf("expected switched full release to be hidden from beta, got %q", got)
+	}
+}
+
+func buildSnapshotWithCandidateStatus(t *testing.T, status model.ReleaseStatus, percent int) *grpcapi.ProxyConfigSnapshot {
+	t.Helper()
+	enabled := true
+	serviceID := uuid.MustParse("11111111-1111-1111-1111-111111111111")
+	liveReleaseID := uuid.MustParse("22222222-2222-2222-2222-222222222222")
+	candidateReleaseID := uuid.MustParse("33333333-3333-3333-3333-333333333333")
+	services := []model.Service{
+		{
+			ID:              serviceID,
+			ServiceKey:      "svc-api",
+			AgentID:         "agent-a",
+			RouteHost:       "api.example.com",
+			RoutePathPrefix: "/",
+			CurrentLiveSlot: model.SlotBlue,
+			ContainerPort:   8080,
+			Enabled:         &enabled,
+		},
+	}
+	publisher := &ProxyConfigPublisher{releases: &fakeProxyReleaseRepo{
+		runtimeInstances: []model.RuntimeInstance{
+			{ServiceID: serviceID, Slot: model.SlotBlue, ReleaseID: liveReleaseID},
+			{ServiceID: serviceID, Slot: model.SlotGreen, ReleaseID: candidateReleaseID},
+		},
+		releases: map[uuid.UUID]*model.Release{
+			candidateReleaseID: {ID: candidateReleaseID, ServiceID: serviceID, Status: status, TrafficPercent: percent},
+		},
+	}}
+	snapshot, err := publisher.buildProxyConfigSnapshot("agent-a", services)
+	if err != nil {
+		t.Fatalf("buildProxyConfigSnapshot() error = %v", err)
+	}
+	return snapshot
+}
+
+type fakeProxyReleaseRepo struct {
+	runtimeInstances []model.RuntimeInstance
+	releases         map[uuid.UUID]*model.Release
+}
+
+func (r *fakeProxyReleaseRepo) CreateRelease(*model.Release) error { return nil }
+
+func (r *fakeProxyReleaseRepo) UpdateRelease(*model.Release) error { return nil }
+
+func (r *fakeProxyReleaseRepo) GetRelease(id uuid.UUID) (*model.Release, error) {
+	return r.releases[id], nil
+}
+
+func (r *fakeProxyReleaseRepo) ListReleases(int) ([]model.Release, error) { return nil, nil }
+
+func (r *fakeProxyReleaseRepo) ListQueuedBefore(uuid.UUID, time.Time, uuid.UUID) ([]model.Release, error) {
+	return nil, nil
+}
+
+func (r *fakeProxyReleaseRepo) FindReadyToSwitchRelease(uuid.UUID) (*model.Release, error) {
+	return nil, nil
+}
+
+func (r *fakeProxyReleaseRepo) HasActiveRelease(uuid.UUID) (bool, error) { return false, nil }
+
+func (r *fakeProxyReleaseRepo) HasTrafficSplitRelease(uuid.UUID) (bool, error) { return false, nil }
+
+func (r *fakeProxyReleaseRepo) FindQueuedOrActiveDuplicate(uuid.UUID, string, string) (*model.Release, error) {
+	return nil, nil
+}
+
+func (r *fakeProxyReleaseRepo) CountQueuedBefore(uuid.UUID, time.Time, uuid.UUID) (int, error) {
+	return 0, nil
+}
+
+func (r *fakeProxyReleaseRepo) CreateTask(*model.Task) error { return nil }
+
+func (r *fakeProxyReleaseRepo) UpdateTask(*model.Task) error { return nil }
+
+func (r *fakeProxyReleaseRepo) GetTask(uuid.UUID) (*model.Task, error) { return nil, nil }
+
+func (r *fakeProxyReleaseRepo) ListTasksByRelease(uuid.UUID) ([]model.Task, error) { return nil, nil }
+
+func (r *fakeProxyReleaseRepo) ListRecoverableTasksByAgent(string) ([]model.Task, error) {
+	return nil, nil
+}
+
+func (r *fakeProxyReleaseRepo) ListActiveTasks() ([]model.Task, error) { return nil, nil }
+
+func (r *fakeProxyReleaseRepo) CreateTaskAttempt(*model.TaskAttempt) error { return nil }
+
+func (r *fakeProxyReleaseRepo) UpsertRuntimeInstance(*model.RuntimeInstance) error { return nil }
+
+func (r *fakeProxyReleaseRepo) GetRuntimeInstanceByServiceAndSlot(uuid.UUID, model.Slot) (*model.RuntimeInstance, error) {
+	return nil, nil
+}
+
+func (r *fakeProxyReleaseRepo) ListRuntimeInstancesByService(uuid.UUID) ([]model.RuntimeInstance, error) {
+	return append([]model.RuntimeInstance(nil), r.runtimeInstances...), nil
+}
+
+func (r *fakeProxyReleaseRepo) CreateAudit(*model.AuditLog) error { return nil }

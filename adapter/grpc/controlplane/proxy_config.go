@@ -124,9 +124,27 @@ func (p *ProxyConfigPublisher) resolveReleases(item servicecatalogapp.ProxyServi
 		if getErr != nil {
 			return "", "", 0, getErr
 		}
+		if !isBetaVisibleRelease(candidateRelease) {
+			return liveReleaseID, "", 0, nil
+		}
 		candidateTrafficPercent = candidateTrafficPercentForRelease(candidateRelease)
 	}
 	return liveReleaseID, candidateReleaseID, candidateTrafficPercent, nil
+}
+
+func isBetaVisibleRelease(release *model.Release) bool {
+	if release == nil {
+		return false
+	}
+	switch release.Status {
+	case model.ReleaseStatusReadyToSwitch:
+		return true
+	case model.ReleaseStatusSwitched:
+		percent := clampTrafficPercent(release.TrafficPercent)
+		return percent >= 1 && percent <= 99
+	default:
+		return false
+	}
 }
 
 func candidateTrafficPercentForRelease(release *model.Release) int {
