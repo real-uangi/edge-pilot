@@ -31,9 +31,7 @@ jobs:
         run: corepack enable
 
       - name: Install frontend dependencies
-        run: |
-          pnpm --dir web/default install --frozen-lockfile
-          pnpm --dir web/default rebuild esbuild
+        run: pnpm --dir web/default install --frozen-lockfile
 
       - name: Build frontend
         run: pnpm --dir web/default build
