@@ -26,7 +26,7 @@
     "vite": "^7.1.9"
   },
   "pnpm": {
-    "onlyBuiltDependencies": [
+    "allowBuilds": [
       "esbuild"
     ]
   }
