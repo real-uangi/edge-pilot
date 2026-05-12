@@ -165,6 +165,7 @@ export function toServiceFormDefaults(service?: ServiceRecord): ServiceFormInput
       .map(([key, value]) => `${key}: ${value}`)
       .join("\n"),
     envText: Object.entries(service?.env ?? {})
+      .sort(([a], [b]) => a.localeCompare(b))
       .map(([key, value]) => `${key}=${value}`)
       .join("\n"),
     commandText: (service?.command ?? []).join("\n"),
