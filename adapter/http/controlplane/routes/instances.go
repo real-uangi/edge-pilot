@@ -81,6 +81,7 @@ func registerAdminInstanceRoutes(admin *gin.RouterGroup, instances instanceAdmin
 
 		if err != nil && err != context.Canceled {
 			// Log error but don't write HTTP response since SSE already started
+			// TODO: add structured logging
 		}
 	})
 }

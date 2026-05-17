@@ -10,6 +10,7 @@ import (
 	"edge-pilot/internal/shared/perf"
 	"encoding/binary"
 	"errors"
+	"fmt"
 	"io"
 	"sync"
 	"time"
@@ -31,6 +32,7 @@ type Client struct {
 	instances  *schedulerInstanceConnector
 	logger     *log.StdLogger
 	logStreams map[string]*logStreamState
+	logMu      sync.Mutex
 }
 
 func NewClient(cfg *config.AgentRuntimeConfig, executor *taskexec.Executor, docker agentdomain.DockerRuntime, proxy agentdomain.ProxyRuntime, state *taskexec.RuntimeState, collector perf.Collector, index *containerindex.ManagedContainerIndex) *Client {
@@ -379,10 +381,12 @@ type logStreamState struct {
 
 func (c *Client) startLogStream(ctx context.Context, req *grpcapi.ContainerLogStreamRequest, outbound chan<- *grpcapi.AgentMessage) {
 	streamCtx, cancel := context.WithCancel(ctx)
+	c.logMu.Lock()
 	if c.logStreams == nil {
 		c.logStreams = make(map[string]*logStreamState)
 	}
 	c.logStreams[req.GetContainerId()] = &logStreamState{cancel: cancel}
+	c.logMu.Unlock()
 
 	go func() {
 		defer cancel()
@@ -408,7 +412,10 @@ func (c *Client) startLogStream(ctx context.Context, req *grpcapi.ContainerLogSt
 				return
 			}
 
-			outbound <- &grpcapi.AgentMessage{
+			select {
+			case <-streamCtx.Done():
+				return
+			case outbound <- &grpcapi.AgentMessage{
 				Payload: &grpcapi.AgentMessage_ContainerLogChunk{
 					ContainerLogChunk: &grpcapi.ContainerLogChunk{
 						RequestId:   req.GetRequestId(),
@@ -418,12 +425,16 @@ func (c *Client) startLogStream(ctx context.Context, req *grpcapi.ContainerLogSt
 						Stderr:      stderr,
 					},
 				},
+			}:
+				// sent successfully
 			}
 		}
 	}()
 }
 
 func (c *Client) stopLogStream(containerID string) {
+	c.logMu.Lock()
+	defer c.logMu.Unlock()
 	if c.logStreams == nil {
 		return
 	}
@@ -432,6 +443,8 @@ func (c *Client) stopLogStream(containerID string) {
 		delete(c.logStreams, containerID)
 	}
 }
+
+const maxLogFrameSize = 1024 * 1024 // 1MB
 
 func readDockerLogFrame(reader io.Reader) ([]byte, bool, error) {
 	header := make([]byte, 8)
@@ -442,6 +455,9 @@ func readDockerLogFrame(reader io.Reader) ([]byte, bool, error) {
 
 	streamType := header[0]
 	size := binary.BigEndian.Uint32(header[4:8])
+	if size > maxLogFrameSize {
+		return nil, false, fmt.Errorf("log frame too large: %d bytes", size)
+	}
 
 	data := make([]byte, size)
 	_, err = io.ReadFull(reader, data)

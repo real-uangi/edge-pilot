@@ -3,6 +3,17 @@ import AnsiToHtml from "ansi-to-html";
 import { instancesApi } from "../api";
 import styles from "../../../styles/admin.module.css";
 
+const MAX_LOG_LINES = 5000;
+
+function escapeHtml(text: string): string {
+  return text
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
+}
+
 interface ContainerLogDialogProps {
   agentId: string;
   containerId: string;
@@ -26,10 +37,16 @@ export function ContainerLogDialog({ agentId, containerId, containerName, onClos
       agentId,
       containerId,
       (chunk) => {
-        setLogs((prev) => [
-          ...prev,
-          { data: chunk.data, stderr: chunk.stderr, id: nextId.current++ },
-        ]);
+        setLogs((prev) => {
+          const next = [
+            ...prev,
+            { data: chunk.data, stderr: chunk.stderr, id: nextId.current++ },
+          ];
+          if (next.length > MAX_LOG_LINES) {
+            next.splice(0, next.length - MAX_LOG_LINES);
+          }
+          return next;
+        });
       },
       () => {
         setConnected(false);
@@ -104,7 +121,7 @@ export function ContainerLogDialog({ agentId, containerId, containerName, onClos
                 key={log.id}
                 className={log.stderr ? styles.logStderr : styles.logStdout}
                 dangerouslySetInnerHTML={{
-                  __html: ansiConverter.current.toHtml(log.data),
+                  __html: ansiConverter.current.toHtml(escapeHtml(log.data)),
                 }}
               />
             ))
