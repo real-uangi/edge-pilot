@@ -17,6 +17,7 @@ var Module = fx.Module(
 		baseroutes.SetMetricsRoutes,
 		routes.SetAuthRoutes,
 		routes.SetAdminAgentRoutes,
+		routes.SetAdminInstanceRoutes,
 		routes.SetAdminRegistryCredentialRoutes,
 		routes.SetAdminServiceRoutes,
 		routes.SetAdminReleaseRoutes,

@@ -8,7 +8,9 @@ import (
 	"edge-pilot/internal/shared/config"
 	"edge-pilot/internal/shared/grpcapi"
 	"edge-pilot/internal/shared/perf"
+	"encoding/binary"
 	"errors"
+	"io"
 	"sync"
 	"time"
 
@@ -19,14 +21,16 @@ import (
 )
 
 type Client struct {
-	cfg       *config.AgentRuntimeConfig
-	executor  *taskexec.Executor
-	proxy     agentdomain.ProxyRuntime
-	state     *taskexec.RuntimeState
-	collector perf.Collector
-	relay     *schedulerRelayBridge
-	instances *schedulerInstanceConnector
-	logger    *log.StdLogger
+	cfg        *config.AgentRuntimeConfig
+	executor   *taskexec.Executor
+	docker     agentdomain.DockerRuntime
+	proxy      agentdomain.ProxyRuntime
+	state      *taskexec.RuntimeState
+	collector  perf.Collector
+	relay      *schedulerRelayBridge
+	instances  *schedulerInstanceConnector
+	logger     *log.StdLogger
+	logStreams map[string]*logStreamState
 }
 
 func NewClient(cfg *config.AgentRuntimeConfig, executor *taskexec.Executor, docker agentdomain.DockerRuntime, proxy agentdomain.ProxyRuntime, state *taskexec.RuntimeState, collector perf.Collector, index *containerindex.ManagedContainerIndex) *Client {
@@ -34,6 +38,7 @@ func NewClient(cfg *config.AgentRuntimeConfig, executor *taskexec.Executor, dock
 	return &Client{
 		cfg:       cfg,
 		executor:  executor,
+		docker:    docker,
 		proxy:     proxy,
 		state:     state,
 		collector: collector,
@@ -211,6 +216,20 @@ func (c *Client) connectOnce(ctx context.Context) error {
 		if msg.GetHaproxyConfigRequest() != nil {
 			go c.handleHAProxyConfigRequest(ctx, msg.GetHaproxyConfigRequest(), outbound)
 		}
+		if msg.GetContainerListRequest() != nil {
+			go c.handleContainerListRequest(ctx, msg.GetContainerListRequest(), outbound)
+		}
+		if msg.GetContainerInspectRequest() != nil {
+			go c.handleContainerInspectRequest(ctx, msg.GetContainerInspectRequest(), outbound)
+		}
+		if msg.GetContainerLogStreamRequest() != nil {
+			req := msg.GetContainerLogStreamRequest()
+			if req.GetFollow() {
+				go c.startLogStream(ctx, req, outbound)
+			} else {
+				c.stopLogStream(req.GetContainerId())
+			}
+		}
 		if msg.GetSchedulerEnvelope() != nil {
 			c.relay.HandleControlEnvelope(msg.GetSchedulerEnvelope())
 		}
@@ -281,4 +300,154 @@ func (c *Client) handleHAProxyConfigRequest(ctx context.Context, req *grpcapi.HA
 			HaproxyConfigResponse: response,
 		},
 	}
+}
+
+func (c *Client) handleContainerListRequest(ctx context.Context, req *grpcapi.ContainerListRequest, outbound chan<- *grpcapi.AgentMessage) {
+	if req == nil {
+		return
+	}
+	containers, err := c.docker.ListManagedContainers(ctx, c.cfg.AgentID, "")
+	response := &grpcapi.ContainerListResponse{
+		RequestId: req.GetRequestId(),
+		AgentId:   c.cfg.AgentID,
+	}
+	if err != nil {
+		response.ErrorMessage = err.Error()
+	} else {
+		summaries := make([]*grpcapi.ContainerSummary, 0, len(containers))
+		for _, container := range containers {
+			if container == nil {
+				continue
+			}
+			summaries = append(summaries, &grpcapi.ContainerSummary{
+				ContainerId: container.ContainerID,
+				Name:        container.Name,
+				State:       container.State,
+				ServiceId:   container.ServiceID,
+				ServiceKey:  container.ServiceKey,
+				ReleaseId:   container.ReleaseID,
+				Slot:        container.Slot,
+			})
+		}
+		response.Containers = summaries
+	}
+	outbound <- &grpcapi.AgentMessage{
+		Payload: &grpcapi.AgentMessage_ContainerListResponse{
+			ContainerListResponse: response,
+		},
+	}
+}
+
+func (c *Client) handleContainerInspectRequest(ctx context.Context, req *grpcapi.ContainerInspectRequest, outbound chan<- *grpcapi.AgentMessage) {
+	if req == nil {
+		return
+	}
+	response := &grpcapi.ContainerInspectResponse{
+		RequestId: req.GetRequestId(),
+		AgentId:   c.cfg.AgentID,
+	}
+
+	status, err := c.docker.InspectContainer(ctx, req.GetContainerId())
+	if err != nil {
+		response.ErrorMessage = err.Error()
+		outbound <- &grpcapi.AgentMessage{
+			Payload: &grpcapi.AgentMessage_ContainerInspectResponse{
+				ContainerInspectResponse: response,
+			},
+		}
+		return
+	}
+
+	details := &grpcapi.ContainerDetails{
+		ContainerId: req.GetContainerId(),
+		State:       status.State,
+		Running:     status.Running,
+		Health:      status.Health,
+	}
+
+	response.Details = details
+	outbound <- &grpcapi.AgentMessage{
+		Payload: &grpcapi.AgentMessage_ContainerInspectResponse{
+			ContainerInspectResponse: response,
+		},
+	}
+}
+
+type logStreamState struct {
+	cancel context.CancelFunc
+}
+
+func (c *Client) startLogStream(ctx context.Context, req *grpcapi.ContainerLogStreamRequest, outbound chan<- *grpcapi.AgentMessage) {
+	streamCtx, cancel := context.WithCancel(ctx)
+	if c.logStreams == nil {
+		c.logStreams = make(map[string]*logStreamState)
+	}
+	c.logStreams[req.GetContainerId()] = &logStreamState{cancel: cancel}
+
+	go func() {
+		defer cancel()
+		reader, err := c.docker.StreamContainerLogs(streamCtx, req.GetContainerId(), int(req.GetTailLines()), true, true, true)
+		if err != nil {
+			c.logger.Errorf(err, "failed to start log stream: containerId=%s", req.GetContainerId())
+			return
+		}
+		defer reader.Close()
+
+		for {
+			select {
+			case <-streamCtx.Done():
+				return
+			default:
+			}
+
+			data, stderr, err := readDockerLogFrame(reader)
+			if err != nil {
+				if err != io.EOF {
+					c.logger.Errorf(err, "log stream read error: containerId=%s", req.GetContainerId())
+				}
+				return
+			}
+
+			outbound <- &grpcapi.AgentMessage{
+				Payload: &grpcapi.AgentMessage_ContainerLogChunk{
+					ContainerLogChunk: &grpcapi.ContainerLogChunk{
+						RequestId:   req.GetRequestId(),
+						AgentId:     c.cfg.AgentID,
+						ContainerId: req.GetContainerId(),
+						Data:        data,
+						Stderr:      stderr,
+					},
+				},
+			}
+		}
+	}()
+}
+
+func (c *Client) stopLogStream(containerID string) {
+	if c.logStreams == nil {
+		return
+	}
+	if state, ok := c.logStreams[containerID]; ok {
+		state.cancel()
+		delete(c.logStreams, containerID)
+	}
+}
+
+func readDockerLogFrame(reader io.Reader) ([]byte, bool, error) {
+	header := make([]byte, 8)
+	_, err := io.ReadFull(reader, header)
+	if err != nil {
+		return nil, false, err
+	}
+
+	streamType := header[0]
+	size := binary.BigEndian.Uint32(header[4:8])
+
+	data := make([]byte, size)
+	_, err = io.ReadFull(reader, data)
+	if err != nil {
+		return nil, false, err
+	}
+
+	return data, streamType == 2, nil
 }

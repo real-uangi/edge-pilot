@@ -7,11 +7,12 @@
 package grpcapi
 
 import (
-	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
-	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 	reflect "reflect"
 	sync "sync"
 	unsafe "unsafe"
+
+	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
+	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 )
 
 const (
@@ -294,6 +295,9 @@ type AgentMessage struct {
 	//	*AgentMessage_Stats
 	//	*AgentMessage_HaproxyConfigResponse
 	//	*AgentMessage_SchedulerEnvelope
+	//	*AgentMessage_ContainerListResponse
+	//	*AgentMessage_ContainerInspectResponse
+	//	*AgentMessage_ContainerLogChunk
 	Payload       isAgentMessage_Payload `protobuf_oneof:"payload"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -390,6 +394,33 @@ func (x *AgentMessage) GetSchedulerEnvelope() *SchedulerRelayEnvelope {
 	return nil
 }
 
+func (x *AgentMessage) GetContainerListResponse() *ContainerListResponse {
+	if x != nil {
+		if x, ok := x.Payload.(*AgentMessage_ContainerListResponse); ok {
+			return x.ContainerListResponse
+		}
+	}
+	return nil
+}
+
+func (x *AgentMessage) GetContainerInspectResponse() *ContainerInspectResponse {
+	if x != nil {
+		if x, ok := x.Payload.(*AgentMessage_ContainerInspectResponse); ok {
+			return x.ContainerInspectResponse
+		}
+	}
+	return nil
+}
+
+func (x *AgentMessage) GetContainerLogChunk() *ContainerLogChunk {
+	if x != nil {
+		if x, ok := x.Payload.(*AgentMessage_ContainerLogChunk); ok {
+			return x.ContainerLogChunk
+		}
+	}
+	return nil
+}
+
 type isAgentMessage_Payload interface {
 	isAgentMessage_Payload()
 }
@@ -418,6 +449,18 @@ type AgentMessage_SchedulerEnvelope struct {
 	SchedulerEnvelope *SchedulerRelayEnvelope `protobuf:"bytes,6,opt,name=scheduler_envelope,json=schedulerEnvelope,proto3,oneof"`
 }
 
+type AgentMessage_ContainerListResponse struct {
+	ContainerListResponse *ContainerListResponse `protobuf:"bytes,7,opt,name=container_list_response,json=containerListResponse,proto3,oneof"`
+}
+
+type AgentMessage_ContainerInspectResponse struct {
+	ContainerInspectResponse *ContainerInspectResponse `protobuf:"bytes,8,opt,name=container_inspect_response,json=containerInspectResponse,proto3,oneof"`
+}
+
+type AgentMessage_ContainerLogChunk struct {
+	ContainerLogChunk *ContainerLogChunk `protobuf:"bytes,9,opt,name=container_log_chunk,json=containerLogChunk,proto3,oneof"`
+}
+
 func (*AgentMessage_Hello) isAgentMessage_Payload() {}
 
 func (*AgentMessage_Heartbeat) isAgentMessage_Payload() {}
@@ -430,6 +473,12 @@ func (*AgentMessage_HaproxyConfigResponse) isAgentMessage_Payload() {}
 
 func (*AgentMessage_SchedulerEnvelope) isAgentMessage_Payload() {}
 
+func (*AgentMessage_ContainerListResponse) isAgentMessage_Payload() {}
+
+func (*AgentMessage_ContainerInspectResponse) isAgentMessage_Payload() {}
+
+func (*AgentMessage_ContainerLogChunk) isAgentMessage_Payload() {}
+
 type ControlMessage struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// Types that are valid to be assigned to Payload:
@@ -439,6 +488,9 @@ type ControlMessage struct {
 	//	*ControlMessage_ProxyConfig
 	//	*ControlMessage_HaproxyConfigRequest
 	//	*ControlMessage_SchedulerEnvelope
+	//	*ControlMessage_ContainerListRequest
+	//	*ControlMessage_ContainerInspectRequest
+	//	*ControlMessage_ContainerLogStreamRequest
 	Payload       isControlMessage_Payload `protobuf_oneof:"payload"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -526,6 +578,33 @@ func (x *ControlMessage) GetSchedulerEnvelope() *SchedulerRelayEnvelope {
 	return nil
 }
 
+func (x *ControlMessage) GetContainerListRequest() *ContainerListRequest {
+	if x != nil {
+		if x, ok := x.Payload.(*ControlMessage_ContainerListRequest); ok {
+			return x.ContainerListRequest
+		}
+	}
+	return nil
+}
+
+func (x *ControlMessage) GetContainerInspectRequest() *ContainerInspectRequest {
+	if x != nil {
+		if x, ok := x.Payload.(*ControlMessage_ContainerInspectRequest); ok {
+			return x.ContainerInspectRequest
+		}
+	}
+	return nil
+}
+
+func (x *ControlMessage) GetContainerLogStreamRequest() *ContainerLogStreamRequest {
+	if x != nil {
+		if x, ok := x.Payload.(*ControlMessage_ContainerLogStreamRequest); ok {
+			return x.ContainerLogStreamRequest
+		}
+	}
+	return nil
+}
+
 type isControlMessage_Payload interface {
 	isControlMessage_Payload()
 }
@@ -550,6 +629,18 @@ type ControlMessage_SchedulerEnvelope struct {
 	SchedulerEnvelope *SchedulerRelayEnvelope `protobuf:"bytes,5,opt,name=scheduler_envelope,json=schedulerEnvelope,proto3,oneof"`
 }
 
+type ControlMessage_ContainerListRequest struct {
+	ContainerListRequest *ContainerListRequest `protobuf:"bytes,6,opt,name=container_list_request,json=containerListRequest,proto3,oneof"`
+}
+
+type ControlMessage_ContainerInspectRequest struct {
+	ContainerInspectRequest *ContainerInspectRequest `protobuf:"bytes,7,opt,name=container_inspect_request,json=containerInspectRequest,proto3,oneof"`
+}
+
+type ControlMessage_ContainerLogStreamRequest struct {
+	ContainerLogStreamRequest *ContainerLogStreamRequest `protobuf:"bytes,8,opt,name=container_log_stream_request,json=containerLogStreamRequest,proto3,oneof"`
+}
+
 func (*ControlMessage_Ack) isControlMessage_Payload() {}
 
 func (*ControlMessage_Task) isControlMessage_Payload() {}
@@ -559,6 +650,12 @@ func (*ControlMessage_ProxyConfig) isControlMessage_Payload() {}
 func (*ControlMessage_HaproxyConfigRequest) isControlMessage_Payload() {}
 
 func (*ControlMessage_SchedulerEnvelope) isControlMessage_Payload() {}
+
+func (*ControlMessage_ContainerListRequest) isControlMessage_Payload() {}
+
+func (*ControlMessage_ContainerInspectRequest) isControlMessage_Payload() {}
+
+func (*ControlMessage_ContainerLogStreamRequest) isControlMessage_Payload() {}
 
 type SchedulerRelayEnvelope struct {
 	state          protoimpl.MessageState    `protogen:"open.v1"`
@@ -1996,11 +2093,731 @@ func (x *HAProxyConfigResponse) GetErrorMessage() string {
 	return ""
 }
 
+type ContainerListRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	RequestId     string                 `protobuf:"bytes,1,opt,name=request_id,json=requestId,proto3" json:"request_id,omitempty"`
+	AgentId       string                 `protobuf:"bytes,2,opt,name=agent_id,json=agentId,proto3" json:"agent_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ContainerListRequest) Reset() {
+	*x = ContainerListRequest{}
+	mi := &file_internal_shared_grpcapi_agent_control_proto_msgTypes[17]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ContainerListRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ContainerListRequest) ProtoMessage() {}
+
+func (x *ContainerListRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_internal_shared_grpcapi_agent_control_proto_msgTypes[17]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ContainerListRequest.ProtoReflect.Descriptor instead.
+func (*ContainerListRequest) Descriptor() ([]byte, []int) {
+	return file_internal_shared_grpcapi_agent_control_proto_rawDescGZIP(), []int{17}
+}
+
+func (x *ContainerListRequest) GetRequestId() string {
+	if x != nil {
+		return x.RequestId
+	}
+	return ""
+}
+
+func (x *ContainerListRequest) GetAgentId() string {
+	if x != nil {
+		return x.AgentId
+	}
+	return ""
+}
+
+type ContainerSummary struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	ContainerId   string                 `protobuf:"bytes,1,opt,name=container_id,json=containerId,proto3" json:"container_id,omitempty"`
+	Name          string                 `protobuf:"bytes,2,opt,name=name,proto3" json:"name,omitempty"`
+	State         string                 `protobuf:"bytes,3,opt,name=state,proto3" json:"state,omitempty"`
+	Image         string                 `protobuf:"bytes,4,opt,name=image,proto3" json:"image,omitempty"`
+	ServiceId     string                 `protobuf:"bytes,5,opt,name=service_id,json=serviceId,proto3" json:"service_id,omitempty"`
+	ServiceKey    string                 `protobuf:"bytes,6,opt,name=service_key,json=serviceKey,proto3" json:"service_key,omitempty"`
+	ReleaseId     string                 `protobuf:"bytes,7,opt,name=release_id,json=releaseId,proto3" json:"release_id,omitempty"`
+	Slot          Slot                   `protobuf:"varint,8,opt,name=slot,proto3,enum=edgepilot.grpcapi.Slot" json:"slot,omitempty"`
+	CreatedAt     int64                  `protobuf:"varint,9,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ContainerSummary) Reset() {
+	*x = ContainerSummary{}
+	mi := &file_internal_shared_grpcapi_agent_control_proto_msgTypes[18]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ContainerSummary) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ContainerSummary) ProtoMessage() {}
+
+func (x *ContainerSummary) ProtoReflect() protoreflect.Message {
+	mi := &file_internal_shared_grpcapi_agent_control_proto_msgTypes[18]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ContainerSummary.ProtoReflect.Descriptor instead.
+func (*ContainerSummary) Descriptor() ([]byte, []int) {
+	return file_internal_shared_grpcapi_agent_control_proto_rawDescGZIP(), []int{18}
+}
+
+func (x *ContainerSummary) GetContainerId() string {
+	if x != nil {
+		return x.ContainerId
+	}
+	return ""
+}
+
+func (x *ContainerSummary) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+func (x *ContainerSummary) GetState() string {
+	if x != nil {
+		return x.State
+	}
+	return ""
+}
+
+func (x *ContainerSummary) GetImage() string {
+	if x != nil {
+		return x.Image
+	}
+	return ""
+}
+
+func (x *ContainerSummary) GetServiceId() string {
+	if x != nil {
+		return x.ServiceId
+	}
+	return ""
+}
+
+func (x *ContainerSummary) GetServiceKey() string {
+	if x != nil {
+		return x.ServiceKey
+	}
+	return ""
+}
+
+func (x *ContainerSummary) GetReleaseId() string {
+	if x != nil {
+		return x.ReleaseId
+	}
+	return ""
+}
+
+func (x *ContainerSummary) GetSlot() Slot {
+	if x != nil {
+		return x.Slot
+	}
+	return Slot_SLOT_UNSPECIFIED
+}
+
+func (x *ContainerSummary) GetCreatedAt() int64 {
+	if x != nil {
+		return x.CreatedAt
+	}
+	return 0
+}
+
+type ContainerListResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	RequestId     string                 `protobuf:"bytes,1,opt,name=request_id,json=requestId,proto3" json:"request_id,omitempty"`
+	AgentId       string                 `protobuf:"bytes,2,opt,name=agent_id,json=agentId,proto3" json:"agent_id,omitempty"`
+	Containers    []*ContainerSummary    `protobuf:"bytes,3,rep,name=containers,proto3" json:"containers,omitempty"`
+	ErrorMessage  string                 `protobuf:"bytes,4,opt,name=error_message,json=errorMessage,proto3" json:"error_message,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ContainerListResponse) Reset() {
+	*x = ContainerListResponse{}
+	mi := &file_internal_shared_grpcapi_agent_control_proto_msgTypes[19]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ContainerListResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ContainerListResponse) ProtoMessage() {}
+
+func (x *ContainerListResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_internal_shared_grpcapi_agent_control_proto_msgTypes[19]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ContainerListResponse.ProtoReflect.Descriptor instead.
+func (*ContainerListResponse) Descriptor() ([]byte, []int) {
+	return file_internal_shared_grpcapi_agent_control_proto_rawDescGZIP(), []int{19}
+}
+
+func (x *ContainerListResponse) GetRequestId() string {
+	if x != nil {
+		return x.RequestId
+	}
+	return ""
+}
+
+func (x *ContainerListResponse) GetAgentId() string {
+	if x != nil {
+		return x.AgentId
+	}
+	return ""
+}
+
+func (x *ContainerListResponse) GetContainers() []*ContainerSummary {
+	if x != nil {
+		return x.Containers
+	}
+	return nil
+}
+
+func (x *ContainerListResponse) GetErrorMessage() string {
+	if x != nil {
+		return x.ErrorMessage
+	}
+	return ""
+}
+
+type ContainerInspectRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	RequestId     string                 `protobuf:"bytes,1,opt,name=request_id,json=requestId,proto3" json:"request_id,omitempty"`
+	AgentId       string                 `protobuf:"bytes,2,opt,name=agent_id,json=agentId,proto3" json:"agent_id,omitempty"`
+	ContainerId   string                 `protobuf:"bytes,3,opt,name=container_id,json=containerId,proto3" json:"container_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ContainerInspectRequest) Reset() {
+	*x = ContainerInspectRequest{}
+	mi := &file_internal_shared_grpcapi_agent_control_proto_msgTypes[20]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ContainerInspectRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ContainerInspectRequest) ProtoMessage() {}
+
+func (x *ContainerInspectRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_internal_shared_grpcapi_agent_control_proto_msgTypes[20]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ContainerInspectRequest.ProtoReflect.Descriptor instead.
+func (*ContainerInspectRequest) Descriptor() ([]byte, []int) {
+	return file_internal_shared_grpcapi_agent_control_proto_rawDescGZIP(), []int{20}
+}
+
+func (x *ContainerInspectRequest) GetRequestId() string {
+	if x != nil {
+		return x.RequestId
+	}
+	return ""
+}
+
+func (x *ContainerInspectRequest) GetAgentId() string {
+	if x != nil {
+		return x.AgentId
+	}
+	return ""
+}
+
+func (x *ContainerInspectRequest) GetContainerId() string {
+	if x != nil {
+		return x.ContainerId
+	}
+	return ""
+}
+
+type ContainerDetails struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	ContainerId   string                 `protobuf:"bytes,1,opt,name=container_id,json=containerId,proto3" json:"container_id,omitempty"`
+	Name          string                 `protobuf:"bytes,2,opt,name=name,proto3" json:"name,omitempty"`
+	State         string                 `protobuf:"bytes,3,opt,name=state,proto3" json:"state,omitempty"`
+	Image         string                 `protobuf:"bytes,4,opt,name=image,proto3" json:"image,omitempty"`
+	ServiceId     string                 `protobuf:"bytes,5,opt,name=service_id,json=serviceId,proto3" json:"service_id,omitempty"`
+	ServiceKey    string                 `protobuf:"bytes,6,opt,name=service_key,json=serviceKey,proto3" json:"service_key,omitempty"`
+	ReleaseId     string                 `protobuf:"bytes,7,opt,name=release_id,json=releaseId,proto3" json:"release_id,omitempty"`
+	Slot          Slot                   `protobuf:"varint,8,opt,name=slot,proto3,enum=edgepilot.grpcapi.Slot" json:"slot,omitempty"`
+	Running       bool                   `protobuf:"varint,9,opt,name=running,proto3" json:"running,omitempty"`
+	Health        string                 `protobuf:"bytes,10,opt,name=health,proto3" json:"health,omitempty"`
+	RestartCount  int32                  `protobuf:"varint,11,opt,name=restart_count,json=restartCount,proto3" json:"restart_count,omitempty"`
+	IpAddress     string                 `protobuf:"bytes,12,opt,name=ip_address,json=ipAddress,proto3" json:"ip_address,omitempty"`
+	Labels        map[string]string      `protobuf:"bytes,13,rep,name=labels,proto3" json:"labels,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	Env           map[string]string      `protobuf:"bytes,14,rep,name=env,proto3" json:"env,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	Command       []string               `protobuf:"bytes,15,rep,name=command,proto3" json:"command,omitempty"`
+	Entrypoint    []string               `protobuf:"bytes,16,rep,name=entrypoint,proto3" json:"entrypoint,omitempty"`
+	Volumes       []*VolumeMount         `protobuf:"bytes,17,rep,name=volumes,proto3" json:"volumes,omitempty"`
+	Ports         []*PublishedPort       `protobuf:"bytes,18,rep,name=ports,proto3" json:"ports,omitempty"`
+	CpuLimit      float64                `protobuf:"fixed64,19,opt,name=cpu_limit,json=cpuLimit,proto3" json:"cpu_limit,omitempty"`
+	MemoryLimit   int64                  `protobuf:"varint,20,opt,name=memory_limit,json=memoryLimit,proto3" json:"memory_limit,omitempty"`
+	CreatedAt     int64                  `protobuf:"varint,21,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ContainerDetails) Reset() {
+	*x = ContainerDetails{}
+	mi := &file_internal_shared_grpcapi_agent_control_proto_msgTypes[21]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ContainerDetails) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ContainerDetails) ProtoMessage() {}
+
+func (x *ContainerDetails) ProtoReflect() protoreflect.Message {
+	mi := &file_internal_shared_grpcapi_agent_control_proto_msgTypes[21]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ContainerDetails.ProtoReflect.Descriptor instead.
+func (*ContainerDetails) Descriptor() ([]byte, []int) {
+	return file_internal_shared_grpcapi_agent_control_proto_rawDescGZIP(), []int{21}
+}
+
+func (x *ContainerDetails) GetContainerId() string {
+	if x != nil {
+		return x.ContainerId
+	}
+	return ""
+}
+
+func (x *ContainerDetails) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+func (x *ContainerDetails) GetState() string {
+	if x != nil {
+		return x.State
+	}
+	return ""
+}
+
+func (x *ContainerDetails) GetImage() string {
+	if x != nil {
+		return x.Image
+	}
+	return ""
+}
+
+func (x *ContainerDetails) GetServiceId() string {
+	if x != nil {
+		return x.ServiceId
+	}
+	return ""
+}
+
+func (x *ContainerDetails) GetServiceKey() string {
+	if x != nil {
+		return x.ServiceKey
+	}
+	return ""
+}
+
+func (x *ContainerDetails) GetReleaseId() string {
+	if x != nil {
+		return x.ReleaseId
+	}
+	return ""
+}
+
+func (x *ContainerDetails) GetSlot() Slot {
+	if x != nil {
+		return x.Slot
+	}
+	return Slot_SLOT_UNSPECIFIED
+}
+
+func (x *ContainerDetails) GetRunning() bool {
+	if x != nil {
+		return x.Running
+	}
+	return false
+}
+
+func (x *ContainerDetails) GetHealth() string {
+	if x != nil {
+		return x.Health
+	}
+	return ""
+}
+
+func (x *ContainerDetails) GetRestartCount() int32 {
+	if x != nil {
+		return x.RestartCount
+	}
+	return 0
+}
+
+func (x *ContainerDetails) GetIpAddress() string {
+	if x != nil {
+		return x.IpAddress
+	}
+	return ""
+}
+
+func (x *ContainerDetails) GetLabels() map[string]string {
+	if x != nil {
+		return x.Labels
+	}
+	return nil
+}
+
+func (x *ContainerDetails) GetEnv() map[string]string {
+	if x != nil {
+		return x.Env
+	}
+	return nil
+}
+
+func (x *ContainerDetails) GetCommand() []string {
+	if x != nil {
+		return x.Command
+	}
+	return nil
+}
+
+func (x *ContainerDetails) GetEntrypoint() []string {
+	if x != nil {
+		return x.Entrypoint
+	}
+	return nil
+}
+
+func (x *ContainerDetails) GetVolumes() []*VolumeMount {
+	if x != nil {
+		return x.Volumes
+	}
+	return nil
+}
+
+func (x *ContainerDetails) GetPorts() []*PublishedPort {
+	if x != nil {
+		return x.Ports
+	}
+	return nil
+}
+
+func (x *ContainerDetails) GetCpuLimit() float64 {
+	if x != nil {
+		return x.CpuLimit
+	}
+	return 0
+}
+
+func (x *ContainerDetails) GetMemoryLimit() int64 {
+	if x != nil {
+		return x.MemoryLimit
+	}
+	return 0
+}
+
+func (x *ContainerDetails) GetCreatedAt() int64 {
+	if x != nil {
+		return x.CreatedAt
+	}
+	return 0
+}
+
+type ContainerInspectResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	RequestId     string                 `protobuf:"bytes,1,opt,name=request_id,json=requestId,proto3" json:"request_id,omitempty"`
+	AgentId       string                 `protobuf:"bytes,2,opt,name=agent_id,json=agentId,proto3" json:"agent_id,omitempty"`
+	Details       *ContainerDetails      `protobuf:"bytes,3,opt,name=details,proto3" json:"details,omitempty"`
+	ErrorMessage  string                 `protobuf:"bytes,4,opt,name=error_message,json=errorMessage,proto3" json:"error_message,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ContainerInspectResponse) Reset() {
+	*x = ContainerInspectResponse{}
+	mi := &file_internal_shared_grpcapi_agent_control_proto_msgTypes[22]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ContainerInspectResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ContainerInspectResponse) ProtoMessage() {}
+
+func (x *ContainerInspectResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_internal_shared_grpcapi_agent_control_proto_msgTypes[22]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ContainerInspectResponse.ProtoReflect.Descriptor instead.
+func (*ContainerInspectResponse) Descriptor() ([]byte, []int) {
+	return file_internal_shared_grpcapi_agent_control_proto_rawDescGZIP(), []int{22}
+}
+
+func (x *ContainerInspectResponse) GetRequestId() string {
+	if x != nil {
+		return x.RequestId
+	}
+	return ""
+}
+
+func (x *ContainerInspectResponse) GetAgentId() string {
+	if x != nil {
+		return x.AgentId
+	}
+	return ""
+}
+
+func (x *ContainerInspectResponse) GetDetails() *ContainerDetails {
+	if x != nil {
+		return x.Details
+	}
+	return nil
+}
+
+func (x *ContainerInspectResponse) GetErrorMessage() string {
+	if x != nil {
+		return x.ErrorMessage
+	}
+	return ""
+}
+
+type ContainerLogStreamRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	RequestId     string                 `protobuf:"bytes,1,opt,name=request_id,json=requestId,proto3" json:"request_id,omitempty"`
+	AgentId       string                 `protobuf:"bytes,2,opt,name=agent_id,json=agentId,proto3" json:"agent_id,omitempty"`
+	ContainerId   string                 `protobuf:"bytes,3,opt,name=container_id,json=containerId,proto3" json:"container_id,omitempty"`
+	Follow        bool                   `protobuf:"varint,4,opt,name=follow,proto3" json:"follow,omitempty"`
+	TailLines     int32                  `protobuf:"varint,5,opt,name=tail_lines,json=tailLines,proto3" json:"tail_lines,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ContainerLogStreamRequest) Reset() {
+	*x = ContainerLogStreamRequest{}
+	mi := &file_internal_shared_grpcapi_agent_control_proto_msgTypes[23]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ContainerLogStreamRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ContainerLogStreamRequest) ProtoMessage() {}
+
+func (x *ContainerLogStreamRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_internal_shared_grpcapi_agent_control_proto_msgTypes[23]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ContainerLogStreamRequest.ProtoReflect.Descriptor instead.
+func (*ContainerLogStreamRequest) Descriptor() ([]byte, []int) {
+	return file_internal_shared_grpcapi_agent_control_proto_rawDescGZIP(), []int{23}
+}
+
+func (x *ContainerLogStreamRequest) GetRequestId() string {
+	if x != nil {
+		return x.RequestId
+	}
+	return ""
+}
+
+func (x *ContainerLogStreamRequest) GetAgentId() string {
+	if x != nil {
+		return x.AgentId
+	}
+	return ""
+}
+
+func (x *ContainerLogStreamRequest) GetContainerId() string {
+	if x != nil {
+		return x.ContainerId
+	}
+	return ""
+}
+
+func (x *ContainerLogStreamRequest) GetFollow() bool {
+	if x != nil {
+		return x.Follow
+	}
+	return false
+}
+
+func (x *ContainerLogStreamRequest) GetTailLines() int32 {
+	if x != nil {
+		return x.TailLines
+	}
+	return 0
+}
+
+type ContainerLogChunk struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	RequestId     string                 `protobuf:"bytes,1,opt,name=request_id,json=requestId,proto3" json:"request_id,omitempty"`
+	AgentId       string                 `protobuf:"bytes,2,opt,name=agent_id,json=agentId,proto3" json:"agent_id,omitempty"`
+	ContainerId   string                 `protobuf:"bytes,3,opt,name=container_id,json=containerId,proto3" json:"container_id,omitempty"`
+	Data          []byte                 `protobuf:"bytes,4,opt,name=data,proto3" json:"data,omitempty"`
+	Stderr        bool                   `protobuf:"varint,5,opt,name=stderr,proto3" json:"stderr,omitempty"`
+	Timestamp     int64                  `protobuf:"varint,6,opt,name=timestamp,proto3" json:"timestamp,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ContainerLogChunk) Reset() {
+	*x = ContainerLogChunk{}
+	mi := &file_internal_shared_grpcapi_agent_control_proto_msgTypes[24]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ContainerLogChunk) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ContainerLogChunk) ProtoMessage() {}
+
+func (x *ContainerLogChunk) ProtoReflect() protoreflect.Message {
+	mi := &file_internal_shared_grpcapi_agent_control_proto_msgTypes[24]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ContainerLogChunk.ProtoReflect.Descriptor instead.
+func (*ContainerLogChunk) Descriptor() ([]byte, []int) {
+	return file_internal_shared_grpcapi_agent_control_proto_rawDescGZIP(), []int{24}
+}
+
+func (x *ContainerLogChunk) GetRequestId() string {
+	if x != nil {
+		return x.RequestId
+	}
+	return ""
+}
+
+func (x *ContainerLogChunk) GetAgentId() string {
+	if x != nil {
+		return x.AgentId
+	}
+	return ""
+}
+
+func (x *ContainerLogChunk) GetContainerId() string {
+	if x != nil {
+		return x.ContainerId
+	}
+	return ""
+}
+
+func (x *ContainerLogChunk) GetData() []byte {
+	if x != nil {
+		return x.Data
+	}
+	return nil
+}
+
+func (x *ContainerLogChunk) GetStderr() bool {
+	if x != nil {
+		return x.Stderr
+	}
+	return false
+}
+
+func (x *ContainerLogChunk) GetTimestamp() int64 {
+	if x != nil {
+		return x.Timestamp
+	}
+	return 0
+}
+
 var File_internal_shared_grpcapi_agent_control_proto protoreflect.FileDescriptor
 
 const file_internal_shared_grpcapi_agent_control_proto_rawDesc = "" +
 	"\n" +
-	"+internal/shared/grpcapi/agent_control.proto\x12\x11edgepilot.grpcapi\"\xd1\x03\n" +
+	"+internal/shared/grpcapi/agent_control.proto\x12\x11edgepilot.grpcapi\"\xfa\x05\n" +
 	"\fAgentMessage\x127\n" +
 	"\x05hello\x18\x01 \x01(\v2\x1f.edgepilot.grpcapi.HelloMessageH\x00R\x05hello\x12C\n" +
 	"\theartbeat\x18\x02 \x01(\v2#.edgepilot.grpcapi.HeartbeatMessageH\x00R\theartbeat\x12@\n" +
@@ -2008,14 +2825,20 @@ const file_internal_shared_grpcapi_agent_control_proto_rawDesc = "" +
 	"taskUpdate\x126\n" +
 	"\x05stats\x18\x04 \x01(\v2\x1e.edgepilot.grpcapi.StatsReportH\x00R\x05stats\x12b\n" +
 	"\x17haproxy_config_response\x18\x05 \x01(\v2(.edgepilot.grpcapi.HAProxyConfigResponseH\x00R\x15haproxyConfigResponse\x12Z\n" +
-	"\x12scheduler_envelope\x18\x06 \x01(\v2).edgepilot.grpcapi.SchedulerRelayEnvelopeH\x00R\x11schedulerEnvelopeB\t\n" +
-	"\apayload\"\x8e\x03\n" +
+	"\x12scheduler_envelope\x18\x06 \x01(\v2).edgepilot.grpcapi.SchedulerRelayEnvelopeH\x00R\x11schedulerEnvelope\x12b\n" +
+	"\x17container_list_response\x18\a \x01(\v2(.edgepilot.grpcapi.ContainerListResponseH\x00R\x15containerListResponse\x12k\n" +
+	"\x1acontainer_inspect_response\x18\b \x01(\v2+.edgepilot.grpcapi.ContainerInspectResponseH\x00R\x18containerInspectResponse\x12V\n" +
+	"\x13container_log_chunk\x18\t \x01(\v2$.edgepilot.grpcapi.ContainerLogChunkH\x00R\x11containerLogChunkB\t\n" +
+	"\apayload\"\xca\x05\n" +
 	"\x0eControlMessage\x121\n" +
 	"\x03ack\x18\x01 \x01(\v2\x1d.edgepilot.grpcapi.AckMessageH\x00R\x03ack\x124\n" +
 	"\x04task\x18\x02 \x01(\v2\x1e.edgepilot.grpcapi.TaskCommandH\x00R\x04task\x12K\n" +
 	"\fproxy_config\x18\x03 \x01(\v2&.edgepilot.grpcapi.ProxyConfigSnapshotH\x00R\vproxyConfig\x12_\n" +
 	"\x16haproxy_config_request\x18\x04 \x01(\v2'.edgepilot.grpcapi.HAProxyConfigRequestH\x00R\x14haproxyConfigRequest\x12Z\n" +
-	"\x12scheduler_envelope\x18\x05 \x01(\v2).edgepilot.grpcapi.SchedulerRelayEnvelopeH\x00R\x11schedulerEnvelopeB\t\n" +
+	"\x12scheduler_envelope\x18\x05 \x01(\v2).edgepilot.grpcapi.SchedulerRelayEnvelopeH\x00R\x11schedulerEnvelope\x12_\n" +
+	"\x16container_list_request\x18\x06 \x01(\v2'.edgepilot.grpcapi.ContainerListRequestH\x00R\x14containerListRequest\x12h\n" +
+	"\x19container_inspect_request\x18\a \x01(\v2*.edgepilot.grpcapi.ContainerInspectRequestH\x00R\x17containerInspectRequest\x12o\n" +
+	"\x1ccontainer_log_stream_request\x18\b \x01(\v2,.edgepilot.grpcapi.ContainerLogStreamRequestH\x00R\x19containerLogStreamRequestB\t\n" +
 	"\apayload\"\x84\x03\n" +
 	"\x16SchedulerRelayEnvelope\x12(\n" +
 	"\x10relay_session_id\x18\x01 \x01(\tR\x0erelaySessionId\x12\x1f\n" +
@@ -2179,7 +3002,96 @@ const file_internal_shared_grpcapi_agent_control_proto_rawDesc = "" +
 	"request_id\x18\x01 \x01(\tR\trequestId\x12\x19\n" +
 	"\bagent_id\x18\x02 \x01(\tR\aagentId\x12\x16\n" +
 	"\x06config\x18\x03 \x01(\tR\x06config\x12#\n" +
-	"\rerror_message\x18\x04 \x01(\tR\ferrorMessage*;\n" +
+	"\rerror_message\x18\x04 \x01(\tR\ferrorMessage\"P\n" +
+	"\x14ContainerListRequest\x12\x1d\n" +
+	"\n" +
+	"request_id\x18\x01 \x01(\tR\trequestId\x12\x19\n" +
+	"\bagent_id\x18\x02 \x01(\tR\aagentId\"\xa0\x02\n" +
+	"\x10ContainerSummary\x12!\n" +
+	"\fcontainer_id\x18\x01 \x01(\tR\vcontainerId\x12\x12\n" +
+	"\x04name\x18\x02 \x01(\tR\x04name\x12\x14\n" +
+	"\x05state\x18\x03 \x01(\tR\x05state\x12\x14\n" +
+	"\x05image\x18\x04 \x01(\tR\x05image\x12\x1d\n" +
+	"\n" +
+	"service_id\x18\x05 \x01(\tR\tserviceId\x12\x1f\n" +
+	"\vservice_key\x18\x06 \x01(\tR\n" +
+	"serviceKey\x12\x1d\n" +
+	"\n" +
+	"release_id\x18\a \x01(\tR\treleaseId\x12+\n" +
+	"\x04slot\x18\b \x01(\x0e2\x17.edgepilot.grpcapi.SlotR\x04slot\x12\x1d\n" +
+	"\n" +
+	"created_at\x18\t \x01(\x03R\tcreatedAt\"\xbb\x01\n" +
+	"\x15ContainerListResponse\x12\x1d\n" +
+	"\n" +
+	"request_id\x18\x01 \x01(\tR\trequestId\x12\x19\n" +
+	"\bagent_id\x18\x02 \x01(\tR\aagentId\x12C\n" +
+	"\n" +
+	"containers\x18\x03 \x03(\v2#.edgepilot.grpcapi.ContainerSummaryR\n" +
+	"containers\x12#\n" +
+	"\rerror_message\x18\x04 \x01(\tR\ferrorMessage\"v\n" +
+	"\x17ContainerInspectRequest\x12\x1d\n" +
+	"\n" +
+	"request_id\x18\x01 \x01(\tR\trequestId\x12\x19\n" +
+	"\bagent_id\x18\x02 \x01(\tR\aagentId\x12!\n" +
+	"\fcontainer_id\x18\x03 \x01(\tR\vcontainerId\"\xfe\x06\n" +
+	"\x10ContainerDetails\x12!\n" +
+	"\fcontainer_id\x18\x01 \x01(\tR\vcontainerId\x12\x12\n" +
+	"\x04name\x18\x02 \x01(\tR\x04name\x12\x14\n" +
+	"\x05state\x18\x03 \x01(\tR\x05state\x12\x14\n" +
+	"\x05image\x18\x04 \x01(\tR\x05image\x12\x1d\n" +
+	"\n" +
+	"service_id\x18\x05 \x01(\tR\tserviceId\x12\x1f\n" +
+	"\vservice_key\x18\x06 \x01(\tR\n" +
+	"serviceKey\x12\x1d\n" +
+	"\n" +
+	"release_id\x18\a \x01(\tR\treleaseId\x12+\n" +
+	"\x04slot\x18\b \x01(\x0e2\x17.edgepilot.grpcapi.SlotR\x04slot\x12\x18\n" +
+	"\arunning\x18\t \x01(\bR\arunning\x12\x16\n" +
+	"\x06health\x18\n" +
+	" \x01(\tR\x06health\x12#\n" +
+	"\rrestart_count\x18\v \x01(\x05R\frestartCount\x12\x1d\n" +
+	"\n" +
+	"ip_address\x18\f \x01(\tR\tipAddress\x12G\n" +
+	"\x06labels\x18\r \x03(\v2/.edgepilot.grpcapi.ContainerDetails.LabelsEntryR\x06labels\x12>\n" +
+	"\x03env\x18\x0e \x03(\v2,.edgepilot.grpcapi.ContainerDetails.EnvEntryR\x03env\x12\x18\n" +
+	"\acommand\x18\x0f \x03(\tR\acommand\x12\x1e\n" +
+	"\n" +
+	"entrypoint\x18\x10 \x03(\tR\n" +
+	"entrypoint\x128\n" +
+	"\avolumes\x18\x11 \x03(\v2\x1e.edgepilot.grpcapi.VolumeMountR\avolumes\x126\n" +
+	"\x05ports\x18\x12 \x03(\v2 .edgepilot.grpcapi.PublishedPortR\x05ports\x12\x1b\n" +
+	"\tcpu_limit\x18\x13 \x01(\x01R\bcpuLimit\x12!\n" +
+	"\fmemory_limit\x18\x14 \x01(\x03R\vmemoryLimit\x12\x1d\n" +
+	"\n" +
+	"created_at\x18\x15 \x01(\x03R\tcreatedAt\x1a9\n" +
+	"\vLabelsEntry\x12\x10\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\x1a6\n" +
+	"\bEnvEntry\x12\x10\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\xb8\x01\n" +
+	"\x18ContainerInspectResponse\x12\x1d\n" +
+	"\n" +
+	"request_id\x18\x01 \x01(\tR\trequestId\x12\x19\n" +
+	"\bagent_id\x18\x02 \x01(\tR\aagentId\x12=\n" +
+	"\adetails\x18\x03 \x01(\v2#.edgepilot.grpcapi.ContainerDetailsR\adetails\x12#\n" +
+	"\rerror_message\x18\x04 \x01(\tR\ferrorMessage\"\xaf\x01\n" +
+	"\x19ContainerLogStreamRequest\x12\x1d\n" +
+	"\n" +
+	"request_id\x18\x01 \x01(\tR\trequestId\x12\x19\n" +
+	"\bagent_id\x18\x02 \x01(\tR\aagentId\x12!\n" +
+	"\fcontainer_id\x18\x03 \x01(\tR\vcontainerId\x12\x16\n" +
+	"\x06follow\x18\x04 \x01(\bR\x06follow\x12\x1d\n" +
+	"\n" +
+	"tail_lines\x18\x05 \x01(\x05R\ttailLines\"\xba\x01\n" +
+	"\x11ContainerLogChunk\x12\x1d\n" +
+	"\n" +
+	"request_id\x18\x01 \x01(\tR\trequestId\x12\x19\n" +
+	"\bagent_id\x18\x02 \x01(\tR\aagentId\x12!\n" +
+	"\fcontainer_id\x18\x03 \x01(\tR\vcontainerId\x12\x12\n" +
+	"\x04data\x18\x04 \x01(\fR\x04data\x12\x16\n" +
+	"\x06stderr\x18\x05 \x01(\bR\x06stderr\x12\x1c\n" +
+	"\ttimestamp\x18\x06 \x01(\x03R\ttimestamp*;\n" +
 	"\x04Slot\x12\x14\n" +
 	"\x10SLOT_UNSPECIFIED\x10\x00\x12\r\n" +
 	"\tSLOT_BLUE\x10\x01\x12\x0e\n" +
@@ -2224,33 +3136,43 @@ func file_internal_shared_grpcapi_agent_control_proto_rawDescGZIP() []byte {
 }
 
 var file_internal_shared_grpcapi_agent_control_proto_enumTypes = make([]protoimpl.EnumInfo, 5)
-var file_internal_shared_grpcapi_agent_control_proto_msgTypes = make([]protoimpl.MessageInfo, 20)
+var file_internal_shared_grpcapi_agent_control_proto_msgTypes = make([]protoimpl.MessageInfo, 30)
 var file_internal_shared_grpcapi_agent_control_proto_goTypes = []any{
-	(Slot)(0),                      // 0: edgepilot.grpcapi.Slot
-	(TaskType)(0),                  // 1: edgepilot.grpcapi.TaskType
-	(TaskStatus)(0),                // 2: edgepilot.grpcapi.TaskStatus
-	(SchedulerRelayDirection)(0),   // 3: edgepilot.grpcapi.SchedulerRelayDirection
-	(SchedulerRelayPayloadType)(0), // 4: edgepilot.grpcapi.SchedulerRelayPayloadType
-	(*AgentMessage)(nil),           // 5: edgepilot.grpcapi.AgentMessage
-	(*ControlMessage)(nil),         // 6: edgepilot.grpcapi.ControlMessage
-	(*SchedulerRelayEnvelope)(nil), // 7: edgepilot.grpcapi.SchedulerRelayEnvelope
-	(*HelloMessage)(nil),           // 8: edgepilot.grpcapi.HelloMessage
-	(*HeartbeatMessage)(nil),       // 9: edgepilot.grpcapi.HeartbeatMessage
-	(*AckMessage)(nil),             // 10: edgepilot.grpcapi.AckMessage
-	(*VolumeMount)(nil),            // 11: edgepilot.grpcapi.VolumeMount
-	(*PublishedPort)(nil),          // 12: edgepilot.grpcapi.PublishedPort
-	(*TaskCommand)(nil),            // 13: edgepilot.grpcapi.TaskCommand
-	(*TaskUpdate)(nil),             // 14: edgepilot.grpcapi.TaskUpdate
-	(*ProxyServiceConfig)(nil),     // 15: edgepilot.grpcapi.ProxyServiceConfig
-	(*ProxyConfigSnapshot)(nil),    // 16: edgepilot.grpcapi.ProxyConfigSnapshot
-	(*BackendStatPoint)(nil),       // 17: edgepilot.grpcapi.BackendStatPoint
-	(*StatsReport)(nil),            // 18: edgepilot.grpcapi.StatsReport
-	(*PerformanceSnapshot)(nil),    // 19: edgepilot.grpcapi.PerformanceSnapshot
-	(*HAProxyConfigRequest)(nil),   // 20: edgepilot.grpcapi.HAProxyConfigRequest
-	(*HAProxyConfigResponse)(nil),  // 21: edgepilot.grpcapi.HAProxyConfigResponse
-	nil,                            // 22: edgepilot.grpcapi.TaskCommand.EnvEntry
-	nil,                            // 23: edgepilot.grpcapi.TaskCommand.HttpHealthHeadersEntry
-	nil,                            // 24: edgepilot.grpcapi.TaskUpdate.MetricsEntry
+	(Slot)(0),                         // 0: edgepilot.grpcapi.Slot
+	(TaskType)(0),                     // 1: edgepilot.grpcapi.TaskType
+	(TaskStatus)(0),                   // 2: edgepilot.grpcapi.TaskStatus
+	(SchedulerRelayDirection)(0),      // 3: edgepilot.grpcapi.SchedulerRelayDirection
+	(SchedulerRelayPayloadType)(0),    // 4: edgepilot.grpcapi.SchedulerRelayPayloadType
+	(*AgentMessage)(nil),              // 5: edgepilot.grpcapi.AgentMessage
+	(*ControlMessage)(nil),            // 6: edgepilot.grpcapi.ControlMessage
+	(*SchedulerRelayEnvelope)(nil),    // 7: edgepilot.grpcapi.SchedulerRelayEnvelope
+	(*HelloMessage)(nil),              // 8: edgepilot.grpcapi.HelloMessage
+	(*HeartbeatMessage)(nil),          // 9: edgepilot.grpcapi.HeartbeatMessage
+	(*AckMessage)(nil),                // 10: edgepilot.grpcapi.AckMessage
+	(*VolumeMount)(nil),               // 11: edgepilot.grpcapi.VolumeMount
+	(*PublishedPort)(nil),             // 12: edgepilot.grpcapi.PublishedPort
+	(*TaskCommand)(nil),               // 13: edgepilot.grpcapi.TaskCommand
+	(*TaskUpdate)(nil),                // 14: edgepilot.grpcapi.TaskUpdate
+	(*ProxyServiceConfig)(nil),        // 15: edgepilot.grpcapi.ProxyServiceConfig
+	(*ProxyConfigSnapshot)(nil),       // 16: edgepilot.grpcapi.ProxyConfigSnapshot
+	(*BackendStatPoint)(nil),          // 17: edgepilot.grpcapi.BackendStatPoint
+	(*StatsReport)(nil),               // 18: edgepilot.grpcapi.StatsReport
+	(*PerformanceSnapshot)(nil),       // 19: edgepilot.grpcapi.PerformanceSnapshot
+	(*HAProxyConfigRequest)(nil),      // 20: edgepilot.grpcapi.HAProxyConfigRequest
+	(*HAProxyConfigResponse)(nil),     // 21: edgepilot.grpcapi.HAProxyConfigResponse
+	(*ContainerListRequest)(nil),      // 22: edgepilot.grpcapi.ContainerListRequest
+	(*ContainerSummary)(nil),          // 23: edgepilot.grpcapi.ContainerSummary
+	(*ContainerListResponse)(nil),     // 24: edgepilot.grpcapi.ContainerListResponse
+	(*ContainerInspectRequest)(nil),   // 25: edgepilot.grpcapi.ContainerInspectRequest
+	(*ContainerDetails)(nil),          // 26: edgepilot.grpcapi.ContainerDetails
+	(*ContainerInspectResponse)(nil),  // 27: edgepilot.grpcapi.ContainerInspectResponse
+	(*ContainerLogStreamRequest)(nil), // 28: edgepilot.grpcapi.ContainerLogStreamRequest
+	(*ContainerLogChunk)(nil),         // 29: edgepilot.grpcapi.ContainerLogChunk
+	nil,                               // 30: edgepilot.grpcapi.TaskCommand.EnvEntry
+	nil,                               // 31: edgepilot.grpcapi.TaskCommand.HttpHealthHeadersEntry
+	nil,                               // 32: edgepilot.grpcapi.TaskUpdate.MetricsEntry
+	nil,                               // 33: edgepilot.grpcapi.ContainerDetails.LabelsEntry
+	nil,                               // 34: edgepilot.grpcapi.ContainerDetails.EnvEntry
 }
 var file_internal_shared_grpcapi_agent_control_proto_depIdxs = []int32{
 	8,  // 0: edgepilot.grpcapi.AgentMessage.hello:type_name -> edgepilot.grpcapi.HelloMessage
@@ -2259,34 +3181,48 @@ var file_internal_shared_grpcapi_agent_control_proto_depIdxs = []int32{
 	18, // 3: edgepilot.grpcapi.AgentMessage.stats:type_name -> edgepilot.grpcapi.StatsReport
 	21, // 4: edgepilot.grpcapi.AgentMessage.haproxy_config_response:type_name -> edgepilot.grpcapi.HAProxyConfigResponse
 	7,  // 5: edgepilot.grpcapi.AgentMessage.scheduler_envelope:type_name -> edgepilot.grpcapi.SchedulerRelayEnvelope
-	10, // 6: edgepilot.grpcapi.ControlMessage.ack:type_name -> edgepilot.grpcapi.AckMessage
-	13, // 7: edgepilot.grpcapi.ControlMessage.task:type_name -> edgepilot.grpcapi.TaskCommand
-	16, // 8: edgepilot.grpcapi.ControlMessage.proxy_config:type_name -> edgepilot.grpcapi.ProxyConfigSnapshot
-	20, // 9: edgepilot.grpcapi.ControlMessage.haproxy_config_request:type_name -> edgepilot.grpcapi.HAProxyConfigRequest
-	7,  // 10: edgepilot.grpcapi.ControlMessage.scheduler_envelope:type_name -> edgepilot.grpcapi.SchedulerRelayEnvelope
-	3,  // 11: edgepilot.grpcapi.SchedulerRelayEnvelope.direction:type_name -> edgepilot.grpcapi.SchedulerRelayDirection
-	4,  // 12: edgepilot.grpcapi.SchedulerRelayEnvelope.payload_type:type_name -> edgepilot.grpcapi.SchedulerRelayPayloadType
-	1,  // 13: edgepilot.grpcapi.TaskCommand.type:type_name -> edgepilot.grpcapi.TaskType
-	0,  // 14: edgepilot.grpcapi.TaskCommand.target_slot:type_name -> edgepilot.grpcapi.Slot
-	0,  // 15: edgepilot.grpcapi.TaskCommand.current_live_slot:type_name -> edgepilot.grpcapi.Slot
-	22, // 16: edgepilot.grpcapi.TaskCommand.env:type_name -> edgepilot.grpcapi.TaskCommand.EnvEntry
-	11, // 17: edgepilot.grpcapi.TaskCommand.volumes:type_name -> edgepilot.grpcapi.VolumeMount
-	12, // 18: edgepilot.grpcapi.TaskCommand.published_ports:type_name -> edgepilot.grpcapi.PublishedPort
-	23, // 19: edgepilot.grpcapi.TaskCommand.http_health_headers:type_name -> edgepilot.grpcapi.TaskCommand.HttpHealthHeadersEntry
-	2,  // 20: edgepilot.grpcapi.TaskUpdate.status:type_name -> edgepilot.grpcapi.TaskStatus
-	0,  // 21: edgepilot.grpcapi.TaskUpdate.slot:type_name -> edgepilot.grpcapi.Slot
-	24, // 22: edgepilot.grpcapi.TaskUpdate.metrics:type_name -> edgepilot.grpcapi.TaskUpdate.MetricsEntry
-	0,  // 23: edgepilot.grpcapi.ProxyServiceConfig.current_live_slot:type_name -> edgepilot.grpcapi.Slot
-	15, // 24: edgepilot.grpcapi.ProxyConfigSnapshot.services:type_name -> edgepilot.grpcapi.ProxyServiceConfig
-	17, // 25: edgepilot.grpcapi.StatsReport.services:type_name -> edgepilot.grpcapi.BackendStatPoint
-	19, // 26: edgepilot.grpcapi.StatsReport.self_performance:type_name -> edgepilot.grpcapi.PerformanceSnapshot
-	5,  // 27: edgepilot.grpcapi.AgentControl.Connect:input_type -> edgepilot.grpcapi.AgentMessage
-	6,  // 28: edgepilot.grpcapi.AgentControl.Connect:output_type -> edgepilot.grpcapi.ControlMessage
-	28, // [28:29] is the sub-list for method output_type
-	27, // [27:28] is the sub-list for method input_type
-	27, // [27:27] is the sub-list for extension type_name
-	27, // [27:27] is the sub-list for extension extendee
-	0,  // [0:27] is the sub-list for field type_name
+	24, // 6: edgepilot.grpcapi.AgentMessage.container_list_response:type_name -> edgepilot.grpcapi.ContainerListResponse
+	27, // 7: edgepilot.grpcapi.AgentMessage.container_inspect_response:type_name -> edgepilot.grpcapi.ContainerInspectResponse
+	29, // 8: edgepilot.grpcapi.AgentMessage.container_log_chunk:type_name -> edgepilot.grpcapi.ContainerLogChunk
+	10, // 9: edgepilot.grpcapi.ControlMessage.ack:type_name -> edgepilot.grpcapi.AckMessage
+	13, // 10: edgepilot.grpcapi.ControlMessage.task:type_name -> edgepilot.grpcapi.TaskCommand
+	16, // 11: edgepilot.grpcapi.ControlMessage.proxy_config:type_name -> edgepilot.grpcapi.ProxyConfigSnapshot
+	20, // 12: edgepilot.grpcapi.ControlMessage.haproxy_config_request:type_name -> edgepilot.grpcapi.HAProxyConfigRequest
+	7,  // 13: edgepilot.grpcapi.ControlMessage.scheduler_envelope:type_name -> edgepilot.grpcapi.SchedulerRelayEnvelope
+	22, // 14: edgepilot.grpcapi.ControlMessage.container_list_request:type_name -> edgepilot.grpcapi.ContainerListRequest
+	25, // 15: edgepilot.grpcapi.ControlMessage.container_inspect_request:type_name -> edgepilot.grpcapi.ContainerInspectRequest
+	28, // 16: edgepilot.grpcapi.ControlMessage.container_log_stream_request:type_name -> edgepilot.grpcapi.ContainerLogStreamRequest
+	3,  // 17: edgepilot.grpcapi.SchedulerRelayEnvelope.direction:type_name -> edgepilot.grpcapi.SchedulerRelayDirection
+	4,  // 18: edgepilot.grpcapi.SchedulerRelayEnvelope.payload_type:type_name -> edgepilot.grpcapi.SchedulerRelayPayloadType
+	1,  // 19: edgepilot.grpcapi.TaskCommand.type:type_name -> edgepilot.grpcapi.TaskType
+	0,  // 20: edgepilot.grpcapi.TaskCommand.target_slot:type_name -> edgepilot.grpcapi.Slot
+	0,  // 21: edgepilot.grpcapi.TaskCommand.current_live_slot:type_name -> edgepilot.grpcapi.Slot
+	30, // 22: edgepilot.grpcapi.TaskCommand.env:type_name -> edgepilot.grpcapi.TaskCommand.EnvEntry
+	11, // 23: edgepilot.grpcapi.TaskCommand.volumes:type_name -> edgepilot.grpcapi.VolumeMount
+	12, // 24: edgepilot.grpcapi.TaskCommand.published_ports:type_name -> edgepilot.grpcapi.PublishedPort
+	31, // 25: edgepilot.grpcapi.TaskCommand.http_health_headers:type_name -> edgepilot.grpcapi.TaskCommand.HttpHealthHeadersEntry
+	2,  // 26: edgepilot.grpcapi.TaskUpdate.status:type_name -> edgepilot.grpcapi.TaskStatus
+	0,  // 27: edgepilot.grpcapi.TaskUpdate.slot:type_name -> edgepilot.grpcapi.Slot
+	32, // 28: edgepilot.grpcapi.TaskUpdate.metrics:type_name -> edgepilot.grpcapi.TaskUpdate.MetricsEntry
+	0,  // 29: edgepilot.grpcapi.ProxyServiceConfig.current_live_slot:type_name -> edgepilot.grpcapi.Slot
+	15, // 30: edgepilot.grpcapi.ProxyConfigSnapshot.services:type_name -> edgepilot.grpcapi.ProxyServiceConfig
+	17, // 31: edgepilot.grpcapi.StatsReport.services:type_name -> edgepilot.grpcapi.BackendStatPoint
+	19, // 32: edgepilot.grpcapi.StatsReport.self_performance:type_name -> edgepilot.grpcapi.PerformanceSnapshot
+	0,  // 33: edgepilot.grpcapi.ContainerSummary.slot:type_name -> edgepilot.grpcapi.Slot
+	23, // 34: edgepilot.grpcapi.ContainerListResponse.containers:type_name -> edgepilot.grpcapi.ContainerSummary
+	0,  // 35: edgepilot.grpcapi.ContainerDetails.slot:type_name -> edgepilot.grpcapi.Slot
+	33, // 36: edgepilot.grpcapi.ContainerDetails.labels:type_name -> edgepilot.grpcapi.ContainerDetails.LabelsEntry
+	34, // 37: edgepilot.grpcapi.ContainerDetails.env:type_name -> edgepilot.grpcapi.ContainerDetails.EnvEntry
+	11, // 38: edgepilot.grpcapi.ContainerDetails.volumes:type_name -> edgepilot.grpcapi.VolumeMount
+	12, // 39: edgepilot.grpcapi.ContainerDetails.ports:type_name -> edgepilot.grpcapi.PublishedPort
+	26, // 40: edgepilot.grpcapi.ContainerInspectResponse.details:type_name -> edgepilot.grpcapi.ContainerDetails
+	5,  // 41: edgepilot.grpcapi.AgentControl.Connect:input_type -> edgepilot.grpcapi.AgentMessage
+	6,  // 42: edgepilot.grpcapi.AgentControl.Connect:output_type -> edgepilot.grpcapi.ControlMessage
+	42, // [42:43] is the sub-list for method output_type
+	41, // [41:42] is the sub-list for method input_type
+	41, // [41:41] is the sub-list for extension type_name
+	41, // [41:41] is the sub-list for extension extendee
+	0,  // [0:41] is the sub-list for field type_name
 }
 
 func init() { file_internal_shared_grpcapi_agent_control_proto_init() }
@@ -2301,6 +3237,9 @@ func file_internal_shared_grpcapi_agent_control_proto_init() {
 		(*AgentMessage_Stats)(nil),
 		(*AgentMessage_HaproxyConfigResponse)(nil),
 		(*AgentMessage_SchedulerEnvelope)(nil),
+		(*AgentMessage_ContainerListResponse)(nil),
+		(*AgentMessage_ContainerInspectResponse)(nil),
+		(*AgentMessage_ContainerLogChunk)(nil),
 	}
 	file_internal_shared_grpcapi_agent_control_proto_msgTypes[1].OneofWrappers = []any{
 		(*ControlMessage_Ack)(nil),
@@ -2308,6 +3247,9 @@ func file_internal_shared_grpcapi_agent_control_proto_init() {
 		(*ControlMessage_ProxyConfig)(nil),
 		(*ControlMessage_HaproxyConfigRequest)(nil),
 		(*ControlMessage_SchedulerEnvelope)(nil),
+		(*ControlMessage_ContainerListRequest)(nil),
+		(*ControlMessage_ContainerInspectRequest)(nil),
+		(*ControlMessage_ContainerLogStreamRequest)(nil),
 	}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
@@ -2315,7 +3257,7 @@ func file_internal_shared_grpcapi_agent_control_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_internal_shared_grpcapi_agent_control_proto_rawDesc), len(file_internal_shared_grpcapi_agent_control_proto_rawDesc)),
 			NumEnums:      5,
-			NumMessages:   20,
+			NumMessages:   30,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

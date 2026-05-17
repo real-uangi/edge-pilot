@@ -1,8 +1,8 @@
 package controlplane
 
 import (
-	"edge-pilot/internal/scheduler/domain"
 	schedulerapp "edge-pilot/internal/scheduler/application"
+	"edge-pilot/internal/scheduler/domain"
 	"edge-pilot/internal/shared/grpcapi"
 	"edge-pilot/internal/shared/model"
 	"testing"
@@ -43,9 +43,9 @@ func TestHandleRelayExecutorMessageRejectsServiceInstanceHelloWithoutRelaySessio
 			LiveSlot:   grpcapi.Slot_SLOT_BLUE,
 			Metadata: map[string]string{
 				"edge_pilot_service_instance": "true",
-				"service_id":                 uuid.New().String(),
-				"release_id":                 "r1",
-				"container_id":               "abcdef0123456789",
+				"service_id":                  uuid.New().String(),
+				"release_id":                  "r1",
+				"container_id":                "abcdef0123456789",
 			},
 		}},
 	})
@@ -70,9 +70,9 @@ func TestHandleRelayExecutorMessageRegistersServiceInstanceWithServiceID(t *test
 			LiveSlot:   grpcapi.Slot_SLOT_BLUE,
 			Metadata: map[string]string{
 				"edge_pilot_service_instance": "true",
-				"service_id":                 serviceID,
-				"release_id":                 releaseID,
-				"container_id":               containerID,
+				"service_id":                  serviceID,
+				"release_id":                  releaseID,
+				"container_id":                containerID,
 			},
 		}},
 	})
@@ -106,7 +106,7 @@ func (r *schedulerAuthRepo) ListJobs() ([]model.SchedulerJob, error) { panic("no
 func (r *schedulerAuthRepo) ListJobsDue(now time.Time, limit int) ([]model.SchedulerJob, error) {
 	panic("not implemented")
 }
-func (r *schedulerAuthRepo) DeleteJob(id uuid.UUID) error { panic("not implemented") }
+func (r *schedulerAuthRepo) DeleteJob(id uuid.UUID) error               { panic("not implemented") }
 func (r *schedulerAuthRepo) CreateRun(run *model.SchedulerJobRun) error { panic("not implemented") }
 func (r *schedulerAuthRepo) UpdateRun(run *model.SchedulerJobRun) error { panic("not implemented") }
 func (r *schedulerAuthRepo) GetRun(id uuid.UUID) (*model.SchedulerJobRun, error) {

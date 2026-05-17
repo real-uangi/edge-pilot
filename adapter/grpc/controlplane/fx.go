@@ -1,6 +1,7 @@
 package controlplane
 
 import (
+	"edge-pilot/internal/agent/application/managedcontainer"
 	"edge-pilot/internal/agent/application/proxyconfig"
 	releasedomain "edge-pilot/internal/release/domain"
 	schedulerapp "edge-pilot/internal/scheduler/application"
@@ -15,6 +16,7 @@ var Module = fx.Module(
 		NewSchedulerSessionHub,
 		func(hub *sessionHub) releasedomain.TaskDispatcher { return hub },
 		func(hub *sessionHub) proxyconfig.HAProxyConfigRequester { return hub },
+		func(hub *sessionHub) managedcontainer.ContainerRuntimeRequester { return hub },
 		func(hub *schedulerSessionHub) schedulerapp.RunDispatcher { return hub },
 		NewProxyConfigPublisher,
 		NewServer,

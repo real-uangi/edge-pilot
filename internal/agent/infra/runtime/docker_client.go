@@ -305,6 +305,39 @@ func (c *DockerClient) InspectContainer(ctx context.Context, containerID string)
 	return status, nil
 }
 
+func (c *DockerClient) StreamContainerLogs(ctx context.Context, containerID string, tailLines int, stdout, stderr, follow bool) (io.ReadCloser, error) {
+	query := fmt.Sprintf("/containers/%s/logs?", url.PathEscape(containerID))
+	params := []string{}
+	if stdout {
+		params = append(params, "stdout=1")
+	}
+	if stderr {
+		params = append(params, "stderr=1")
+	}
+	if follow {
+		params = append(params, "follow=1")
+	}
+	if tailLines > 0 {
+		params = append(params, fmt.Sprintf("tail=%d", tailLines))
+	}
+	query += strings.Join(params, "&")
+
+	req, err := c.endpoint.newRequest(ctx, http.MethodGet, query, nil)
+	if err != nil {
+		return nil, err
+	}
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	if resp.StatusCode >= 300 {
+		body, _ := io.ReadAll(resp.Body)
+		resp.Body.Close()
+		return nil, fmt.Errorf("docker logs stream failed: %s %s", resp.Status, strings.TrimSpace(string(body)))
+	}
+	return resp.Body, nil
+}
+
 func (c *DockerClient) ReadContainerLogs(ctx context.Context, containerID string, tailLines int, maxBytes int) (string, error) {
 	req, err := c.endpoint.newRequest(ctx, http.MethodGet, fmt.Sprintf("/containers/%s/logs?stdout=1&stderr=1&tail=%d", url.PathEscape(containerID), tailLines), nil)
 	if err != nil {

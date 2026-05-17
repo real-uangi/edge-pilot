@@ -10,6 +10,7 @@ const navItems = [
   { to: "/services", label: "服务" },
   { to: "/registry-credentials", label: "镜像仓库" },
   { to: "/agents", label: "节点" },
+  { to: "/instances", label: "受管实例" },
   { to: "/releases", label: "发布" },
   { to: "/scheduler", label: "定时任务" },
   { to: "/scheduler/history", label: "执行历史" },

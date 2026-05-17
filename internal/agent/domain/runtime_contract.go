@@ -4,6 +4,7 @@ import (
 	"context"
 	"edge-pilot/internal/shared/grpcapi"
 	"errors"
+	"io"
 	"strings"
 )
 
@@ -16,6 +17,7 @@ type DockerRuntime interface {
 	FindManagedContainerByIdentity(context.Context, ManagedContainerIdentity) (*ManagedContainer, error)
 	ResolveListenAddress(context.Context, string, int) (string, error)
 	ReadContainerLogs(context.Context, string, int, int) (string, error)
+	StreamContainerLogs(context.Context, string, int, bool, bool, bool) (io.ReadCloser, error)
 	RemoveContainer(context.Context, string) error
 	ListManagedContainers(context.Context, string, string) ([]*ManagedContainer, error)
 }

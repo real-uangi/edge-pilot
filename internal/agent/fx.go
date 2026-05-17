@@ -3,6 +3,7 @@ package agent
 import (
 	"context"
 	"edge-pilot/internal/agent/application/containerindex"
+	"edge-pilot/internal/agent/application/managedcontainer"
 	"edge-pilot/internal/agent/application/proxyconfig"
 	"edge-pilot/internal/agent/application/registry"
 	"edge-pilot/internal/agent/application/taskexec"
@@ -70,6 +71,7 @@ var ControlPlaneModule = fx.Module(
 		provideRegistryService,
 		provideProxyConfigAgentOnlineChecker,
 		proxyconfig.NewHAProxyConfigService,
+		managedcontainer.NewManagedContainerService,
 	),
 )
 

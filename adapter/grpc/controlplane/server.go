@@ -29,8 +29,11 @@ type sessionHub struct {
 	sessions map[string]*agentSession
 	codec    *secret.Codec
 
-	pendingMu            sync.Mutex
-	pendingConfigRequest map[string]chan *grpcapi.HAProxyConfigResponse
+	pendingMu               sync.Mutex
+	pendingConfigRequest    map[string]chan *grpcapi.HAProxyConfigResponse
+	pendingListResponses    map[string]chan *grpcapi.ContainerListResponse
+	pendingInspectResponses map[string]chan *grpcapi.ContainerInspectResponse
+	logStreams              *LogStreamManager
 }
 
 type agentSession struct {
@@ -43,9 +46,12 @@ type agentSession struct {
 
 func NewSessionHub(codec *secret.Codec) *sessionHub {
 	return &sessionHub{
-		sessions:             make(map[string]*agentSession),
-		codec:                codec,
-		pendingConfigRequest: make(map[string]chan *grpcapi.HAProxyConfigResponse),
+		sessions:                make(map[string]*agentSession),
+		codec:                   codec,
+		pendingConfigRequest:    make(map[string]chan *grpcapi.HAProxyConfigResponse),
+		pendingListResponses:    make(map[string]chan *grpcapi.ContainerListResponse),
+		pendingInspectResponses: make(map[string]chan *grpcapi.ContainerInspectResponse),
+		logStreams:              NewLogStreamManager(),
 	}
 }
 
@@ -296,6 +302,12 @@ func (s *Server) Connect(stream grpcapi.AgentControl_ConnectServer) (err error) 
 			}
 		case message.GetHaproxyConfigResponse() != nil:
 			s.hub.resolveHAProxyConfigResponse(message.GetHaproxyConfigResponse())
+		case message.GetContainerListResponse() != nil:
+			s.hub.resolveContainerListResponse(message.GetContainerListResponse())
+		case message.GetContainerInspectResponse() != nil:
+			s.hub.resolveContainerInspectResponse(message.GetContainerInspectResponse())
+		case message.GetContainerLogChunk() != nil:
+			s.hub.logStreams.ForwardChunk(message.GetContainerLogChunk())
 		case message.GetSchedulerEnvelope() != nil:
 			if s.schedulerRelay != nil {
 				if err := s.schedulerRelay.HandleRelayEnvelope(hello.GetAgentId(), message.GetSchedulerEnvelope()); err != nil {
@@ -342,6 +354,13 @@ func (h *sessionHub) resolveHAProxyConfigResponse(response *grpcapi.HAProxyConfi
 	}
 }
 
+func (h *sessionHub) getSession(agentID string) (*agentSession, bool) {
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+	session, ok := h.sessions[agentID]
+	return session, ok
+}
+
 func (h *sessionHub) failPendingByAgent(agentID string) {
 	prefix := agentID + ":"
 	h.pendingMu.Lock()
@@ -349,6 +368,24 @@ func (h *sessionHub) failPendingByAgent(agentID string) {
 	for key, ch := range h.pendingConfigRequest {
 		if len(key) >= len(prefix) && key[:len(prefix)] == prefix {
 			delete(h.pendingConfigRequest, key)
+			select {
+			case ch <- nil:
+			default:
+			}
+		}
+	}
+	for key, ch := range h.pendingListResponses {
+		if len(key) >= len(prefix) && key[:len(prefix)] == prefix {
+			delete(h.pendingListResponses, key)
+			select {
+			case ch <- nil:
+			default:
+			}
+		}
+	}
+	for key, ch := range h.pendingInspectResponses {
+		if len(key) >= len(prefix) && key[:len(prefix)] == prefix {
+			delete(h.pendingInspectResponses, key)
 			select {
 			case ch <- nil:
 			default:

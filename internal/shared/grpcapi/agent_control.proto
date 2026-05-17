@@ -37,6 +37,9 @@ message AgentMessage {
     StatsReport stats = 4;
     HAProxyConfigResponse haproxy_config_response = 5;
     SchedulerRelayEnvelope scheduler_envelope = 6;
+    ContainerListResponse container_list_response = 7;
+    ContainerInspectResponse container_inspect_response = 8;
+    ContainerLogChunk container_log_chunk = 9;
   }
 }
 
@@ -47,6 +50,9 @@ message ControlMessage {
     ProxyConfigSnapshot proxy_config = 3;
     HAProxyConfigRequest haproxy_config_request = 4;
     SchedulerRelayEnvelope scheduler_envelope = 5;
+    ContainerListRequest container_list_request = 6;
+    ContainerInspectRequest container_inspect_request = 7;
+    ContainerLogStreamRequest container_log_stream_request = 8;
   }
 }
 
@@ -220,4 +226,88 @@ message HAProxyConfigResponse {
   string agent_id = 2;
   string config = 3;
   string error_message = 4;
+}
+
+// ========== 容器列表查询 ==========
+
+message ContainerListRequest {
+  string request_id = 1;
+  string agent_id = 2;
+}
+
+message ContainerSummary {
+  string container_id = 1;
+  string name = 2;
+  string state = 3;
+  string image = 4;
+  string service_id = 5;
+  string service_key = 6;
+  string release_id = 7;
+  Slot slot = 8;
+  int64 created_at = 9;
+}
+
+message ContainerListResponse {
+  string request_id = 1;
+  string agent_id = 2;
+  repeated ContainerSummary containers = 3;
+  string error_message = 4;
+}
+
+// ========== 容器详情查询 ==========
+
+message ContainerInspectRequest {
+  string request_id = 1;
+  string agent_id = 2;
+  string container_id = 3;
+}
+
+message ContainerDetails {
+  string container_id = 1;
+  string name = 2;
+  string state = 3;
+  string image = 4;
+  string service_id = 5;
+  string service_key = 6;
+  string release_id = 7;
+  Slot slot = 8;
+  bool running = 9;
+  string health = 10;
+  int32 restart_count = 11;
+  string ip_address = 12;
+  map<string, string> labels = 13;
+  map<string, string> env = 14;
+  repeated string command = 15;
+  repeated string entrypoint = 16;
+  repeated VolumeMount volumes = 17;
+  repeated PublishedPort ports = 18;
+  double cpu_limit = 19;
+  int64 memory_limit = 20;
+  int64 created_at = 21;
+}
+
+message ContainerInspectResponse {
+  string request_id = 1;
+  string agent_id = 2;
+  ContainerDetails details = 3;
+  string error_message = 4;
+}
+
+// ========== 日志流 ==========
+
+message ContainerLogStreamRequest {
+  string request_id = 1;
+  string agent_id = 2;
+  string container_id = 3;
+  bool follow = 4;
+  int32 tail_lines = 5;
+}
+
+message ContainerLogChunk {
+  string request_id = 1;
+  string agent_id = 2;
+  string container_id = 3;
+  bytes data = 4;
+  bool stderr = 5;
+  int64 timestamp = 6;
 }
