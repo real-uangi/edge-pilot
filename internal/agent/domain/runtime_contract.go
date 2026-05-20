@@ -2,10 +2,11 @@ package domain
 
 import (
 	"context"
-	"edge-pilot/internal/shared/grpcapi"
 	"errors"
 	"io"
 	"strings"
+
+	"edge-pilot/internal/shared/grpcapi"
 )
 
 var ErrProxyNotReady = errors.New("proxy stack not ready")
@@ -13,6 +14,7 @@ var ErrProxyNotReady = errors.New("proxy stack not ready")
 type DockerRuntime interface {
 	DeployContainer(context.Context, *grpcapi.TaskCommand) (*ContainerRuntime, error)
 	InspectContainer(context.Context, string) (*ContainerStatus, error)
+	GetContainerDetails(context.Context, string) (*ContainerDetails, error)
 	FindContainerByName(context.Context, string) (*ManagedContainer, error)
 	FindManagedContainerByIdentity(context.Context, ManagedContainerIdentity) (*ManagedContainer, error)
 	ResolveListenAddress(context.Context, string, int) (string, error)

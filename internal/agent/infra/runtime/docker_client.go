@@ -278,8 +278,8 @@ func consumeDockerPullStream(r io.Reader) error {
 	}
 }
 
-func (c *DockerClient) InspectContainer(ctx context.Context, containerID string) (*agentdomain.ContainerStatus, error) {
-	req, err := c.endpoint.newRequest(ctx, http.MethodGet, "/containers/"+containerID+"/json", nil)
+func (c *DockerClient) fetchDockerInspect(ctx context.Context, containerID string) (*dockerInspectResponse, error) {
+	req, err := c.endpoint.newRequest(ctx, http.MethodGet, "/containers/"+url.PathEscape(containerID)+"/json", nil)
 	if err != nil {
 		return nil, err
 	}
@@ -295,6 +295,14 @@ func (c *DockerClient) InspectContainer(ctx context.Context, containerID string)
 	if err := json.NewDecoder(resp.Body).Decode(&inspectResp); err != nil {
 		return nil, err
 	}
+	return &inspectResp, nil
+}
+
+func (c *DockerClient) InspectContainer(ctx context.Context, containerID string) (*agentdomain.ContainerStatus, error) {
+	inspectResp, err := c.fetchDockerInspect(ctx, containerID)
+	if err != nil {
+		return nil, err
+	}
 	status := &agentdomain.ContainerStatus{
 		State:   inspectResp.State.Status,
 		Running: inspectResp.State.Running,
@@ -303,6 +311,118 @@ func (c *DockerClient) InspectContainer(ctx context.Context, containerID string)
 		status.Health = inspectResp.State.Health.Status
 	}
 	return status, nil
+}
+
+func (c *DockerClient) GetContainerDetails(ctx context.Context, containerID string) (*agentdomain.ContainerDetails, error) {
+	inspectResp, err := c.fetchDockerInspect(ctx, containerID)
+	if err != nil {
+		return nil, err
+	}
+
+	details := &agentdomain.ContainerDetails{
+		ContainerID:  inspectResp.ID,
+		Name:         strings.TrimPrefix(inspectResp.Name, "/"),
+		State:        inspectResp.State.Status,
+		Image:        inspectResp.Config.Image,
+		Running:      inspectResp.State.Running,
+		RestartCount: int32(inspectResp.RestartCount),
+		Labels:       inspectResp.Config.Labels,
+		Env:          parseEnv(inspectResp.Config.Env),
+		Command:      inspectResp.Config.Cmd,
+		Entrypoint:   inspectResp.Config.Entrypoint,
+		CPULimit:     nanoCPUsToCores(inspectResp.HostConfig.NanoCpus),
+		MemoryLimit:  inspectResp.HostConfig.Memory / (1024 * 1024),
+		CreatedAt:    inspectResp.Created.Unix(),
+	}
+	if inspectResp.State.Health != nil {
+		details.Health = inspectResp.State.Health.Status
+	}
+	if endpoint, ok := inspectResp.NetworkSettings.Networks[c.cfg.ProxyNetworkName]; ok {
+		details.IPAddress = endpoint.IPAddress
+	}
+	if binds := inspectResp.HostConfig.Binds; len(binds) > 0 {
+		details.Volumes = parseVolumeMounts(binds)
+	}
+	if ports := inspectResp.HostConfig.PortBindings; len(ports) > 0 {
+		details.Ports = parsePublishedPorts(ports)
+	}
+	return details, nil
+}
+
+func nanoCPUsToCores(nanoCPUs int64) float64 {
+	if nanoCPUs <= 0 {
+		return 0
+	}
+	return float64(nanoCPUs) / 1_000_000_000
+}
+
+func isSensitiveEnvKey(key string) bool {
+	upper := strings.ToUpper(key)
+	sensitive := []string{"PASSWORD", "SECRET", "KEY", "TOKEN", "CREDENTIAL", "AUTH"}
+	for _, s := range sensitive {
+		if strings.Contains(upper, s) {
+			return true
+		}
+	}
+	return false
+}
+
+func parseEnv(env []string) map[string]string {
+	out := make(map[string]string, len(env))
+	for _, e := range env {
+		if idx := strings.IndexByte(e, '='); idx > 0 {
+			key := e[:idx]
+			value := e[idx+1:]
+			if isSensitiveEnvKey(key) {
+				value = "[REDACTED]"
+			}
+			out[key] = value
+		}
+	}
+	return out
+}
+
+func parseVolumeMounts(binds []string) []*agentdomain.VolumeMount {
+	out := make([]*agentdomain.VolumeMount, 0, len(binds))
+	for _, bind := range binds {
+		parts := strings.SplitN(bind, ":", 3)
+		if len(parts) < 2 {
+			continue
+		}
+		vm := &agentdomain.VolumeMount{Source: parts[0], Target: parts[1]}
+		if len(parts) == 3 {
+			for _, opt := range strings.Split(parts[2], ",") {
+				if opt == "ro" {
+					vm.ReadOnly = true
+					break
+				}
+			}
+		}
+		out = append(out, vm)
+	}
+	return out
+}
+
+func parsePublishedPorts(portBindings map[string][]dockerPortBinding) []*agentdomain.PublishedPort {
+	out := make([]*agentdomain.PublishedPort, 0, len(portBindings))
+	for containerPortProto, bindings := range portBindings {
+		containerPortStr := strings.SplitN(containerPortProto, "/", 2)[0]
+		containerPort, err := strconv.Atoi(containerPortStr)
+		if err != nil {
+			continue
+		}
+		for _, binding := range bindings {
+			hostPort, err := strconv.Atoi(binding.HostPort)
+			if err != nil {
+				continue
+			}
+			out = append(out, &agentdomain.PublishedPort{
+				ContainerPort: int32(containerPort),
+				HostPort:      int32(hostPort),
+			})
+		}
+	}
+	return out
 }
 
 func (c *DockerClient) StreamContainerLogs(ctx context.Context, containerID string, tailLines int, stdout, stderr, follow bool) (io.ReadCloser, error) {
@@ -536,11 +656,16 @@ type dockerCreateResponse struct {
 }
 
 type dockerInspectResponse struct {
-	ID           string `json:"Id"`
-	Name         string `json:"Name"`
-	RestartCount int    `json:"RestartCount"`
+	ID           string    `json:"Id"`
+	Name         string    `json:"Name"`
+	Created      time.Time `json:"Created"`
+	RestartCount int       `json:"RestartCount"`
 	Config       struct {
-		Labels map[string]string `json:"Labels"`
+		Image      string            `json:"Image"`
+		Labels     map[string]string `json:"Labels"`
+		Env        []string          `json:"Env"`
+		Cmd        []string          `json:"Cmd"`
+		Entrypoint []string          `json:"Entrypoint"`
 	} `json:"Config"`
 	State struct {
 		Status  string `json:"Status"`
@@ -549,6 +674,12 @@ type dockerInspectResponse struct {
 			Status string `json:"Status"`
 		} `json:"Health"`
 	} `json:"State"`
+	HostConfig struct {
+		Binds        []string                       `json:"Binds"`
+		PortBindings map[string][]dockerPortBinding `json:"PortBindings"`
+		NanoCpus     int64                          `json:"NanoCpus"`
+		Memory       int64                          `json:"Memory"`
+	} `json:"HostConfig"`
 	NetworkSettings struct {
 		Networks map[string]struct {
 			IPAddress string `json:"IPAddress"`
@@ -557,10 +688,12 @@ type dockerInspectResponse struct {
 }
 
 type dockerContainerSummary struct {
-	ID     string            `json:"Id"`
-	Names  []string          `json:"Names"`
-	State  string            `json:"State"`
-	Labels map[string]string `json:"Labels"`
+	ID      string            `json:"Id"`
+	Names   []string          `json:"Names"`
+	State   string            `json:"State"`
+	Image   string            `json:"Image"`
+	Created int64             `json:"Created"`
+	Labels  map[string]string `json:"Labels"`
 }
 
 func flattenEnv(m map[string]string) []string {
@@ -640,6 +773,8 @@ func toManagedContainer(resp *dockerInspectResponse) *agentdomain.ManagedContain
 			ListenAddress: "",
 		},
 		Name:       strings.TrimPrefix(resp.Name, "/"),
+		Image:      resp.Config.Image,
+		CreatedAt:  resp.Created.Unix(),
 		Managed:    labels[agentdomain.ManagedLabelKey] == agentdomain.ManagedLabelValue,
 		AgentID:    labels[agentdomain.ManagedLabelAgentID],
 		ServiceID:  labels[agentdomain.ManagedLabelServiceID],
@@ -660,6 +795,8 @@ func summaryToManagedContainer(item dockerContainerSummary) *agentdomain.Managed
 			ContainerID: item.ID,
 		},
 		Name:       name,
+		Image:      item.Image,
+		CreatedAt:  item.Created,
 		Managed:    item.Labels[agentdomain.ManagedLabelKey] == agentdomain.ManagedLabelValue,
 		AgentID:    item.Labels[agentdomain.ManagedLabelAgentID],
 		ServiceID:  item.Labels[agentdomain.ManagedLabelServiceID],

@@ -78,6 +78,7 @@ func (h *sessionHub) unregister(agentID string) {
 		delete(h.sessions, agentID)
 	}
 	h.failPendingByAgent(agentID)
+	h.logStreams.UnregisterByAgent(agentID)
 }
 
 func (h *sessionHub) DispatchTask(agentID string, task *model.Task) error {

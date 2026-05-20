@@ -5,6 +5,7 @@ import (
 	agentdomain "edge-pilot/internal/agent/domain"
 	"edge-pilot/internal/shared/config"
 	"edge-pilot/internal/shared/grpcapi"
+	"io"
 	"testing"
 )
 
@@ -135,6 +136,10 @@ type fakeDockerRuntime struct{}
 func (f *fakeDockerRuntime) DeployContainer(context.Context, *grpcapi.TaskCommand) (*agentdomain.ContainerRuntime, error) {
 	panic("not implemented")
 }
+func (f *fakeDockerRuntime) GetContainerDetails(context.Context, string) (*agentdomain.ContainerDetails, error) {
+	panic("not implemented")
+}
+
 func (f *fakeDockerRuntime) InspectContainer(context.Context, string) (*agentdomain.ContainerStatus, error) {
 	panic("not implemented")
 }
@@ -148,6 +153,9 @@ func (f *fakeDockerRuntime) ResolveListenAddress(context.Context, string, int) (
 	panic("not implemented")
 }
 func (f *fakeDockerRuntime) ReadContainerLogs(context.Context, string, int, int) (string, error) {
+	panic("not implemented")
+}
+func (f *fakeDockerRuntime) StreamContainerLogs(context.Context, string, int, bool, bool, bool) (io.ReadCloser, error) {
 	panic("not implemented")
 }
 func (f *fakeDockerRuntime) RemoveContainer(context.Context, string) error {

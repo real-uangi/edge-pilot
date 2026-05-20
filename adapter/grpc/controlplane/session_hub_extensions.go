@@ -171,6 +171,27 @@ func (m *LogStreamManager) Unregister(agentID, containerID string) {
 	m.mu.Unlock()
 }
 
+func (m *LogStreamManager) UnregisterByAgent(agentID string) {
+	prefix := agentID + ":"
+	m.mu.RLock()
+	var keys []string
+	for key := range m.streams {
+		if len(key) >= len(prefix) && key[:len(prefix)] == prefix {
+			keys = append(keys, key)
+		}
+	}
+	m.mu.RUnlock()
+
+	m.mu.Lock()
+	for _, key := range keys {
+		if ch, ok := m.streams[key]; ok {
+			close(ch)
+			delete(m.streams, key)
+		}
+	}
+	m.mu.Unlock()
+}
+
 func (m *LogStreamManager) ForwardChunk(chunk *grpcapi.ContainerLogChunk) bool {
 	key := chunk.GetAgentId() + ":" + chunk.GetContainerId()
 	m.mu.RLock()
@@ -179,6 +200,9 @@ func (m *LogStreamManager) ForwardChunk(chunk *grpcapi.ContainerLogChunk) bool {
 	if !ok {
 		return false
 	}
+	defer func() {
+		recover()
+	}()
 	select {
 	case ch <- chunk:
 		return true

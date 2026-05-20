@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { Fragment, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { getErrorMessage } from "../../../shared/lib/api-client";
 import { formatDateTime } from "../../../shared/lib/format";
@@ -92,9 +92,8 @@ export function InstancesPage() {
               </thead>
               <tbody>
                 {filteredInstances.map((instance) => (
-                  <>
+                  <Fragment key={instance.containerId}>
                     <tr
-                      key={instance.containerId}
                       className={styles.clickableRow}
                       onClick={() =>
                         setExpandedId(expandedId === instance.containerId ? null : instance.containerId)
@@ -137,7 +136,7 @@ export function InstancesPage() {
                         </td>
                       </tr>
                     )}
-                  </>
+                  </Fragment>
                 ))}
               </tbody>
             </table>

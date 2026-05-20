@@ -14,8 +14,11 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/real-uangi/allingo/common/api"
+	"github.com/real-uangi/allingo/common/log"
 	"github.com/real-uangi/allingo/common/result"
 )
+
+var instancesLogger = log.NewStdLogger("http.instances")
 
 type instanceAdminActions interface {
 	ListContainers() ([]dto.ManagedInstanceOutput, error)
@@ -80,8 +83,7 @@ func registerAdminInstanceRoutes(admin *gin.RouterGroup, instances instanceAdmin
 		})
 
 		if err != nil && err != context.Canceled {
-			// Log error but don't write HTTP response since SSE already started
-			// TODO: add structured logging
+			instancesLogger.Errorf(err, "sse log stream error: agentId=%s containerId=%s", agentID, containerID)
 		}
 	})
 }

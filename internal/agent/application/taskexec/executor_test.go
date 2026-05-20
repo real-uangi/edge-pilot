@@ -6,6 +6,8 @@ import (
 	"edge-pilot/internal/shared/config"
 	"edge-pilot/internal/shared/grpcapi"
 	"errors"
+	"fmt"
+	"io"
 	"strings"
 	"testing"
 )
@@ -397,6 +399,10 @@ func (f *fakeDockerRuntime) DeployContainer(ctx context.Context, task *grpcapi.T
 	return &ContainerRuntime{ContainerID: "new-container", ListenAddress: "172.29.0.22:8080"}, nil
 }
 
+func (f *fakeDockerRuntime) GetContainerDetails(ctx context.Context, containerID string) (*agentdomain.ContainerDetails, error) {
+	return nil, fmt.Errorf("not implemented")
+}
+
 func (f *fakeDockerRuntime) InspectContainer(ctx context.Context, containerID string) (*ContainerStatus, error) {
 	if status, ok := f.statusByID[containerID]; ok {
 		copyStatus := *status
@@ -436,6 +442,10 @@ func (f *fakeDockerRuntime) ReadContainerLogs(ctx context.Context, containerID s
 		return logs, nil
 	}
 	return "", nil
+}
+
+func (f *fakeDockerRuntime) StreamContainerLogs(ctx context.Context, containerID string, tailLines int, follow bool, timestamps bool, stderr bool) (io.ReadCloser, error) {
+	return nil, nil
 }
 
 func (f *fakeDockerRuntime) RemoveContainer(ctx context.Context, containerID string) error {

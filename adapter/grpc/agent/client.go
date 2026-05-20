@@ -12,6 +12,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"strings"
 	"sync"
 	"time"
 
@@ -325,10 +326,12 @@ func (c *Client) handleContainerListRequest(ctx context.Context, req *grpcapi.Co
 				ContainerId: container.ContainerID,
 				Name:        container.Name,
 				State:       container.State,
+				Image:       container.Image,
 				ServiceId:   container.ServiceID,
 				ServiceKey:  container.ServiceKey,
 				ReleaseId:   container.ReleaseID,
 				Slot:        container.Slot,
+				CreatedAt:   container.CreatedAt,
 			})
 		}
 		response.Containers = summaries
@@ -349,9 +352,14 @@ func (c *Client) handleContainerInspectRequest(ctx context.Context, req *grpcapi
 		AgentId:   c.cfg.AgentID,
 	}
 
-	status, err := c.docker.InspectContainer(ctx, req.GetContainerId())
+	details, err := c.docker.GetContainerDetails(ctx, req.GetContainerId())
 	if err != nil {
-		response.ErrorMessage = err.Error()
+		c.logger.Errorf(err, "container inspect failed: containerId=%s", req.GetContainerId())
+		if strings.Contains(err.Error(), "404") {
+			response.ErrorMessage = "container not found"
+		} else {
+			response.ErrorMessage = "container inspect failed"
+		}
 		outbound <- &grpcapi.AgentMessage{
 			Payload: &grpcapi.AgentMessage_ContainerInspectResponse{
 				ContainerInspectResponse: response,
@@ -360,14 +368,36 @@ func (c *Client) handleContainerInspectRequest(ctx context.Context, req *grpcapi
 		return
 	}
 
-	details := &grpcapi.ContainerDetails{
-		ContainerId: req.GetContainerId(),
-		State:       status.State,
-		Running:     status.Running,
-		Health:      status.Health,
+	response.Details = &grpcapi.ContainerDetails{
+		ContainerId:  details.ContainerID,
+		Name:         details.Name,
+		State:        details.State,
+		Image:        details.Image,
+		Running:      details.Running,
+		Health:       details.Health,
+		RestartCount: details.RestartCount,
+		Labels:       details.Labels,
+		Env:          details.Env,
+		Command:      details.Command,
+		Entrypoint:   details.Entrypoint,
+		IpAddress:    details.IPAddress,
+		CpuLimit:     details.CPULimit,
+		MemoryLimit:  details.MemoryLimit,
+		CreatedAt:    details.CreatedAt,
 	}
-
-	response.Details = details
+	for _, v := range details.Volumes {
+		response.Details.Volumes = append(response.Details.Volumes, &grpcapi.VolumeMount{
+			Source:   v.Source,
+			Target:   v.Target,
+			ReadOnly: v.ReadOnly,
+		})
+	}
+	for _, p := range details.Ports {
+		response.Details.Ports = append(response.Details.Ports, &grpcapi.PublishedPort{
+			ContainerPort: p.ContainerPort,
+			HostPort:      p.HostPort,
+		})
+	}
 	outbound <- &grpcapi.AgentMessage{
 		Payload: &grpcapi.AgentMessage_ContainerInspectResponse{
 			ContainerInspectResponse: response,
@@ -377,6 +407,7 @@ func (c *Client) handleContainerInspectRequest(ctx context.Context, req *grpcapi
 
 type logStreamState struct {
 	cancel context.CancelFunc
+	done   chan struct{}
 }
 
 func (c *Client) startLogStream(ctx context.Context, req *grpcapi.ContainerLogStreamRequest, outbound chan<- *grpcapi.AgentMessage) {
@@ -385,11 +416,27 @@ func (c *Client) startLogStream(ctx context.Context, req *grpcapi.ContainerLogSt
 	if c.logStreams == nil {
 		c.logStreams = make(map[string]*logStreamState)
 	}
-	c.logStreams[req.GetContainerId()] = &logStreamState{cancel: cancel}
+	if existing, ok := c.logStreams[req.GetContainerId()]; ok {
+		existing.cancel()
+		<-existing.done
+	}
+	done := make(chan struct{})
+	c.logStreams[req.GetContainerId()] = &logStreamState{cancel: cancel, done: done}
 	c.logMu.Unlock()
 
 	go func() {
+		defer func() {
+			recover()
+		}()
+		defer close(done)
 		defer cancel()
+		defer func() {
+			c.logMu.Lock()
+			if state, ok := c.logStreams[req.GetContainerId()]; ok && state.done == done {
+				delete(c.logStreams, req.GetContainerId())
+			}
+			c.logMu.Unlock()
+		}()
 		reader, err := c.docker.StreamContainerLogs(streamCtx, req.GetContainerId(), int(req.GetTailLines()), true, true, true)
 		if err != nil {
 			c.logger.Errorf(err, "failed to start log stream: containerId=%s", req.GetContainerId())
