@@ -591,3 +591,320 @@
     font-size: clamp(24px, 6vw, 34px);
   }
 }
+
+/* ===== Pipeline Timeline ===== */
+
+.pipelineContainer {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  padding: 8px 0;
+}
+
+.pipelineStep {
+  display: flex;
+  gap: 0;
+  position: relative;
+}
+
+.pipelineStep:last-child .pipelineConnector {
+  display: none;
+}
+
+.pipelineIndicator {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 36px;
+  flex-shrink: 0;
+  position: relative;
+}
+
+.pipelineNode {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  border: 2px solid var(--ep-outline);
+  background: var(--ep-surface-low);
+  flex-shrink: 0;
+  position: relative;
+  z-index: 2;
+  transition: all 0.3s var(--ep-ease-standard);
+}
+
+.pipelineNodeSuccess {
+  background: var(--ep-secondary);
+  border-color: var(--ep-secondary);
+}
+
+.pipelineNodeFailed {
+  background: var(--ep-danger);
+  border-color: var(--ep-danger);
+}
+
+.pipelineNodeRunning {
+  background: var(--ep-primary);
+  border-color: var(--ep-primary);
+  animation: pipelinePulse 1.5s ease-in-out infinite;
+}
+
+.pipelineNodeWarning {
+  background: var(--ep-warning);
+  border-color: var(--ep-warning);
+}
+
+.pipelineConnector {
+  width: 2px;
+  flex: 1;
+  min-height: 24px;
+  background: var(--ep-outline-ghost);
+  position: relative;
+  margin-top: -1px;
+  margin-bottom: -1px;
+  z-index: 1;
+}
+
+.pipelineConnectorDone {
+  background: var(--ep-secondary);
+}
+
+.pipelineConnectorFailed {
+  background: var(--ep-danger);
+}
+
+.pipelineCard {
+  flex: 1;
+  margin-left: 12px;
+  margin-bottom: 16px;
+  padding: 14px 16px;
+  background: var(--ep-surface-mid);
+  border-radius: var(--ep-radius-md);
+  border: 1px solid var(--ep-outline-ghost);
+  cursor: pointer;
+  transition: all 0.2s var(--ep-ease-standard);
+  position: relative;
+  animation: fade-in-up var(--ep-motion-base) var(--ep-ease-standard) both;
+}
+
+.pipelineCard:hover {
+  background: var(--ep-surface-high);
+  border-color: var(--ep-outline);
+  transform: translateX(2px);
+}
+
+.pipelineCard:active {
+  transform: translateX(2px) scale(0.995);
+}
+
+.pipelineCardHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 8px;
+}
+
+.pipelineCardTitle {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--ep-text);
+  margin: 0;
+}
+
+.pipelineCardMeta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  margin-top: 8px;
+  font-size: 12px;
+  color: var(--ep-text-muted);
+  line-height: 1.5;
+}
+
+.pipelineCardMetaItem {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.pipelineCardMetaLabel {
+  color: var(--ep-text-dim);
+}
+
+.pipelineDuration {
+  font-family: var(--ep-font-mono);
+  font-weight: 600;
+  color: var(--ep-text);
+  font-size: 12px;
+}
+
+.pipelineDurationRunning {
+  color: var(--ep-primary);
+}
+
+/* Stagger animation delays for pipeline steps */
+.pipelineStep:nth-child(1) .pipelineCard { animation-delay: 0ms; }
+.pipelineStep:nth-child(2) .pipelineCard { animation-delay: 80ms; }
+.pipelineStep:nth-child(3) .pipelineCard { animation-delay: 160ms; }
+.pipelineStep:nth-child(4) .pipelineCard { animation-delay: 240ms; }
+.pipelineStep:nth-child(5) .pipelineCard { animation-delay: 320ms; }
+.pipelineStep:nth-child(6) .pipelineCard { animation-delay: 400ms; }
+.pipelineStep:nth-child(7) .pipelineCard { animation-delay: 480ms; }
+.pipelineStep:nth-child(8) .pipelineCard { animation-delay: 560ms; }
+
+@keyframes pipelinePulse {
+  0%, 100% {
+    transform: scale(1);
+    opacity: 1;
+    box-shadow: 0 0 0 0 rgba(0, 209, 255, 0.4);
+  }
+  50% {
+    transform: scale(1.15);
+    opacity: 0.9;
+    box-shadow: 0 0 0 6px rgba(0, 209, 255, 0);
+  }
+}
+
+/* ===== Modal ===== */
+
+.modalBackdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  z-index: 1000;
+  animation: modalFadeIn 0.2s var(--ep-ease-standard);
+}
+
+.modalBackdropClosing {
+  animation: modalFadeOut 0.2s var(--ep-ease-standard) forwards;
+}
+
+.modalContent {
+  background: var(--ep-surface-low);
+  border-radius: var(--ep-radius-lg);
+  border: 1px solid var(--ep-outline-ghost);
+  box-shadow: var(--ep-shadow-ambient);
+  width: 100%;
+  max-width: 800px;
+  max-height: 85vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  animation: modalSlideIn 0.25s var(--ep-ease-standard);
+}
+
+.modalContentClosing {
+  animation: modalSlideOut 0.2s var(--ep-ease-standard) forwards;
+}
+
+.modalHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--ep-outline-ghost);
+  flex-shrink: 0;
+}
+
+.modalTitle {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--ep-text);
+}
+
+.modalClose {
+  background: none;
+  border: none;
+  color: var(--ep-text-muted);
+  cursor: pointer;
+  padding: 4px;
+  border-radius: var(--ep-radius-sm);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s ease;
+}
+
+.modalClose:hover {
+  background: var(--ep-surface-mid);
+  color: var(--ep-text);
+}
+
+.modalBody {
+  flex: 1;
+  overflow-y: auto;
+  padding: 16px 20px;
+  min-height: 0;
+}
+
+.modalActions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 12px 20px;
+  border-top: 1px solid var(--ep-outline-ghost);
+  flex-shrink: 0;
+}
+
+@keyframes modalFadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes modalFadeOut {
+  from { opacity: 1; }
+  to { opacity: 0; }
+}
+
+@keyframes modalSlideIn {
+  from {
+    opacity: 0;
+    transform: translateY(-12px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes modalSlideOut {
+  from {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+  to {
+    opacity: 0;
+    transform: translateY(-8px) scale(0.98);
+  }
+}
+
+@media (max-width: 640px) {
+  .modalBackdrop {
+    padding: 12px;
+  }
+
+  .modalContent {
+    max-height: 90vh;
+    border-radius: var(--ep-radius-md);
+  }
+
+  .modalHeader,
+  .modalBody,
+  .modalActions {
+    padding-left: 14px;
+    padding-right: 14px;
+  }
+
+  .pipelineCardMeta {
+    flex-direction: column;
+    gap: 4px;
+  }
+}
