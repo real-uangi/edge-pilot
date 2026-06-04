@@ -1164,14 +1164,22 @@ type serviceBackendTarget struct {
 	Slot        grpcapi.Slot
 }
 
+const staticAssetPathRegex = `\.(avif|bmp|css|eot|gif|ico|jpeg|jpg|js|m4a|map|mjs|mp3|mp4|ogg|otf|png|svg|ttf|wasm|wav|webm|webmanifest|webp|woff|woff2)$`
+
+func staticAssetPathCondTest() string {
+	return "{ path -m reg -i " + staticAssetPathRegex + " }"
+}
+
 func serviceBackendResponseRules(serviceKey string, routePathPrefix string, currentReleaseID string, liveReleaseID string, betaReleaseID string, releaseRole string) []httpResponseRule {
 	cookieName := servicecatalogapp.StickyCookieName(serviceKey)
 	rules := []httpResponseRule{
 		{
-			Type:   "add-header",
-			Action: "add-header",
-			Header: "Set-Cookie",
-			Format: servicecatalogapp.BuildStickyCookie(cookieName, currentReleaseID, routePathPrefix),
+			Type:     "add-header",
+			Action:   "add-header",
+			Header:   "Set-Cookie",
+			Format:   servicecatalogapp.BuildStickyCookie(cookieName, currentReleaseID, routePathPrefix),
+			Cond:     "unless",
+			CondTest: staticAssetPathCondTest(),
 		},
 		{
 			Type:   "set-header",

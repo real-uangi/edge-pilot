@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"errors"
 	"reflect"
+	"regexp"
 	"strings"
 	"testing"
 
@@ -498,6 +499,8 @@ func TestReconcileLockedBuildsBackendResponseHeaderRules(t *testing.T) {
 	}
 	assertBackendResponseRule(t, blue.HTTPResponseRules, "Set-Cookie", "release-blue")
 	assertBackendResponseRule(t, green.HTTPResponseRules, "Set-Cookie", "release-green")
+	assertBackendStickyCookieRuleSkipsStaticAssets(t, blue.HTTPResponseRules)
+	assertBackendStickyCookieRuleSkipsStaticAssets(t, green.HTTPResponseRules)
 	assertBackendResponseRuleExact(t, blue.HTTPResponseRules, servicecatalogapp.CurrentReleaseIDHeaderName, "release-blue")
 	assertBackendResponseRuleExact(t, green.HTTPResponseRules, servicecatalogapp.CurrentReleaseIDHeaderName, "release-green")
 	assertBackendResponseRuleExact(t, blue.HTTPResponseRules, servicecatalogapp.LiveReleaseIDHeaderName, "release-green")
@@ -560,9 +563,52 @@ func TestReconcileLockedBuildsBackendResponseHeaderRules(t *testing.T) {
 			if strings.TrimSpace(rule.Type) != strings.TrimSpace(rule.Action) {
 				t.Fatalf("backend %s rule[%d] type should equal action, got %#v", backend.Name, i, rule)
 			}
+			if strings.EqualFold(strings.TrimSpace(rule.Header), "Set-Cookie") {
+				if strings.TrimSpace(rule.Cond) != "unless" || strings.TrimSpace(rule.CondTest) != staticAssetPathCondTest() {
+					t.Fatalf("backend %s Set-Cookie rule should skip static assets, got %#v", backend.Name, rule)
+				}
+				continue
+			}
 			if strings.TrimSpace(rule.Cond) != "" || strings.TrimSpace(rule.CondTest) != "" {
 				t.Fatalf("backend %s rule[%d] should be unconditional, got %#v", backend.Name, i, rule)
 			}
+		}
+	}
+}
+
+func TestStaticAssetPathRegexMatchesExpectedExtensions(t *testing.T) {
+	if got := staticAssetPathCondTest(); got != "{ path -m reg -i "+staticAssetPathRegex+" }" {
+		t.Fatalf("unexpected static asset cond test %q", got)
+	}
+
+	matcher := regexp.MustCompile("(?i)" + staticAssetPathRegex)
+	staticPaths := []string{
+		"/assets/app.js",
+		"/assets/app.mjs",
+		"/assets/app.css",
+		"/assets/app.js.map",
+		"/assets/app.wasm",
+		"/assets/logo.svg",
+		"/assets/font.woff2",
+		"/favicon.ico",
+		"/site.webmanifest",
+	}
+	for _, path := range staticPaths {
+		if !matcher.MatchString(path) {
+			t.Fatalf("expected static asset regex to match %q", path)
+		}
+	}
+
+	dynamicPaths := []string{
+		"/",
+		"/dashboard",
+		"/api/releases",
+		"/assets/app",
+		"/assets/js/app",
+	}
+	for _, path := range dynamicPaths {
+		if matcher.MatchString(path) {
+			t.Fatalf("expected static asset regex not to match %q", path)
 		}
 	}
 }
@@ -881,6 +927,20 @@ func assertBackendResponseRule(t *testing.T, rules []httpResponseRule, header st
 	}
 	if !strings.Contains(rule.Format, expectedContains) {
 		t.Fatalf("expected response header %q format contains %q, got %#v", header, expectedContains, *rule)
+	}
+}
+
+func assertBackendStickyCookieRuleSkipsStaticAssets(t *testing.T, rules []httpResponseRule) {
+	t.Helper()
+	rule := findBackendRule(rules, "Set-Cookie")
+	if rule == nil {
+		t.Fatalf("expected Set-Cookie response rule, got %#v", rules)
+	}
+	if strings.TrimSpace(rule.Cond) != "unless" {
+		t.Fatalf("expected Set-Cookie response rule cond unless, got %#v", *rule)
+	}
+	if strings.TrimSpace(rule.CondTest) != staticAssetPathCondTest() {
+		t.Fatalf("expected Set-Cookie response rule static asset cond %q, got %#v", staticAssetPathCondTest(), *rule)
 	}
 }
 
