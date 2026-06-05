@@ -334,7 +334,15 @@ func filterHTTPResponseRules(rules []httpResponseRule) []httpResponseRule {
 		if strings.TrimSpace(rule.Header) == "" {
 			continue
 		}
-		if strings.TrimSpace(rule.Format) == "" {
+		switch rule.Type {
+		case "add-header", "set-header":
+			if strings.TrimSpace(rule.Format) == "" {
+				continue
+			}
+			rule.Format = normalizeHAProxyFmt(rule.Format)
+		case "del-header":
+			rule.Format = ""
+		default:
 			continue
 		}
 		rule.Cond = strings.TrimSpace(rule.Cond)
@@ -351,7 +359,6 @@ func filterHTTPResponseRules(rules []httpResponseRule) []httpResponseRule {
 		} else if rule.Cond != "if" && rule.Cond != "unless" {
 			rule.Cond = "if"
 		}
-		rule.Format = normalizeHAProxyFmt(rule.Format)
 		out = append(out, rule)
 	}
 	for i := range out {

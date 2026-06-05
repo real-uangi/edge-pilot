@@ -643,6 +643,8 @@ func renderIntendedFrontendConfig(frontend frontendSection) string {
 		switch action {
 		case "set-header", "add-header":
 			actionLine = fmt.Sprintf("  http-request %s %s %s", action, strings.TrimSpace(rule.Header), strings.TrimSpace(rule.Format))
+		case "set-var":
+			actionLine = fmt.Sprintf("  http-request set-var(%s.%s) %s", strings.TrimSpace(rule.VarScope), strings.TrimSpace(rule.VarName), strings.TrimSpace(rule.VarExpr))
 		case "return":
 			status := rule.ReturnStatusCode
 			if status <= 0 {
@@ -790,8 +792,9 @@ func (m *ManagedProxyRuntime) frontendSection(snapshot *grpcapi.ProxyConfigSnaps
 		}
 		return services[i].GetServiceKey() < services[j].GetServiceKey()
 	})
-	acls := make([]frontendACL, 0, len(services)*9)
+	acls := make([]frontendACL, 0, len(services)*9+1)
 	rules := make([]frontendSwitchRule, 0, len(services)*8)
+	requestRules := staticAssetRequestRules()
 	addACL := func(name string, criterion string, value string) {
 		acls = append(acls, frontendACL{
 			Name:      name,
@@ -812,6 +815,7 @@ func (m *ManagedProxyRuntime) frontendSection(snapshot *grpcapi.ProxyConfigSnaps
 			Index:    len(rules),
 		})
 	}
+	addACL(staticAssetPathACLName, "path", "-m reg -i "+staticAssetPathRegex)
 	for _, service := range services {
 		hostACL := aclName(service.GetServiceId(), "host")
 		pathACL := aclName(service.GetServiceId(), "path")
@@ -904,6 +908,7 @@ func (m *ManagedProxyRuntime) frontendSection(snapshot *grpcapi.ProxyConfigSnaps
 		},
 		ACLList:                  acls,
 		BackendSwitchingRuleList: rules,
+		HTTPRequestRules:         requestRules,
 	}
 }
 
@@ -1164,10 +1169,35 @@ type serviceBackendTarget struct {
 	Slot        grpcapi.Slot
 }
 
-const staticAssetPathRegex = `\.(avif|bmp|css|eot|gif|ico|jpeg|jpg|js|m4a|map|mjs|mp3|mp4|ogg|otf|png|svg|ttf|wasm|wav|webm|webmanifest|webp|woff|woff2)$`
+const (
+	staticAssetPathACLName = "ep_static_asset_path"
+	staticAssetTxnVarName  = "ep_static_asset"
+	staticAssetPathRegex   = `\.(avif|bmp|css|eot|gif|ico|jpeg|jpg|js|m4a|map|mjs|mp3|mp4|ogg|otf|png|svg|ttf|wasm|wav|webm|webmanifest|webp|woff|woff2)$`
+)
 
-func staticAssetPathCondTest() string {
-	return "{ path -m reg -i " + staticAssetPathRegex + " }"
+func staticAssetRequestRules() []httpRequestRule {
+	return []httpRequestRule{
+		{
+			Type:     "set-var",
+			VarScope: "txn",
+			VarName:  staticAssetTxnVarName,
+			VarExpr:  "bool(false)",
+			Index:    0,
+		},
+		{
+			Type:     "set-var",
+			VarScope: "txn",
+			VarName:  staticAssetTxnVarName,
+			VarExpr:  "bool(true)",
+			Cond:     "if",
+			CondTest: staticAssetPathACLName,
+			Index:    1,
+		},
+	}
+}
+
+func staticAssetVarCondTest() string {
+	return "{ var(txn." + staticAssetTxnVarName + ") -m bool }"
 }
 
 func serviceBackendResponseRules(serviceKey string, routePathPrefix string, currentReleaseID string, liveReleaseID string, betaReleaseID string, releaseRole string) []httpResponseRule {
@@ -1179,7 +1209,14 @@ func serviceBackendResponseRules(serviceKey string, routePathPrefix string, curr
 			Header:   "Set-Cookie",
 			Format:   servicecatalogapp.BuildStickyCookie(cookieName, currentReleaseID, routePathPrefix),
 			Cond:     "unless",
-			CondTest: staticAssetPathCondTest(),
+			CondTest: staticAssetVarCondTest(),
+		},
+		{
+			Type:     "del-header",
+			Action:   "del-header",
+			Header:   "Set-Cookie",
+			Cond:     "if",
+			CondTest: staticAssetVarCondTest(),
 		},
 		{
 			Type:   "set-header",

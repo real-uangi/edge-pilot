@@ -194,11 +194,19 @@ func TestDataPlaneClientEnsureBackendInTransactionFiltersResponseRules(t *testin
 				Index:    1,
 			},
 			{
+				Type:     "del-header",
+				Action:   "del-header",
+				Header:   "Set-Cookie",
+				Cond:     "if",
+				CondTest: "{ var(txn.ep_static_asset) -m bool }",
+				Index:    2,
+			},
+			{
 				Type:   "set-header",
 				Action: "set-header",
 				Header: "",
 				Format: "invalid",
-				Index:  2,
+				Index:  3,
 			},
 		},
 	})
@@ -219,8 +227,8 @@ func TestDataPlaneClientEnsureBackendInTransactionFiltersResponseRules(t *testin
 	if !ok {
 		t.Fatalf("expected http_response_rule_list array, got %#v", payload["http_response_rule_list"])
 	}
-	if len(rawRules) != 2 {
-		t.Fatalf("expected filtered backend response rules size 2, got %d", len(rawRules))
+	if len(rawRules) != 3 {
+		t.Fatalf("expected filtered backend response rules size 3, got %d", len(rawRules))
 	}
 	firstRule := rawRules[0].(map[string]any)
 	if got := firstRule["hdr_format"]; got != `"release-1;Max-Age=600;Path=/;HttpOnly;SameSite=Lax"` {
@@ -244,6 +252,25 @@ func TestDataPlaneClientEnsureBackendInTransactionFiltersResponseRules(t *testin
 	}
 	if got := secondRule["index"]; got != float64(1) {
 		t.Fatalf("expected second backend response rule index 1, got %#v", got)
+	}
+	thirdRule := rawRules[2].(map[string]any)
+	if got := thirdRule["type"]; got != "del-header" {
+		t.Fatalf("expected third backend response rule type del-header, got %#v", got)
+	}
+	if got := thirdRule["hdr_name"]; got != "Set-Cookie" {
+		t.Fatalf("expected third backend response rule header Set-Cookie, got %#v", got)
+	}
+	if got := thirdRule["hdr_format"]; got != nil {
+		t.Fatalf("expected del-header backend rule without hdr_format, got %#v", got)
+	}
+	if got := thirdRule["cond"]; got != "if" {
+		t.Fatalf("expected del-header backend rule cond if, got %#v", got)
+	}
+	if got := thirdRule["cond_test"]; got != "{ var(txn.ep_static_asset) -m bool }" {
+		t.Fatalf("expected del-header backend rule static asset cond, got %#v", got)
+	}
+	if got := thirdRule["index"]; got != float64(2) {
+		t.Fatalf("expected third backend response rule index 2, got %#v", got)
 	}
 }
 

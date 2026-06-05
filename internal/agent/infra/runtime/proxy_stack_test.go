@@ -439,9 +439,7 @@ func TestFrontendSectionAddsStickyPreviewRoutingRules(t *testing.T) {
 	if section.BackendSwitchingRuleList[7].Name != "be-api_green" {
 		t.Fatalf("expected live green backend fallback, got %q", section.BackendSwitchingRuleList[7].Name)
 	}
-	if len(section.HTTPRequestRules) != 0 {
-		t.Fatalf("expected 0 request rules after normalize move to backend, got %d", len(section.HTTPRequestRules))
-	}
+	assertFrontendStaticAssetRules(t, section)
 	if len(section.HTTPAfterResponseRules) != 0 {
 		t.Fatalf("expected 0 after-response rules after normalize move to backend, got %d", len(section.HTTPAfterResponseRules))
 	}
@@ -454,9 +452,7 @@ func TestFrontendSectionKeepsCandidateCookieRuleForStickyWhenSplitInactive(t *te
 	snapshot.Services[0].CandidateTrafficPercent = 0
 	section := proxy.frontendSection(snapshot)
 
-	if len(section.HTTPRequestRules) != 0 {
-		t.Fatalf("expected 0 request rules after normalize move to backend, got %d", len(section.HTTPRequestRules))
-	}
+	assertFrontendStaticAssetRules(t, section)
 	foundCandidateCookieRule := false
 	for _, rule := range section.BackendSwitchingRuleList {
 		if rule.Name == "be-api_blue" && strings.Contains(rule.CondTest, "cookie_candidate") {
@@ -564,8 +560,17 @@ func TestReconcileLockedBuildsBackendResponseHeaderRules(t *testing.T) {
 				t.Fatalf("backend %s rule[%d] type should equal action, got %#v", backend.Name, i, rule)
 			}
 			if strings.EqualFold(strings.TrimSpace(rule.Header), "Set-Cookie") {
-				if strings.TrimSpace(rule.Cond) != "unless" || strings.TrimSpace(rule.CondTest) != staticAssetPathCondTest() {
-					t.Fatalf("backend %s Set-Cookie rule should skip static assets, got %#v", backend.Name, rule)
+				switch strings.TrimSpace(rule.Type) {
+				case "add-header":
+					if strings.TrimSpace(rule.Cond) != "unless" || strings.TrimSpace(rule.CondTest) != staticAssetVarCondTest() {
+						t.Fatalf("backend %s Set-Cookie add rule should skip static assets, got %#v", backend.Name, rule)
+					}
+				case "del-header":
+					if strings.TrimSpace(rule.Cond) != "if" || strings.TrimSpace(rule.CondTest) != staticAssetVarCondTest() || strings.TrimSpace(rule.Format) != "" {
+						t.Fatalf("backend %s Set-Cookie delete rule should clear static assets, got %#v", backend.Name, rule)
+					}
+				default:
+					t.Fatalf("backend %s unexpected Set-Cookie rule type, got %#v", backend.Name, rule)
 				}
 				continue
 			}
@@ -577,8 +582,8 @@ func TestReconcileLockedBuildsBackendResponseHeaderRules(t *testing.T) {
 }
 
 func TestStaticAssetPathRegexMatchesExpectedExtensions(t *testing.T) {
-	if got := staticAssetPathCondTest(); got != "{ path -m reg -i "+staticAssetPathRegex+" }" {
-		t.Fatalf("unexpected static asset cond test %q", got)
+	if got := staticAssetRequestRules(); len(got) != 2 {
+		t.Fatalf("expected two static asset request rules, got %#v", got)
 	}
 
 	matcher := regexp.MustCompile("(?i)" + staticAssetPathRegex)
@@ -815,15 +820,16 @@ func TestReconcileLockedFiltersInvalidBackendResponseHeaderRules(t *testing.T) {
 	if blue == nil || green == nil {
 		t.Fatalf("expected both blue/green backend configs, got %#v", dataplane.backendConfigs)
 	}
-	if len(blue.HTTPResponseRules) != 4 {
-		t.Fatalf("expected blue backend keep 4 response rules, got %d", len(blue.HTTPResponseRules))
+	if len(blue.HTTPResponseRules) != 5 {
+		t.Fatalf("expected blue backend keep 5 response rules, got %d", len(blue.HTTPResponseRules))
 	}
-	if len(green.HTTPResponseRules) != 1 {
-		t.Fatalf("expected green backend keep only live release header rule, got %d", len(green.HTTPResponseRules))
+	if len(green.HTTPResponseRules) != 2 {
+		t.Fatalf("expected green backend keep Set-Cookie cleanup and live release header rules, got %d", len(green.HTTPResponseRules))
 	}
-	if findBackendRule(green.HTTPResponseRules, "Set-Cookie") != nil {
-		t.Fatalf("green backend sticky cookie rule should be filtered when release id is empty, got %#v", green.HTTPResponseRules)
+	if findBackendRuleByType(green.HTTPResponseRules, "add-header", "Set-Cookie") != nil {
+		t.Fatalf("green backend sticky cookie add rule should be filtered when release id is empty, got %#v", green.HTTPResponseRules)
 	}
+	assertBackendStaticCookieCleanupRule(t, green.HTTPResponseRules)
 	if findBackendRule(green.HTTPResponseRules, servicecatalogapp.CurrentReleaseIDHeaderName) != nil {
 		t.Fatalf("green backend current release rule should be filtered when release id is empty, got %#v", green.HTTPResponseRules)
 	}
@@ -919,6 +925,52 @@ func findBackendRule(rules []httpResponseRule, header string) *httpResponseRule 
 	return nil
 }
 
+func findBackendRuleByType(rules []httpResponseRule, ruleType string, header string) *httpResponseRule {
+	for i := range rules {
+		if strings.TrimSpace(rules[i].Type) == strings.TrimSpace(ruleType) && strings.EqualFold(strings.TrimSpace(rules[i].Header), strings.TrimSpace(header)) {
+			return &rules[i]
+		}
+	}
+	return nil
+}
+
+func assertFrontendStaticAssetRules(t *testing.T, section frontendSection) {
+	t.Helper()
+	foundStaticACL := false
+	for _, acl := range section.ACLList {
+		if strings.TrimSpace(acl.Name) == staticAssetPathACLName {
+			foundStaticACL = true
+			if strings.TrimSpace(acl.Criterion) != "path" || strings.TrimSpace(acl.Value) != "-m reg -i "+staticAssetPathRegex {
+				t.Fatalf("expected static asset path ACL, got %#v", acl)
+			}
+			break
+		}
+	}
+	if !foundStaticACL {
+		t.Fatalf("expected static asset path ACL, got %#v", section.ACLList)
+	}
+	if len(section.HTTPRequestRules) != 2 {
+		t.Fatalf("expected two static asset request rules, got %#v", section.HTTPRequestRules)
+	}
+	expected := []struct {
+		expr string
+		cond string
+		test string
+	}{
+		{expr: "bool(false)"},
+		{expr: "bool(true)", cond: "if", test: staticAssetPathACLName},
+	}
+	for i, item := range expected {
+		rule := section.HTTPRequestRules[i]
+		if strings.TrimSpace(rule.Type) != "set-var" || strings.TrimSpace(rule.VarScope) != "txn" || strings.TrimSpace(rule.VarName) != staticAssetTxnVarName {
+			t.Fatalf("expected static asset set-var rule[%d], got %#v", i, rule)
+		}
+		if strings.TrimSpace(rule.VarExpr) != item.expr || strings.TrimSpace(rule.Cond) != item.cond || strings.TrimSpace(rule.CondTest) != item.test {
+			t.Fatalf("expected static asset set-var rule[%d] expr=%q cond=%q condTest=%q, got %#v", i, item.expr, item.cond, item.test, rule)
+		}
+	}
+}
+
 func assertBackendResponseRule(t *testing.T, rules []httpResponseRule, header string, expectedContains string) {
 	t.Helper()
 	rule := findBackendRule(rules, header)
@@ -932,15 +984,33 @@ func assertBackendResponseRule(t *testing.T, rules []httpResponseRule, header st
 
 func assertBackendStickyCookieRuleSkipsStaticAssets(t *testing.T, rules []httpResponseRule) {
 	t.Helper()
-	rule := findBackendRule(rules, "Set-Cookie")
+	rule := findBackendRuleByType(rules, "add-header", "Set-Cookie")
 	if rule == nil {
 		t.Fatalf("expected Set-Cookie response rule, got %#v", rules)
 	}
 	if strings.TrimSpace(rule.Cond) != "unless" {
 		t.Fatalf("expected Set-Cookie response rule cond unless, got %#v", *rule)
 	}
-	if strings.TrimSpace(rule.CondTest) != staticAssetPathCondTest() {
-		t.Fatalf("expected Set-Cookie response rule static asset cond %q, got %#v", staticAssetPathCondTest(), *rule)
+	if strings.TrimSpace(rule.CondTest) != staticAssetVarCondTest() {
+		t.Fatalf("expected Set-Cookie response rule static asset cond %q, got %#v", staticAssetVarCondTest(), *rule)
+	}
+	assertBackendStaticCookieCleanupRule(t, rules)
+}
+
+func assertBackendStaticCookieCleanupRule(t *testing.T, rules []httpResponseRule) {
+	t.Helper()
+	rule := findBackendRuleByType(rules, "del-header", "Set-Cookie")
+	if rule == nil {
+		t.Fatalf("expected Set-Cookie static asset cleanup rule, got %#v", rules)
+	}
+	if strings.TrimSpace(rule.Format) != "" {
+		t.Fatalf("expected Set-Cookie cleanup rule without format, got %#v", *rule)
+	}
+	if strings.TrimSpace(rule.Cond) != "if" {
+		t.Fatalf("expected Set-Cookie cleanup rule cond if, got %#v", *rule)
+	}
+	if strings.TrimSpace(rule.CondTest) != staticAssetVarCondTest() {
+		t.Fatalf("expected Set-Cookie cleanup rule static asset cond %q, got %#v", staticAssetVarCondTest(), *rule)
 	}
 }
 
