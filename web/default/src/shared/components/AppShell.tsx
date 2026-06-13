@@ -1,20 +1,92 @@
 import { useEffect, useMemo, useState, type PropsWithChildren } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { NavLink } from "react-router-dom";
+import { NavLink, useLocation } from "react-router-dom";
+import {
+  LayoutDashboard,
+  Server,
+  HardDrive,
+  Rocket,
+  Clock,
+  Activity,
+  ChevronDown,
+  ChevronRight,
+} from "lucide-react";
 import { dashboardApi } from "../../features/dashboard/api";
 import styles from "./AppShell.module.css";
 
-const navItems = [
-  { to: "/", label: "总览", end: true },
-  { to: "/system-performance", label: "系统性能" },
-  { to: "/services", label: "服务" },
-  { to: "/registry-credentials", label: "镜像仓库" },
-  { to: "/agents", label: "节点" },
-  { to: "/instances", label: "受管实例" },
-  { to: "/releases", label: "发布" },
-  { to: "/scheduler", label: "定时任务" },
-  { to: "/scheduler/history", label: "执行历史" },
-  { to: "/scheduler/executors", label: "执行器" },
+type NavItem = { to: string; label: string; end?: boolean };
+
+type NavGroup =
+  | {
+      key: string;
+      label: string;
+      icon: React.ComponentType<{ size?: number; className?: string }>;
+      type: "link";
+      to: string;
+      end?: boolean;
+    }
+  | {
+      key: string;
+      label: string;
+      icon: React.ComponentType<{ size?: number; className?: string }>;
+      type: "group";
+      items: NavItem[];
+    };
+
+const navGroups: NavGroup[] = [
+  {
+    key: "overview",
+    label: "总览",
+    icon: LayoutDashboard,
+    type: "link",
+    to: "/",
+    end: true,
+  },
+  {
+    key: "service",
+    label: "服务管理",
+    icon: Server,
+    type: "group",
+    items: [
+      { to: "/services", label: "服务" },
+      { to: "/registry-credentials", label: "镜像仓库" },
+    ],
+  },
+  {
+    key: "infra",
+    label: "基础设施",
+    icon: HardDrive,
+    type: "group",
+    items: [
+      { to: "/agents", label: "节点" },
+      { to: "/instances", label: "受管实例" },
+    ],
+  },
+  {
+    key: "release",
+    label: "发布管理",
+    icon: Rocket,
+    type: "group",
+    items: [{ to: "/releases", label: "发布" }],
+  },
+  {
+    key: "scheduler",
+    label: "任务调度",
+    icon: Clock,
+    type: "group",
+    items: [
+      { to: "/scheduler", label: "定时任务" },
+      { to: "/scheduler/history", label: "执行历史" },
+      { to: "/scheduler/executors", label: "执行器" },
+    ],
+  },
+  {
+    key: "monitor",
+    label: "系统监控",
+    icon: Activity,
+    type: "group",
+    items: [{ to: "/system-performance", label: "系统性能" }],
+  },
 ];
 
 interface AppShellProps extends PropsWithChildren {
@@ -38,6 +110,8 @@ export function AppShell({ username, loggingOut, onLogout, children }: AppShellP
       return false;
     }
   });
+
+  const location = useLocation();
 
   useEffect(() => {
     try {
@@ -79,6 +153,55 @@ export function AppShell({ username, loggingOut, onLogout, children }: AppShellP
     setRightRailOpen(false);
   };
 
+  const isGroupActive = (group: NavGroup) => {
+    if (group.type === "link") {
+      if (group.end) {
+        return location.pathname === group.to;
+      }
+      return location.pathname === group.to || location.pathname.startsWith(group.to + "/");
+    }
+    return group.items.some((item) => {
+      if (item.end) {
+        return location.pathname === item.to;
+      }
+      return location.pathname === item.to || location.pathname.startsWith(item.to + "/");
+    });
+  };
+
+  const [expandedGroups, setExpandedGroups] = useState<Set<string>>(() => {
+    const initial = new Set<string>();
+    navGroups.forEach((group) => {
+      if (isGroupActive(group)) {
+        initial.add(group.key);
+      }
+    });
+    return initial;
+  });
+
+  useEffect(() => {
+    setExpandedGroups((prev) => {
+      const next = new Set(prev);
+      navGroups.forEach((group) => {
+        if (isGroupActive(group)) {
+          next.add(group.key);
+        }
+      });
+      return next;
+    });
+  }, [location.pathname]);
+
+  const toggleGroup = (key: string) => {
+    setExpandedGroups((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) {
+        next.delete(key);
+      } else {
+        next.add(key);
+      }
+      return next;
+    });
+  };
+
   return (
     <div className={`${styles.shell} ${rightRailCollapsed ? styles.shellRightRailCollapsed : ""}`}>
       <header className={styles.mobileHeader}>
@@ -115,17 +238,64 @@ export function AppShell({ username, loggingOut, onLogout, children }: AppShellP
           </div>
 
           <nav className={styles.nav}>
-            {navItems.map((item) => (
-              <NavLink
-                key={item.to}
-                end={item.end}
-                to={item.to}
-                className={({ isActive }) => (isActive ? styles.navActive : styles.navLink)}
-                onClick={closeDrawers}
-              >
-                {item.label}
-              </NavLink>
-            ))}
+            {navGroups.map((group) => {
+              const Icon = group.icon;
+              const groupActive = isGroupActive(group);
+              const isExpanded = expandedGroups.has(group.key);
+
+              return (
+                <div key={group.key} className={styles.navGroup}>
+                  {group.type === "link" ? (
+                    <NavLink
+                      end={group.end}
+                      to={group.to}
+                      className={({ isActive }) =>
+                        `${styles.navGroupHeader} ${isActive ? styles.navGroupHeaderActive : ""}`
+                      }
+                      onClick={closeDrawers}
+                    >
+                      <Icon size={16} className={styles.navGroupIcon} />
+                      <span className={styles.navGroupLabel}>{group.label}</span>
+                    </NavLink>
+                  ) : (
+                    <>
+                      <button
+                        type="button"
+                        className={`${styles.navGroupHeader} ${groupActive ? styles.navGroupHeaderActive : ""}`}
+                        onClick={() => toggleGroup(group.key)}
+                      >
+                        <Icon size={16} className={styles.navGroupIcon} />
+                        <span className={styles.navGroupLabel}>{group.label}</span>
+                        {isExpanded ? (
+                          <ChevronDown size={14} className={styles.navGroupChevron} />
+                        ) : (
+                          <ChevronRight size={14} className={styles.navGroupChevron} />
+                        )}
+                      </button>
+                      <div
+                        className={`${styles.navGroupItems} ${
+                          isExpanded ? styles.navGroupItemsExpanded : styles.navGroupItemsCollapsed
+                        }`}
+                      >
+                        {group.items.map((item) => (
+                          <NavLink
+                            key={item.to}
+                            end={item.end}
+                            to={item.to}
+                            className={({ isActive }) =>
+                              isActive ? styles.navSubActive : styles.navSubLink
+                            }
+                            onClick={closeDrawers}
+                          >
+                            {item.label}
+                          </NavLink>
+                        ))}
+                      </div>
+                    </>
+                  )}
+                </div>
+              );
+            })}
           </nav>
 
           <div className={styles.sessionCard}>

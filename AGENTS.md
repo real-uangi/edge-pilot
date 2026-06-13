@@ -9,13 +9,33 @@
 - 在新增数据库实体model时，要注意避免零值歧义，原则上表示状态的bool类型都需要定义为指针，iota枚举类型必须从iota+1开始
 - 新增model时必须重写对应`TableName() string`方法，名称格式固定`ep_`前缀
 
+## 开发环境要求
+
+- Go 1.26
+- Node 22 + pnpm
+- `protoc`（用于 `make proto` 重新生成 gRPC 代码）
+
+## 常用开发命令
+
+- `make proto` — 重新生成 gRPC 代码（依赖 `protoc` 和 `go-grpc` 插件）
+- `make build` — 构建两个二进制到 `dist/`
+- `make build-control-plane` / `make build-agent` — 单二进制构建
+- `go test -v ./...` — 运行全部 Go 测试
+- `goimports -w .` — 格式化整个项目（或针对修改文件）
+- `pnpm --dir web/default install --frozen-lockfile` — 安装前端依赖
+- `pnpm --dir web/default build` — 前端构建
+- `pnpm --dir web/default typecheck` — 前端类型检查
+
 ## 前端代码修改规范
 
 - 前端改动需与项目现有视觉与交互风格保持一致，不引入突兀的样式或不统一的组件用法。
   - 遵循DESIGN.md
 - **严禁**将流程编排和平台内部策略写进前端页面。
 - **严禁**添加无意义的阐述型文案。
-- 提交前需执行必要检查（如类型检查、lint、构建或项目约定的前端校验命令），确保页面可正常运行。
+- 提交前需执行必要检查，确保页面可正常运行：
+  - `pnpm --dir web/default typecheck`
+  - `pnpm --dir web/default build`
+  - 如有新增依赖，确认已写入 `package.json` 并重新生成 `pnpm-lock.yaml`
 
 ## 项目结构速览
 
@@ -85,6 +105,8 @@
 
 ## 工程守则（精简）
 
+- 默认工作在当前分支，无需创建 feature branch。
+- CI 自动发布：push 到 `main` 会触发 `go test` → 自动递增 patch tag → 自动 Release；产物为 `dist/edge-pilot-control` 和 `dist/edge-pilot-agent`。
 - 事务边界：仅在单域内使用 DB 事务；跨域流程通过事件与补偿保证最终一致。
 - 幂等优先：支付、回调、发货、通知等关键入口必须具备幂等键与可重试设计。
 - 错误分层：区分可重试/不可重试错误；对外返回稳定业务语义，不暴露基础设施细节。

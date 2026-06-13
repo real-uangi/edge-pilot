@@ -80,8 +80,103 @@
 
 .nav {
   display: grid;
-  gap: 6px;
+  gap: 20px;
   align-content: start;
+}
+
+.navGroup {
+  display: grid;
+  gap: 4px;
+}
+
+.navGroupHeader {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 10px;
+  border-radius: var(--ep-radius-sm);
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--ep-text-muted);
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  width: 100%;
+  text-align: left;
+  transition: background-color var(--ep-motion-fast) var(--ep-ease-standard),
+    color var(--ep-motion-fast) var(--ep-ease-standard);
+}
+
+.navGroupHeader:hover {
+  background: rgba(76, 214, 255, 0.08);
+  color: var(--ep-text);
+}
+
+.navGroupHeaderActive {
+  color: var(--ep-primary);
+  font-weight: 600;
+}
+
+.navGroupIcon {
+  flex-shrink: 0;
+  opacity: 0.8;
+}
+
+.navGroupHeaderActive .navGroupIcon {
+  opacity: 1;
+}
+
+.navGroupLabel {
+  flex: 1;
+}
+
+.navGroupChevron {
+  flex-shrink: 0;
+  opacity: 0.6;
+  transition: transform var(--ep-motion-base) var(--ep-ease-standard);
+}
+
+.navGroupItems {
+  display: grid;
+  gap: 2px;
+  padding-left: 24px;
+  overflow: hidden;
+  transition: max-height var(--ep-motion-base) var(--ep-ease-standard),
+    opacity var(--ep-motion-base) var(--ep-ease-standard);
+}
+
+.navGroupItemsExpanded {
+  max-height: 200px;
+  opacity: 1;
+}
+
+.navGroupItemsCollapsed {
+  max-height: 0;
+  opacity: 0;
+}
+
+.navSubLink,
+.navSubActive {
+  padding: 7px 10px;
+  border-radius: var(--ep-radius-sm);
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.navSubLink {
+  color: var(--ep-text-muted);
+  background: transparent;
+}
+
+.navSubLink:hover {
+  background: rgba(76, 214, 255, 0.08);
+  color: var(--ep-text);
+}
+
+.navSubActive {
+  background: linear-gradient(135deg, rgba(164, 230, 255, 0.88), rgba(0, 209, 255, 0.96));
+  color: var(--ep-primary-ink);
+  font-weight: 600;
 }
 
 .navLink,
