@@ -115,6 +115,9 @@ func (r *schedulerAuthRepo) GetRun(id uuid.UUID) (*model.SchedulerJobRun, error)
 func (r *schedulerAuthRepo) ListRunsByJob(jobID uuid.UUID, limit int) ([]model.SchedulerJobRun, error) {
 	panic("not implemented")
 }
+func (r *schedulerAuthRepo) ListAllRuns(limit int) ([]model.SchedulerJobRun, error) {
+	panic("not implemented")
+}
 func (r *schedulerAuthRepo) ListDispatchableRuns(now time.Time, limit int) ([]model.SchedulerJobRun, error) {
 	panic("not implemented")
 }

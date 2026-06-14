@@ -1,10 +1,10 @@
-import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
 import { getErrorMessage } from "../../../shared/lib/api-client";
 import { formatDateTime } from "../../../shared/lib/format";
 import { ActionButton } from "../../../shared/components/ActionButton";
 import { EmptyState, ErrorState, LoadingState } from "../../../shared/components/StateBlocks";
+import { useDialog } from "../../../shared/components/DialogProvider";
 import { schedulerApi } from "../api";
 import type { SchedulerJobRecord } from "../types";
 import { JobForm } from "./JobForm";
@@ -13,6 +13,7 @@ import styles from "../../../styles/admin.module.css";
 
 export function JobsPage() {
   const queryClient = useQueryClient();
+  const dialog = useDialog();
 
   const jobsQuery = useQuery({
     queryKey: ["scheduler", "jobs"],
@@ -35,6 +36,31 @@ export function JobsPage() {
     mutationFn: schedulerApi.deleteJob,
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["scheduler"] }),
   });
+
+  const handleTrigger = async (job: SchedulerJobRecord) => {
+    const confirmed = await dialog.confirm({
+      title: "立即触发任务",
+      message: `确认立即触发任务 "${job.name}"？`,
+      confirmText: "确认触发",
+      cancelText: "取消",
+    });
+    if (confirmed) {
+      triggerMutation.mutate(job.id);
+    }
+  };
+
+  const handleDelete = async (job: SchedulerJobRecord) => {
+    const confirmed = await dialog.confirm({
+      title: "删除任务",
+      message: `确认删除任务 "${job.name}"？删除后无法恢复。`,
+      confirmText: "确认删除",
+      cancelText: "取消",
+      danger: true,
+    });
+    if (confirmed) {
+      deleteMutation.mutate(job.id);
+    }
+  };
 
   return (
     <div className={styles.page}>
@@ -66,10 +92,10 @@ export function JobsPage() {
               <thead>
                 <tr>
                   <th>名称</th>
-                  <th>类型</th>
-                  <th>计划</th>
-                  <th>分发</th>
-                  <th>组</th>
+                  <th>任务类型</th>
+                  <th>调度方式</th>
+                  <th>分发策略</th>
+                  <th>执行器组</th>
                   <th>下次执行</th>
                   <th>状态</th>
                   <th>操作</th>
@@ -90,13 +116,13 @@ export function JobsPage() {
                     <td>{job.nextRunAt ? formatDateTime(job.nextRunAt) : "-"}</td>
                     <td>{job.enabled ? "启用" : "停用"}</td>
                     <td className={styles.buttonRow}>
-                      <ActionButton label="触发" pending={triggerMutation.isPending} onClick={() => triggerMutation.mutate(job.id)} />
+                      <ActionButton label="触发" pending={triggerMutation.isPending} onClick={() => handleTrigger(job)} />
                       <ActionButton
                         label={job.enabled ? "停用" : "启用"}
                         pending={toggleMutation.isPending}
                         onClick={() => toggleMutation.mutate({ id: job.id, enabled: Boolean(job.enabled) })}
                       />
-                      <ActionButton label="删除" variant="danger" pending={deleteMutation.isPending} onClick={() => deleteMutation.mutate(job.id)} />
+                      <ActionButton label="删除" variant="danger" pending={deleteMutation.isPending} onClick={() => handleDelete(job)} />
                     </td>
                   </tr>
                 ))}

@@ -102,6 +102,18 @@ func (r *repository) ListRunsByJob(jobID uuid.UUID, limit int) ([]model.Schedule
 	return runs, nil
 }
 
+func (r *repository) ListAllRuns(limit int) ([]model.SchedulerJobRun, error) {
+	var runs []model.SchedulerJobRun
+	query := r.conn.Order("created_at desc")
+	if limit > 0 {
+		query = query.Limit(limit)
+	}
+	if err := query.Find(&runs).Error; err != nil {
+		return nil, err
+	}
+	return runs, nil
+}
+
 func (r *repository) ListDispatchableRuns(now time.Time, limit int) ([]model.SchedulerJobRun, error) {
 	var runs []model.SchedulerJobRun
 	query := r.conn.Where("status = ? OR (status = ? AND next_retry_at IS NOT NULL AND next_retry_at <= ?) OR (status = ? AND lease_expires_at IS NOT NULL AND lease_expires_at <= ?) OR (status = ? AND lease_expires_at IS NOT NULL AND lease_expires_at <= ?)",

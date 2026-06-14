@@ -17,9 +17,9 @@ export function RunsPage() {
   });
 
   const runsQuery = useQuery({
-    queryKey: ["scheduler", "runs", selectedJobId],
-    queryFn: () => schedulerApi.listRuns(selectedJobId),
-    enabled: selectedJobId.length > 0,
+    queryKey: ["scheduler", "runs", selectedJobId || "all"],
+    queryFn: () =>
+      selectedJobId ? schedulerApi.listRuns(selectedJobId) : schedulerApi.listAllRuns(),
     refetchInterval: 5000,
   });
 
@@ -61,26 +61,24 @@ export function RunsPage() {
             <h2 className={styles.sectionTitle}>执行记录</h2>
           </div>
         </div>
-        {!selectedJobId ? (
-          <EmptyState title="请选择任务" message="在上方选择一个任务查看执行历史。" />
-        ) : runsQuery.isPending ? (
+        {runsQuery.isPending ? (
           <LoadingState title="正在加载执行记录" message="读取最近运行结果。" />
         ) : runsQuery.isError ? (
           <ErrorState title="执行记录加载失败" message={getErrorMessage(runsQuery.error)} onRetry={() => runsQuery.refetch()} />
         ) : !runsQuery.data?.length ? (
-          <EmptyState title="暂无记录" message="该任务还未产生执行记录。" />
+          <EmptyState title="暂无记录" message={selectedJobId ? "该任务还未产生执行记录。" : "暂无执行记录。"} />
         ) : (
           <div className={styles.tableWrap}>
             <table>
               <thead>
                 <tr>
-                  <th>Run</th>
+                  <th>执行编号</th>
                   <th>状态</th>
-                  <th>Attempt</th>
+                  <th>当前重试</th>
                   <th>租约执行器</th>
                   <th>调度时间</th>
                   <th>完成时间</th>
-                  <th>错误</th>
+                  <th>错误信息</th>
                 </tr>
               </thead>
               <tbody>

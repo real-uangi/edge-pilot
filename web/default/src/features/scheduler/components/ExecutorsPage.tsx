@@ -3,12 +3,14 @@ import { getErrorMessage } from "../../../shared/lib/api-client";
 import { formatDateTime } from "../../../shared/lib/format";
 import { ActionButton } from "../../../shared/components/ActionButton";
 import { EmptyState, ErrorState, InlineNotice, LoadingState } from "../../../shared/components/StateBlocks";
+import { useDialog } from "../../../shared/components/DialogProvider";
 import { schedulerApi } from "../api";
 import { ExecutorForm } from "./ExecutorForm";
 import styles from "../../../styles/admin.module.css";
 
 export function ExecutorsPage() {
   const queryClient = useQueryClient();
+  const dialog = useDialog();
 
   const executorsQuery = useQuery({
     queryKey: ["scheduler", "executors"],
@@ -31,6 +33,32 @@ export function ExecutorsPage() {
     mutationFn: schedulerApi.deleteExecutor,
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["scheduler", "executors"] }),
   });
+
+  const handleResetToken = async (executor: { id: string }) => {
+    const confirmed = await dialog.confirm({
+      title: "重置 Token",
+      message: "重置后旧 Token 立即失效，执行器需要重新连接。确认继续？",
+      confirmText: "确认重置",
+      cancelText: "取消",
+      danger: true,
+    });
+    if (confirmed) {
+      resetTokenMutation.mutate(executor.id);
+    }
+  };
+
+  const handleDelete = async (executor: { id: string; group: string }) => {
+    const confirmed = await dialog.confirm({
+      title: "删除执行器",
+      message: `确认删除执行器 "${executor.id}"？正在执行的任务可能受影响。`,
+      confirmText: "确认删除",
+      cancelText: "取消",
+      danger: true,
+    });
+    if (confirmed) {
+      deleteMutation.mutate(executor.id);
+    }
+  };
 
   return (
     <div className={styles.page}>
@@ -63,8 +91,8 @@ export function ExecutorsPage() {
                 <tr>
                   <th>ID</th>
                   <th>组</th>
-                  <th>通道</th>
-                  <th>liveSlot</th>
+                  <th>通道模式</th>
+                  <th>活跃槽位</th>
                   <th>状态</th>
                   <th>最近心跳</th>
                   <th>操作</th>
@@ -75,18 +103,18 @@ export function ExecutorsPage() {
                   <tr key={executor.id}>
                     <td>{executor.id}</td>
                     <td>{executor.group}</td>
-                    <td>{executor.channelMode === 2 ? "agent_relay" : "direct"}</td>
+                    <td>{executor.channelMode === 2 ? "代理中继" : "直连"}</td>
                     <td>{executor.liveSlot}</td>
                     <td>{executor.enabled ? "启用" : "停用"}</td>
                     <td>{executor.lastSeenAt ? formatDateTime(executor.lastSeenAt) : "-"}</td>
                     <td className={styles.buttonRow}>
-                      <ActionButton label="重置Token" pending={resetTokenMutation.isPending} onClick={() => resetTokenMutation.mutate(executor.id)} />
+                      <ActionButton label="重置Token" pending={resetTokenMutation.isPending} onClick={() => handleResetToken(executor)} />
                       <ActionButton
                         label={executor.enabled ? "停用" : "启用"}
                         pending={toggleMutation.isPending}
                         onClick={() => toggleMutation.mutate({ id: executor.id, enabled: Boolean(executor.enabled) })}
                       />
-                      <ActionButton label="删除" variant="danger" pending={deleteMutation.isPending} onClick={() => deleteMutation.mutate(executor.id)} />
+                      <ActionButton label="删除" variant="danger" pending={deleteMutation.isPending} onClick={() => handleDelete(executor)} />
                     </td>
                   </tr>
                 ))}

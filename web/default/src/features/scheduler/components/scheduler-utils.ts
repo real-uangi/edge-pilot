@@ -7,7 +7,7 @@ export const scheduleKindLabel: Record<number, string> = {
 
 export const dispatchPolicyLabel: Record<number, string> = {
   1: "轮询",
-  2: "固定 live 槽",
+  2: "固定槽位",
 };
 
 export const runStatusLabel: Record<number, string> = {
@@ -53,4 +53,12 @@ export function parseMapJSON(text: string): Record<string, unknown> {
     throw new Error("必须是 JSON 对象");
   }
   return parsed as Record<string, unknown>;
+}
+
+export function isValidCron(expr: string): boolean {
+  if (!expr || expr.trim() === "") return false;
+  const parts = expr.trim().split(/\s+/);
+  if (parts.length !== 5) return false;
+  const fieldPattern = /^[\d,*\/\-?LW#]+$/;
+  return parts.every((part) => fieldPattern.test(part));
 }

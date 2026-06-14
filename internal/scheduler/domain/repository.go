@@ -19,6 +19,7 @@ type Repository interface {
 	UpdateRun(run *model.SchedulerJobRun) error
 	GetRun(id uuid.UUID) (*model.SchedulerJobRun, error)
 	ListRunsByJob(jobID uuid.UUID, limit int) ([]model.SchedulerJobRun, error)
+	ListAllRuns(limit int) ([]model.SchedulerJobRun, error)
 	ListDispatchableRuns(now time.Time, limit int) ([]model.SchedulerJobRun, error)
 	ClaimRun(runID uuid.UUID, leasedBy string, leaseExpiresAt time.Time, now time.Time) (bool, error)
 

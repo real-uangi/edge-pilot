@@ -284,6 +284,13 @@
   align-items: center;
 }
 
+.cronPresets {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin-top: 6px;
+}
+
 .error {
   color: var(--ep-danger);
   font-weight: 600;

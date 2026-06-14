@@ -24,6 +24,7 @@ type schedulerAdminActions interface {
 	SetJobEnabled(id uuid.UUID, enabled bool) (*dto.SchedulerJobOutput, error)
 	TriggerNow(id uuid.UUID, override map[string]any) (*dto.SchedulerRunOutput, error)
 	ListRuns(jobID uuid.UUID, limit int) ([]dto.SchedulerRunOutput, error)
+	ListAllRuns(limit int) ([]dto.SchedulerRunOutput, error)
 	CreateExecutor(req dto.UpsertSchedulerExecutorRequest) (*dto.SchedulerExecutorOutput, error)
 	ResetExecutorToken(executorID string) (*dto.SchedulerExecutorOutput, error)
 	SetExecutorEnabled(executorID string, enabled bool) (*dto.SchedulerExecutorOutput, error)
@@ -144,6 +145,20 @@ func registerSchedulerRoutes(admin *gin.RouterGroup, scheduler schedulerAdminAct
 			}
 		}
 		out, err := scheduler.ListRuns(id, limit)
+		if err != nil {
+			c.Render(api.HandleErr(err))
+			return
+		}
+		c.Render(http.StatusOK, result.Ok(out))
+	})
+	admin.GET("/runs", func(c *gin.Context) {
+		limit := 50
+		if raw := c.Query("limit"); raw != "" {
+			if v, convErr := strconv.Atoi(raw); convErr == nil && v > 0 && v <= 200 {
+				limit = v
+			}
+		}
+		out, err := scheduler.ListAllRuns(limit)
 		if err != nil {
 			c.Render(api.HandleErr(err))
 			return

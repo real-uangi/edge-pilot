@@ -43,6 +43,9 @@ export const schedulerApi = {
   listRuns(id: string) {
     return request<SchedulerRunRecord[]>(`/api/admin/scheduler/jobs/${id}/runs`);
   },
+  listAllRuns() {
+    return request<SchedulerRunRecord[]>("/api/admin/scheduler/runs");
+  },
   listExecutors() {
     return request<SchedulerExecutorRecord[]>("/api/admin/scheduler/executors");
   },

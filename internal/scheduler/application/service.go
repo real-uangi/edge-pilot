@@ -175,6 +175,18 @@ func (s *Service) ListRuns(jobID uuid.UUID, limit int) ([]dto.SchedulerRunOutput
 	return out, nil
 }
 
+func (s *Service) ListAllRuns(limit int) ([]dto.SchedulerRunOutput, error) {
+	runs, err := s.repo.ListAllRuns(limit)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]dto.SchedulerRunOutput, 0, len(runs))
+	for i := range runs {
+		out = append(out, toSchedulerRunOutput(&runs[i]))
+	}
+	return out, nil
+}
+
 func (s *Service) CreateExecutor(req dto.UpsertSchedulerExecutorRequest) (*dto.SchedulerExecutorOutput, error) {
 	if strings.TrimSpace(req.ExecutorID) == "" {
 		return nil, business.NewBadRequest("executorId required")
