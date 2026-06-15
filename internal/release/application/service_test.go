@@ -1126,7 +1126,7 @@ func TestRetryRejectsWhenAnotherReleaseIsActive(t *testing.T) {
 
 func TestSkipQueuedReleaseMarksSkipped(t *testing.T) {
 	serviceRepo := &fakeServiceRepo{}
-	agentRepo := &fakeAgentRepo{}
+	agentRepo := &fakeAgentRepo{nodes: map[string]*model.AgentNode{}}
 	releaseRepo := newFakeReleaseRepo()
 	dispatcher := &fakeDispatcher{}
 
@@ -1136,6 +1136,8 @@ func TestSkipQueuedReleaseMarksSkipped(t *testing.T) {
 
 	enabled := true
 	dockerHealth := true
+	online := true
+	now := time.Now()
 	service := &model.Service{
 		ID:                uuid.New(),
 		ServiceKey:        "svc-a",
@@ -1149,6 +1151,12 @@ func TestSkipQueuedReleaseMarksSkipped(t *testing.T) {
 	serviceRepo.ensure()
 	serviceRepo.byID[service.ID] = service
 	serviceRepo.byKey[service.ServiceKey] = service
+	agentRepo.nodes["agent-a"] = &model.AgentNode{
+		ID:              "agent-a",
+		Enabled:         &enabled,
+		Online:          &online,
+		LastHeartbeatAt: &now,
+	}
 
 	queued, err := releaseService.CreateFromCI(dto.CreateReleaseFromCIRequest{
 		ServiceKey: "svc-a",
@@ -1167,8 +1175,87 @@ func TestSkipQueuedReleaseMarksSkipped(t *testing.T) {
 	if skipped.CompletedAt == nil {
 		t.Fatalf("expected skipped release completed time")
 	}
-	if _, err := releaseService.Start(queued.ID, "admin"); err == nil {
-		t.Fatalf("expected skipped release to reject start")
+	started, err := releaseService.Start(queued.ID, "admin")
+	if err != nil {
+		t.Fatalf("expected skipped release to allow start, got error = %v", err)
+	}
+	if started.Status != model.ReleaseStatusDispatching {
+		t.Fatalf("expected dispatching status after re-starting skipped release, got %v", started.Status)
+	}
+	if started.CompletedAt != nil {
+		t.Fatalf("expected completedAt reset after re-starting skipped release")
+	}
+	if len(dispatcher.tasks) != 1 {
+		t.Fatalf("expected one dispatched task after re-starting skipped release, got %d", len(dispatcher.tasks))
+	}
+}
+
+func TestStartSkippedReleaseRejectsWhenNewerSuccessfulReleaseExists(t *testing.T) {
+	serviceRepo := &fakeServiceRepo{}
+	agentRepo := &fakeAgentRepo{nodes: map[string]*model.AgentNode{}}
+	releaseRepo := newFakeReleaseRepo()
+	dispatcher := &fakeDispatcher{}
+
+	serviceCatalog := servicecatalogapp.NewService(serviceRepo)
+	registry := agentregistry.NewRegistryService(config.LoadAgentAuthConfig(), agentRepo)
+	releaseService := NewService(releaseRepo, dispatcher, serviceCatalog, registry)
+
+	enabled := true
+	dockerHealth := true
+	online := true
+	now := time.Now()
+	service := &model.Service{
+		ID:                uuid.New(),
+		ServiceKey:        "svc-a",
+		Name:              "svc-a",
+		AgentID:           "agent-a",
+		ImageRepo:         "repo/app",
+		ContainerPort:     8080,
+		DockerHealthCheck: &dockerHealth,
+		Enabled:           &enabled,
+	}
+	serviceRepo.ensure()
+	serviceRepo.byID[service.ID] = service
+	serviceRepo.byKey[service.ServiceKey] = service
+	agentRepo.nodes["agent-a"] = &model.AgentNode{
+		ID:              "agent-a",
+		Enabled:         &enabled,
+		Online:          &online,
+		LastHeartbeatAt: &now,
+	}
+
+	skipped := &model.Release{
+		ID:        uuid.New(),
+		ServiceID: service.ID,
+		AgentID:   "agent-a",
+		ImageRepo: "repo/app",
+		ImageTag:  "v1.0.0",
+		Status:    model.ReleaseStatusSkipped,
+	}
+	skipped.CreatedAt = now.Add(-2 * time.Minute)
+	completedAt := now.Add(-time.Minute)
+	newerSuccessful := &model.Release{
+		ID:             uuid.New(),
+		ServiceID:      service.ID,
+		AgentID:        "agent-a",
+		ImageRepo:      "repo/app",
+		ImageTag:       "v1.1.0",
+		Status:         model.ReleaseStatusCompleted,
+		TrafficPercent: 100,
+		CompletedAt:    &completedAt,
+	}
+	newerSuccessful.CreatedAt = now.Add(-time.Minute)
+	for _, release := range []*model.Release{skipped, newerSuccessful} {
+		if err := releaseRepo.CreateRelease(release); err != nil {
+			t.Fatalf("CreateRelease() error = %v", err)
+		}
+	}
+
+	if _, err := releaseService.Start(skipped.ID, "admin"); err == nil {
+		t.Fatalf("expected skipped release to reject start when newer successful release exists")
+	}
+	if len(dispatcher.tasks) != 0 {
+		t.Fatalf("expected no dispatched task when newer successful release exists, got %d", len(dispatcher.tasks))
 	}
 }
 
@@ -2548,6 +2635,24 @@ func (r *fakeReleaseRepo) HasTrafficSplitRelease(serviceID uuid.UUID) (bool, err
 		}
 		if (item.Status == model.ReleaseStatusReadyToSwitch || item.Status == model.ReleaseStatusSwitched) &&
 			item.TrafficPercent >= 1 && item.TrafficPercent <= 99 {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
+func (r *fakeReleaseRepo) HasNewerSuccessfulRelease(serviceID uuid.UUID, createdAt time.Time) (bool, error) {
+	for _, item := range r.releases {
+		if item.ServiceID != serviceID {
+			continue
+		}
+		if item.Status != model.ReleaseStatusCompleted && item.Status != model.ReleaseStatusSwitched {
+			continue
+		}
+		if item.TrafficPercent != 100 {
+			continue
+		}
+		if item.CreatedAt.After(createdAt) {
 			return true, nil
 		}
 	}

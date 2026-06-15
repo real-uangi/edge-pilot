@@ -241,6 +241,8 @@ func (r *fakeProxyReleaseRepo) HasActiveRelease(uuid.UUID) (bool, error) { retur
 
 func (r *fakeProxyReleaseRepo) HasTrafficSplitRelease(uuid.UUID) (bool, error) { return false, nil }
 
+func (r *fakeProxyReleaseRepo) HasNewerSuccessfulRelease(uuid.UUID, time.Time) (bool, error) { return false, nil }
+
 func (r *fakeProxyReleaseRepo) FindQueuedOrActiveDuplicate(uuid.UUID, string, string) (*model.Release, error) {
 	return nil, nil
 }

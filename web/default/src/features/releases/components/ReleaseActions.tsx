@@ -52,7 +52,7 @@ export function ReleaseActions({
         label="开始"
         pending={startPending}
         variant="primary"
-        disabled={release.status !== 1}
+        disabled={release.status !== 1 && release.status !== 9}
         onClick={onStart}
       />
       <ActionButton

@@ -146,8 +146,18 @@ func (s *Service) Start(id uuid.UUID, operator string) (*dto.ReleaseOutput, erro
 	if release == nil {
 		return nil, business.ErrNotFound
 	}
-	if !release.Status.IsQueued() {
+	isSkipped := release.Status == model.ReleaseStatusSkipped
+	if !release.Status.IsQueued() && !isSkipped {
 		return nil, business.NewErrorWithCode("release is not queued", 409)
+	}
+	if isSkipped {
+		newer, err := s.repo.HasNewerSuccessfulRelease(release.ServiceID, release.CreatedAt)
+		if err != nil {
+			return nil, err
+		}
+		if newer {
+			return nil, business.NewErrorWithCode("a newer successful release exists", 409)
+		}
 	}
 	active, err := s.repo.HasActiveRelease(release.ServiceID)
 	if err != nil {
@@ -184,6 +194,8 @@ func (s *Service) Start(id uuid.UUID, operator string) (*dto.ReleaseOutput, erro
 	release.PreviousLiveSlot = spec.CurrentLiveSlot
 	release.TargetSlot = nextSlot(spec.CurrentLiveSlot)
 	release.TrafficPercent = 0
+	release.SwitchConfirmed = boolPointer(false)
+	release.CompletedAt = nil
 	if err := s.completeSupersededRelease(release, operator); err != nil {
 		return nil, err
 	}
