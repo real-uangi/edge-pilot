@@ -116,6 +116,7 @@ func (c *DockerClient) DeployContainer(ctx context.Context, task *grpcapi.TaskCo
 	return &agentdomain.ContainerRuntime{
 		ContainerID:   createResp.ID,
 		ListenAddress: listenAddress,
+		Image:         imageRef,
 	}, nil
 }
 
@@ -576,6 +577,31 @@ func (c *DockerClient) RemoveContainer(ctx context.Context, containerID string) 
 	if resp.StatusCode >= 300 {
 		return fmt.Errorf("docker remove failed: %s", resp.Status)
 	}
+	return nil
+}
+
+func (c *DockerClient) RemoveImage(ctx context.Context, imageRef string) error {
+	if strings.TrimSpace(imageRef) == "" {
+		return nil
+	}
+	c.logger.Infof("removing docker image: image=%s", imageRef)
+	req, err := c.endpoint.newRequest(ctx, http.MethodDelete, "/images/"+url.PathEscape(imageRef)+"?force=1", nil)
+	if err != nil {
+		return err
+	}
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode == http.StatusNotFound || resp.StatusCode == http.StatusConflict {
+		return nil
+	}
+	if resp.StatusCode >= 300 {
+		body, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("docker remove image failed: %s %s", resp.Status, strings.TrimSpace(string(body)))
+	}
+	c.logger.Infof("removed docker image: image=%s", imageRef)
 	return nil
 }
 

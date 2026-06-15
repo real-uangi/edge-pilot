@@ -85,7 +85,7 @@ func TestReconcileLockedDeletesStaleBackendsInsideTransaction(t *testing.T) {
 func TestSelectStaleManagedContainerIDsReturnsOnlyMissingServices(t *testing.T) {
 	items := []*agentdomain.ManagedContainer{
 		{ContainerRuntime: agentdomain.ContainerRuntime{ContainerID: "keep-live"}, ServiceKey: "svc-a"},
-		{ContainerRuntime: agentdomain.ContainerRuntime{ContainerID: "remove-stale"}, ServiceKey: "svc-legacy"},
+		{ContainerRuntime: agentdomain.ContainerRuntime{ContainerID: "remove-stale"}, ServiceKey: "svc-legacy", Image: "img-legacy"},
 		{ContainerRuntime: agentdomain.ContainerRuntime{ContainerID: "skip-empty"}, ServiceKey: ""},
 	}
 	snapshot := &grpcapi.ProxyConfigSnapshot{
@@ -95,10 +95,13 @@ func TestSelectStaleManagedContainerIDsReturnsOnlyMissingServices(t *testing.T) 
 		},
 	}
 
-	stale := selectStaleManagedContainerIDs(items, snapshot)
+	stale, images := selectStaleManagedContainerIDs(items, snapshot)
 	expected := []string{"remove-stale"}
 	if !reflect.DeepEqual(stale, expected) {
 		t.Fatalf("expected stale container ids %v, got %v", expected, stale)
+	}
+	if images["remove-stale"] != "img-legacy" {
+		t.Fatalf("expected stale container image map, got %#v", images)
 	}
 }
 
@@ -114,9 +117,12 @@ func TestSelectStaleManagedContainerIDsReturnsNoneWhenSnapshotKeepsService(t *te
 		},
 	}
 
-	stale := selectStaleManagedContainerIDs(items, snapshot)
+	stale, images := selectStaleManagedContainerIDs(items, snapshot)
 	if len(stale) != 0 {
 		t.Fatalf("expected no stale container ids, got %v", stale)
+	}
+	if len(images) != 0 {
+		t.Fatalf("expected no stale image map entries, got %#v", images)
 	}
 }
 

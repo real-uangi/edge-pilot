@@ -21,6 +21,7 @@ type DockerRuntime interface {
 	ReadContainerLogs(context.Context, string, int, int) (string, error)
 	StreamContainerLogs(context.Context, string, int, bool, bool, bool) (io.ReadCloser, error)
 	RemoveContainer(context.Context, string) error
+	RemoveImage(context.Context, string) error
 	ListManagedContainers(context.Context, string, string) ([]*ManagedContainer, error)
 }
 
@@ -44,6 +45,7 @@ type ProxyRuntime interface {
 type ContainerRuntime struct {
 	ContainerID   string
 	ListenAddress string
+	Image         string
 }
 
 type ContainerStatus struct {

@@ -13,6 +13,27 @@ import (
 	"github.com/real-uangi/allingo/common/log"
 )
 
+func TestEnsureManagedContainerRecreateRemovesOldImage(t *testing.T) {
+	spec := testManagedContainerSpec()
+	initial := buildManagedContainerInspect(spec, "proxy-old", true, spec.Network, "172.29.0.250")
+	daemon := newFakeManagedContainerDaemon(t, spec, initial, false)
+	client := daemon.newClient()
+
+	_, err := client.ensureManagedContainer(context.Background(), spec)
+	if err != nil {
+		t.Fatalf("expected ensureManagedContainer success, got %v", err)
+	}
+	if daemon.removeCount != 1 {
+		t.Fatalf("expected one remove call, got %d", daemon.removeCount)
+	}
+	if daemon.removeImageCount != 1 {
+		t.Fatalf("expected one image remove call, got %d", daemon.removeImageCount)
+	}
+	if len(daemon.removeImageRefs) != 1 || daemon.removeImageRefs[0] != spec.Image {
+		t.Fatalf("expected old image %s to be removed, got %#v", spec.Image, daemon.removeImageRefs)
+	}
+}
+
 func TestManagedContainerNetworkDriftReason(t *testing.T) {
 	spec := testManagedContainerSpec()
 
@@ -136,6 +157,8 @@ type fakeManagedContainerDaemon struct {
 	recreateInvalid bool
 	createCount     int
 	removeCount     int
+	removeImageCount int
+	removeImageRefs []string
 	connectCount    int
 	connectIPs      []string
 	createRequests  []dockerCreateContainerRequest
@@ -191,6 +214,16 @@ func (d *fakeManagedContainerDaemon) handle(w http.ResponseWriter, r *http.Reque
 		if err := json.NewEncoder(w).Encode(d.current); err != nil {
 			d.t.Fatalf("encode inspect response failed: %v", err)
 		}
+		return
+
+	case r.Method == http.MethodDelete && strings.HasPrefix(r.URL.Path, "/images/"):
+		id := strings.TrimPrefix(r.URL.Path, "/images/")
+		if idx := strings.IndexByte(id, '?'); idx >= 0 {
+			id = id[:idx]
+		}
+		d.removeImageCount++
+		d.removeImageRefs = append(d.removeImageRefs, id)
+		w.WriteHeader(http.StatusOK)
 		return
 
 	case r.Method == http.MethodDelete && strings.HasPrefix(r.URL.Path, "/containers/"):

@@ -453,6 +453,9 @@ func (c *DockerClient) recreateAndValidateManagedContainer(ctx context.Context, 
 		if err := c.RemoveContainer(ctx, inspect.ID); err != nil {
 			return err
 		}
+		if err := c.RemoveImage(ctx, inspect.Config.Image); err != nil {
+			c.logger.Errorf(err, "failed to remove docker image after proxy container cleanup: image=%s containerId=%s", inspect.Config.Image, inspect.ID)
+		}
 	}
 	if err := c.recreateManagedContainer(ctx, spec); err != nil {
 		return err
