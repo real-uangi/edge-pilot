@@ -162,6 +162,185 @@ func TestExecuteDeployRetriesTransientHealthFailures(t *testing.T) {
 	}
 }
 
+func TestExecuteTrafficSwitchCleansImages(t *testing.T) {
+	docker := &fakeDockerRuntime{
+		managedItems: []*ManagedContainer{
+			{
+				ContainerRuntime: ContainerRuntime{ContainerID: "remove-old"},
+				Name:             ManagedContainerNameForRelease("svc-a", "release-old"),
+				Managed:          true,
+				AgentID:          "agent-a",
+				ServiceKey:       "svc-a",
+				ReleaseID:        "release-old",
+				Slot:             grpcapi.Slot_SLOT_GREEN,
+				Image:            "registry/svc-a:release-old",
+			},
+		},
+	}
+	executor := NewExecutor(&config.AgentRuntimeConfig{AgentID: "agent-a"}, docker, &fakeProxyRuntime{}, nil)
+
+	err := executor.Execute(context.Background(), &grpcapi.TaskCommand{
+		TaskId:          "task-3",
+		ReleaseId:       "release-target",
+		AgentId:         "agent-a",
+		ServiceKey:      "svc-a",
+		Type:            grpcapi.TaskType_TASK_TYPE_SWITCH_TRAFFIC,
+		BackendName:     "be-api",
+		ServerName:      "srv-green",
+		PreviousServer:  "srv-blue",
+		TargetSlot:      grpcapi.Slot_SLOT_GREEN,
+		CurrentLiveSlot: grpcapi.Slot_SLOT_BLUE,
+		ContainerPort:   8080,
+	}, func(update *grpcapi.TaskUpdate) error { return nil })
+	if err != nil {
+		t.Fatalf("Execute() error = %v", err)
+	}
+	if len(docker.removedIDs) != 1 || docker.removedIDs[0] != "remove-old" {
+		t.Fatalf("expected stale managed container to be removed, got %#v", docker.removedIDs)
+	}
+	if len(docker.removedImages) != 1 || docker.removedImages[0] != "registry/svc-a:release-old" {
+		t.Fatalf("expected stale managed container image to be removed, got %#v", docker.removedImages)
+	}
+}
+
+func TestExecuteDeployCleansFailedContainerAndImage(t *testing.T) {
+	docker := &fakeDockerRuntime{
+		statusByID: map[string]*ContainerStatus{
+			"new-container": {State: "exited", Running: false, Health: "unhealthy"},
+		},
+		logsByID: map[string]string{
+			"new-container": "boot failed",
+		},
+	}
+	executor := NewExecutor(&config.AgentRuntimeConfig{AgentID: "agent-a"}, docker, &fakeProxyRuntime{}, nil)
+	executor.httpProbe = func(string, string, map[string]string, int, int) error { return errors.New("probe failed") }
+
+	err := executor.Execute(context.Background(), &grpcapi.TaskCommand{
+		TaskId:                  "task-failed",
+		ReleaseId:               "release-failed",
+		ServiceKey:              "svc-a",
+		AgentId:                 "agent-a",
+		ImageRepo:               "registry/svc-a",
+		ImageTag:                "release-failed",
+		Type:                    grpcapi.TaskType_TASK_TYPE_DEPLOY_GREEN,
+		TargetSlot:              grpcapi.Slot_SLOT_GREEN,
+		ServerName:              "srv-green",
+		ContainerPort:           8080,
+		DockerHealthCheck:       true,
+		HttpHealthPath:          "/health",
+		HttpExpectedCode:        200,
+		HttpTimeoutSecond:       2,
+		StartupGraceSecond:      1,
+		HttpProbeTimeoutSecond:  1,
+		HttpProbeIntervalSecond: 1,
+		HttpSuccessThreshold:    1,
+	}, func(update *grpcapi.TaskUpdate) error { return nil })
+	if err == nil {
+		t.Fatalf("expected deploy failure")
+	}
+	execErr, ok := err.(*TaskExecutionError)
+	if !ok || execErr.Diagnostic == nil {
+		t.Fatalf("expected task execution error with diagnostic, got %#v", err)
+	}
+	if !execErr.Diagnostic.CleanupCompleted {
+		t.Fatalf("expected cleanup to complete")
+	}
+	if len(docker.removedIDs) != 1 || docker.removedIDs[0] != "new-container" {
+		t.Fatalf("expected failed container to be removed, got %#v", docker.removedIDs)
+	}
+	if len(docker.removedImages) != 1 || docker.removedImages[0] != "registry/svc-a:release-failed" {
+		t.Fatalf("expected failed container image to be removed, got %#v", docker.removedImages)
+	}
+}
+
+func TestReconcileManagedContainersOnStartupRemovesImages(t *testing.T) {
+	docker := &fakeDockerRuntime{
+		managedItems: []*ManagedContainer{
+			{
+				ContainerRuntime: ContainerRuntime{ContainerID: "keep-running"},
+				Name:             ManagedContainerName("svc-a", grpcapi.Slot_SLOT_GREEN),
+				Managed:          true,
+				AgentID:          "agent-a",
+				ServiceKey:       "svc-a",
+				ReleaseID:        "release-keep",
+				Slot:             grpcapi.Slot_SLOT_GREEN,
+				State:            "running",
+				Image:            "registry/svc-a:release-keep",
+			},
+			{
+				ContainerRuntime: ContainerRuntime{ContainerID: "remove-terminal"},
+				Name:             ManagedContainerName("svc-a", grpcapi.Slot_SLOT_BLUE),
+				Managed:          true,
+				AgentID:          "agent-a",
+				ServiceKey:       "svc-a",
+				ReleaseID:        "release-terminal",
+				Slot:             grpcapi.Slot_SLOT_BLUE,
+				State:            "exited",
+				Image:            "registry/svc-a:release-terminal",
+			},
+		},
+	}
+	executor := NewExecutor(&config.AgentRuntimeConfig{AgentID: "agent-a"}, docker, &fakeProxyRuntime{}, nil)
+
+	stats, err := executor.ReconcileManagedContainersOnStartup(context.Background(), "agent-a")
+	if err != nil {
+		t.Fatalf("ReconcileManagedContainersOnStartup() error = %v", err)
+	}
+	if stats.Scanned != 2 || stats.Preserved != 1 || stats.Removed != 1 || stats.Failed != 0 {
+		t.Fatalf("unexpected stats: %#v", stats)
+	}
+	if len(docker.removedIDs) != 1 || docker.removedIDs[0] != "remove-terminal" {
+		t.Fatalf("expected terminal container to be removed, got %#v", docker.removedIDs)
+	}
+	if len(docker.removedImages) != 1 || docker.removedImages[0] != "registry/svc-a:release-terminal" {
+		t.Fatalf("expected terminal container image to be removed, got %#v", docker.removedImages)
+	}
+}
+
+func TestImageRemovalFailureDoesNotBlockCleanup(t *testing.T) {
+	docker := &fakeDockerRuntime{
+		managedItems: []*ManagedContainer{
+			{
+				ContainerRuntime: ContainerRuntime{ContainerID: "remove-old"},
+				Name:             ManagedContainerNameForRelease("svc-a", "release-old"),
+				Managed:          true,
+				AgentID:          "agent-a",
+				ServiceKey:       "svc-a",
+				ReleaseID:        "release-old",
+				Slot:             grpcapi.Slot_SLOT_GREEN,
+				Image:            "registry/svc-a:release-old",
+			},
+		},
+		removeImageErrByRef: map[string]error{
+			"registry/svc-a:release-old": errors.New("image in use"),
+		},
+	}
+	executor := NewExecutor(&config.AgentRuntimeConfig{AgentID: "agent-a"}, docker, &fakeProxyRuntime{}, nil)
+
+	err := executor.Execute(context.Background(), &grpcapi.TaskCommand{
+		TaskId:          "task-3",
+		ReleaseId:       "release-target",
+		AgentId:         "agent-a",
+		ServiceKey:      "svc-a",
+		Type:            grpcapi.TaskType_TASK_TYPE_SWITCH_TRAFFIC,
+		BackendName:     "be-api",
+		ServerName:      "srv-green",
+		PreviousServer:  "srv-blue",
+		TargetSlot:      grpcapi.Slot_SLOT_GREEN,
+		CurrentLiveSlot: grpcapi.Slot_SLOT_BLUE,
+		ContainerPort:   8080,
+	}, func(update *grpcapi.TaskUpdate) error { return nil })
+	if err != nil {
+		t.Fatalf("Execute() error = %v", err)
+	}
+	if len(docker.removedIDs) != 1 {
+		t.Fatalf("expected container to be removed despite image removal failure, got %#v", docker.removedIDs)
+	}
+	if len(docker.removedImages) != 1 {
+		t.Fatalf("expected image removal to be attempted, got %#v", docker.removedImages)
+	}
+}
+
 func TestExecuteDeployCollectsLogsAndCleansFailedContainer(t *testing.T) {
 	docker := &fakeDockerRuntime{
 		statusByID: map[string]*ContainerStatus{
@@ -383,20 +562,22 @@ func TestReconcileManagedContainersOnStartupConservativeScan(t *testing.T) {
 }
 
 type fakeDockerRuntime struct {
-	foundByName   map[string]*ManagedContainer
-	managedItems  []*ManagedContainer
-	statusByID    map[string]*ContainerStatus
-	inspectCalls  map[string]int
-	listenByID    map[string]string
-	logsByID      map[string]string
-	removeErrByID map[string]error
-	deployedTasks []*grpcapi.TaskCommand
-	removedIDs    []string
+	foundByName       map[string]*ManagedContainer
+	managedItems      []*ManagedContainer
+	statusByID        map[string]*ContainerStatus
+	inspectCalls      map[string]int
+	listenByID        map[string]string
+	logsByID          map[string]string
+	removeErrByID     map[string]error
+	removeImageErrByRef map[string]error
+	deployedTasks     []*grpcapi.TaskCommand
+	removedIDs        []string
+	removedImages     []string
 }
 
 func (f *fakeDockerRuntime) DeployContainer(ctx context.Context, task *grpcapi.TaskCommand) (*ContainerRuntime, error) {
 	f.deployedTasks = append(f.deployedTasks, task)
-	return &ContainerRuntime{ContainerID: "new-container", ListenAddress: "172.29.0.22:8080"}, nil
+	return &ContainerRuntime{ContainerID: "new-container", ListenAddress: "172.29.0.22:8080", Image: task.GetImageRepo() + ":" + task.GetImageTag()}, nil
 }
 
 func (f *fakeDockerRuntime) GetContainerDetails(ctx context.Context, containerID string) (*agentdomain.ContainerDetails, error) {
@@ -451,6 +632,14 @@ func (f *fakeDockerRuntime) StreamContainerLogs(ctx context.Context, containerID
 func (f *fakeDockerRuntime) RemoveContainer(ctx context.Context, containerID string) error {
 	f.removedIDs = append(f.removedIDs, containerID)
 	if err, ok := f.removeErrByID[containerID]; ok {
+		return err
+	}
+	return nil
+}
+
+func (f *fakeDockerRuntime) RemoveImage(ctx context.Context, imageRef string) error {
+	f.removedImages = append(f.removedImages, imageRef)
+	if err, ok := f.removeImageErrByRef[imageRef]; ok {
 		return err
 	}
 	return nil

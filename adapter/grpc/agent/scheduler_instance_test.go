@@ -161,6 +161,9 @@ func (f *fakeDockerRuntime) StreamContainerLogs(context.Context, string, int, bo
 func (f *fakeDockerRuntime) RemoveContainer(context.Context, string) error {
 	panic("not implemented")
 }
+func (f *fakeDockerRuntime) RemoveImage(context.Context, string) error {
+	panic("not implemented")
+}
 func (f *fakeDockerRuntime) ListManagedContainers(context.Context, string, string) ([]*agentdomain.ManagedContainer, error) {
 	panic("not implemented")
 }

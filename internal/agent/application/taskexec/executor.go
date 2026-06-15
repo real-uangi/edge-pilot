@@ -433,6 +433,11 @@ func (e *Executor) collectFailureDiagnostic(ctx context.Context, runtime *agentd
 		diagnostic.FailureLogs = logs
 	}
 	cleanupErr := e.docker.RemoveContainer(ctx, containerID)
+	if cleanupErr == nil && strings.TrimSpace(runtime.Image) != "" {
+		if err := e.docker.RemoveImage(ctx, runtime.Image); err != nil {
+			e.logger.Errorf(err, "failed to remove docker image after container cleanup: image=%s containerId=%s", runtime.Image, containerID)
+		}
+	}
 	diagnostic.CleanupCompleted = cleanupErr == nil
 	return diagnostic, cleanupErr
 }
@@ -458,12 +463,22 @@ func (e *Executor) cleanupManagedContainers(ctx context.Context, task *grpcapi.T
 			errs = append(errs, err)
 			continue
 		}
+		e.removeContainerImage(ctx, item.ContainerID, item.Image)
 		removed++
 	}
 	if len(errs) > 0 {
 		return removed, errors.Join(errs...)
 	}
 	return removed, nil
+}
+
+func (e *Executor) removeContainerImage(ctx context.Context, containerID, image string) {
+	if strings.TrimSpace(image) == "" {
+		return
+	}
+	if err := e.docker.RemoveImage(ctx, image); err != nil {
+		e.logger.Errorf(err, "failed to remove docker image after container cleanup: image=%s containerId=%s", image, containerID)
+	}
 }
 
 func (e *Executor) cleanupStaleContainersOnSlot(ctx context.Context, agentID, serviceKey string, slot grpcapi.Slot) (int, error) {
@@ -489,6 +504,7 @@ func (e *Executor) cleanupStaleContainersOnSlot(ctx context.Context, agentID, se
 			errs = append(errs, err)
 			continue
 		}
+		e.removeContainerImage(ctx, item.ContainerID, item.Image)
 		removed++
 	}
 	if len(errs) > 0 {
@@ -532,6 +548,7 @@ func (e *Executor) ReconcileManagedContainersOnStartup(ctx context.Context, agen
 			e.logger.Errorf(err, "startup managed container cleanup failed: agentId=%s containerId=%s serviceKey=%s releaseId=%s slot=%s state=%s", agentID, item.ContainerID, item.ServiceKey, item.ReleaseID, item.Slot.String(), item.State)
 			continue
 		}
+		e.removeContainerImage(ctx, item.ContainerID, item.Image)
 		stats.Removed++
 	}
 	e.logger.Infof("startup managed container scan completed: agentId=%s scanned=%d removed=%d preserved=%d failed=%d", agentID, stats.Scanned, stats.Removed, stats.Preserved, stats.Failed)

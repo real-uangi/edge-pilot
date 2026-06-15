@@ -511,18 +511,24 @@ func (m *ManagedProxyRuntime) cleanupStaleManagedContainers(ctx context.Context,
 		m.logger.Errorf(err, "list managed containers for stale cleanup failed: agentId=%s", m.cfg.AgentID)
 		return
 	}
-	staleContainerIDs := selectStaleManagedContainerIDs(items, snapshot)
+	staleContainerIDs, imageByContainerID := selectStaleManagedContainerIDs(items, snapshot)
 	for _, containerID := range staleContainerIDs {
 		m.logger.Infof("removing stale managed container after snapshot reconcile: agentId=%s containerId=%s", m.cfg.AgentID, containerID)
 		if err := m.docker.RemoveContainer(ctx, containerID); err != nil {
 			m.logger.Errorf(err, "remove stale managed container failed: agentId=%s containerId=%s", m.cfg.AgentID, containerID)
+			continue
+		}
+		if image := imageByContainerID[containerID]; image != "" {
+			if err := m.docker.RemoveImage(ctx, image); err != nil {
+				m.logger.Errorf(err, "failed to remove docker image after stale managed container cleanup: agentId=%s containerId=%s image=%s", m.cfg.AgentID, containerID, image)
+			}
 		}
 	}
 }
 
-func selectStaleManagedContainerIDs(items []*agentdomain.ManagedContainer, snapshot *grpcapi.ProxyConfigSnapshot) []string {
+func selectStaleManagedContainerIDs(items []*agentdomain.ManagedContainer, snapshot *grpcapi.ProxyConfigSnapshot) ([]string, map[string]string) {
 	if len(items) == 0 {
-		return nil
+		return nil, nil
 	}
 	desiredServiceKeys := make(map[string]struct{}, len(snapshot.GetServices()))
 	for _, service := range snapshot.GetServices() {
@@ -533,6 +539,7 @@ func selectStaleManagedContainerIDs(items []*agentdomain.ManagedContainer, snaps
 		desiredServiceKeys[serviceKey] = struct{}{}
 	}
 	staleContainerIDs := make([]string, 0, len(items))
+	imageByContainerID := make(map[string]string, len(items))
 	for _, item := range items {
 		if item == nil {
 			continue
@@ -549,8 +556,9 @@ func selectStaleManagedContainerIDs(items []*agentdomain.ManagedContainer, snaps
 			continue
 		}
 		staleContainerIDs = append(staleContainerIDs, containerID)
+		imageByContainerID[containerID] = strings.TrimSpace(item.Image)
 	}
-	return staleContainerIDs
+	return staleContainerIDs, imageByContainerID
 }
 
 type dataplaneFailureContext struct {
