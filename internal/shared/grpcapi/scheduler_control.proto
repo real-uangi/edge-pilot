@@ -52,7 +52,7 @@ message SchedulerAck {
 message SchedulerRunCommand {
   string run_id = 1;
   string job_id = 2;
-  string task_type = 3;
+  string handler_key = 3;
   string idempotency_key = 4;
   int32 attempt = 5;
   string payload_json = 6;

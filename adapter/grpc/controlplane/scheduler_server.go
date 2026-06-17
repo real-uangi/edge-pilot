@@ -236,7 +236,7 @@ func (h *schedulerSessionHub) DispatchRun(executorID string, run *model.Schedule
 			Run: &grpcapi.SchedulerRunCommand{
 				RunId:          run.ID.String(),
 				JobId:          run.JobID.String(),
-				TaskType:       run.TaskType,
+				HandlerKey:     run.HandlerKey,
 				IdempotencyKey: run.IdempotencyKey,
 				Attempt:        int32(run.Attempt),
 				PayloadJson:    string(payloadBytes),

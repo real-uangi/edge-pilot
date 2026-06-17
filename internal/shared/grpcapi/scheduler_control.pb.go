@@ -7,12 +7,11 @@
 package grpcapi
 
 import (
+	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
+	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 	reflect "reflect"
 	sync "sync"
 	unsafe "unsafe"
-
-	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
-	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 )
 
 const (
@@ -410,7 +409,7 @@ type SchedulerRunCommand struct {
 	state          protoimpl.MessageState `protogen:"open.v1"`
 	RunId          string                 `protobuf:"bytes,1,opt,name=run_id,json=runId,proto3" json:"run_id,omitempty"`
 	JobId          string                 `protobuf:"bytes,2,opt,name=job_id,json=jobId,proto3" json:"job_id,omitempty"`
-	TaskType       string                 `protobuf:"bytes,3,opt,name=task_type,json=taskType,proto3" json:"task_type,omitempty"`
+	HandlerKey     string                 `protobuf:"bytes,3,opt,name=handler_key,json=handlerKey,proto3" json:"handler_key,omitempty"`
 	IdempotencyKey string                 `protobuf:"bytes,4,opt,name=idempotency_key,json=idempotencyKey,proto3" json:"idempotency_key,omitempty"`
 	Attempt        int32                  `protobuf:"varint,5,opt,name=attempt,proto3" json:"attempt,omitempty"`
 	PayloadJson    string                 `protobuf:"bytes,6,opt,name=payload_json,json=payloadJson,proto3" json:"payload_json,omitempty"`
@@ -462,9 +461,9 @@ func (x *SchedulerRunCommand) GetJobId() string {
 	return ""
 }
 
-func (x *SchedulerRunCommand) GetTaskType() string {
+func (x *SchedulerRunCommand) GetHandlerKey() string {
 	if x != nil {
-		return x.TaskType
+		return x.HandlerKey
 	}
 	return ""
 }
@@ -883,11 +882,12 @@ const file_internal_shared_grpcapi_scheduler_control_proto_rawDesc = "" +
 	"executorId\x12&\n" +
 	"\x0frunning_run_ids\x18\x02 \x03(\tR\rrunningRunIds\"(\n" +
 	"\fSchedulerAck\x12\x18\n" +
-	"\amessage\x18\x01 \x01(\tR\amessage\"\xc6\x01\n" +
+	"\amessage\x18\x01 \x01(\tR\amessage\"\xca\x01\n" +
 	"\x13SchedulerRunCommand\x12\x15\n" +
 	"\x06run_id\x18\x01 \x01(\tR\x05runId\x12\x15\n" +
-	"\x06job_id\x18\x02 \x01(\tR\x05jobId\x12\x1b\n" +
-	"\ttask_type\x18\x03 \x01(\tR\btaskType\x12'\n" +
+	"\x06job_id\x18\x02 \x01(\tR\x05jobId\x12\x1f\n" +
+	"\vhandler_key\x18\x03 \x01(\tR\n" +
+	"handlerKey\x12'\n" +
 	"\x0fidempotency_key\x18\x04 \x01(\tR\x0eidempotencyKey\x12\x18\n" +
 	"\aattempt\x18\x05 \x01(\x05R\aattempt\x12!\n" +
 	"\fpayload_json\x18\x06 \x01(\tR\vpayloadJson\"\xa2\x01\n" +

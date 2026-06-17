@@ -9,7 +9,8 @@ import (
 
 type UpsertSchedulerJobRequest struct {
 	Name            string            `json:"name" binding:"required"`
-	TaskType        string            `json:"taskType" binding:"required"`
+	HandlerKey      string            `json:"handlerKey" binding:"required"`
+	ServiceID       uuid.UUID         `json:"serviceId" binding:"required"`
 	Payload         map[string]any    `json:"payload"`
 	ScheduleKind    string            `json:"scheduleKind" binding:"required,oneof=one_time cron"`
 	CronExpr        string            `json:"cronExpr"`
@@ -25,7 +26,8 @@ type UpsertSchedulerJobRequest struct {
 type SchedulerJobOutput struct {
 	ID              uuid.UUID                     `json:"id"`
 	Name            string                        `json:"name"`
-	TaskType        string                        `json:"taskType"`
+	HandlerKey      string                        `json:"handlerKey"`
+	ServiceID       uuid.UUID                     `json:"serviceId"`
 	Payload         map[string]any                `json:"payload"`
 	ScheduleKind    model.SchedulerScheduleKind   `json:"scheduleKind"`
 	CronExpr        string                        `json:"cronExpr"`
@@ -44,7 +46,8 @@ type SchedulerJobOutput struct {
 type SchedulerRunOutput struct {
 	ID             uuid.UUID                   `json:"id"`
 	JobID          uuid.UUID                   `json:"jobId"`
-	TaskType       string                      `json:"taskType"`
+	HandlerKey     string                      `json:"handlerKey"`
+	ServiceID      uuid.UUID                   `json:"serviceId"`
 	Payload        map[string]any              `json:"payload"`
 	Status         model.SchedulerJobRunStatus `json:"status"`
 	Attempt        int                         `json:"attempt"`

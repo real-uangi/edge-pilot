@@ -376,7 +376,8 @@ type SchedulerJob struct {
 	ID uuid.UUID `json:"id" gorm:"type:uuid;primaryKey"`
 	commondb.Model
 	Name              string                             `json:"name" gorm:"size:255;not null"`
-	TaskType          string                             `json:"taskType" gorm:"size:128;index;not null"`
+	HandlerKey        string                             `json:"handlerKey" gorm:"size:128;index;not null"`
+	ServiceID         uuid.UUID                          `json:"serviceId" gorm:"type:uuid;index"`
 	Payload           *commondb.JSONB[map[string]any]    `json:"payload" gorm:"type:jsonb"`
 	ScheduleKind      SchedulerScheduleKind              `json:"scheduleKind" gorm:"index;not null"`
 	CronExpr          string                             `json:"cronExpr" gorm:"size:255"`
@@ -399,7 +400,8 @@ type SchedulerJobRun struct {
 	ID uuid.UUID `json:"id" gorm:"type:uuid;primaryKey"`
 	commondb.Model
 	JobID           uuid.UUID                       `json:"jobId" gorm:"type:uuid;index;not null"`
-	TaskType        string                          `json:"taskType" gorm:"size:128;index;not null"`
+	HandlerKey      string                          `json:"handlerKey" gorm:"size:128;index;not null"`
+	ServiceID       uuid.UUID                       `json:"serviceId" gorm:"type:uuid;index"`
 	Payload         *commondb.JSONB[map[string]any] `json:"payload" gorm:"type:jsonb"`
 	Status          SchedulerJobRunStatus           `json:"status" gorm:"index;not null"`
 	Attempt         int                             `json:"attempt"`

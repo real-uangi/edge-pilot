@@ -44,18 +44,6 @@ func TestRetryBackoff(t *testing.T) {
 	}
 }
 
-func TestIsReleaseLinkedTaskType(t *testing.T) {
-	if !isReleaseLinkedTaskType("release.deploy") {
-		t.Fatalf("expected release.deploy to be linked")
-	}
-	if !isReleaseLinkedTaskType("release_switch") {
-		t.Fatalf("expected release_switch to be linked")
-	}
-	if isReleaseLinkedTaskType("custom.task") {
-		t.Fatalf("expected custom.task not linked")
-	}
-}
-
 func TestDTOShapeCompileGuard(t *testing.T) {
 	_ = dto.UpsertSchedulerJobRequest{}
 }

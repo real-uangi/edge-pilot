@@ -1,7 +1,8 @@
 export interface SchedulerJobRecord {
   id: string;
   name: string;
-  taskType: string;
+  handlerKey: string;
+  serviceId: string | null;
   payload: Record<string, unknown>;
   scheduleKind: number;
   cronExpr: string;
@@ -20,7 +21,8 @@ export interface SchedulerJobRecord {
 export interface SchedulerRunRecord {
   id: string;
   jobId: string;
-  taskType: string;
+  handlerKey: string;
+  serviceId: string | null;
   payload: Record<string, unknown>;
   status: number;
   attempt: number;
@@ -54,7 +56,8 @@ export interface SchedulerExecutorRecord {
 
 export interface UpsertSchedulerJobInput {
   name: string;
-  taskType: string;
+  handlerKey: string;
+  serviceId: string;
   payload: Record<string, unknown>;
   scheduleKind: "one_time" | "cron";
   cronExpr?: string;

@@ -22,13 +22,14 @@ export const runStatusLabel: Record<number, string> = {
 export function newJobForm(): UpsertSchedulerJobInput {
   return {
     name: "",
-    taskType: "",
+    handlerKey: "",
+    serviceId: "",
     payload: {},
     scheduleKind: "one_time",
     cronExpr: "*/5 * * * *",
     runAt: new Date().toISOString(),
     dispatchPolicy: "round_robin",
-    executorGroup: "default",
+    executorGroup: "",
     leaseTimeoutSec: 60,
     maxRetries: 3,
     metadata: {},

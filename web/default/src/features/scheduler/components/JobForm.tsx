@@ -4,6 +4,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { getErrorMessage } from "../../../shared/lib/api-client";
 import { schedulerApi } from "../api";
+import { servicesApi } from "../../services/api";
 import { ActionButton } from "../../../shared/components/ActionButton";
 import { isValidCron } from "./scheduler-utils";
 import styles from "../../../styles/admin.module.css";
@@ -17,23 +18,15 @@ const cronPresets = [
   { label: "每月1日", value: "0 2 1 * *" },
 ];
 
-const taskTypeExamples = [
-  "release.deploy",
-  "release_switch",
-  "release_rollback",
-  "release_cleanup",
-  "custom.task",
-];
-
 const jobSchema = z
   .object({
     name: z.string().min(1, "名称必填").max(64, "最长 64 字符"),
-    taskType: z.string().min(1, "任务类型必填"),
+    handlerKey: z.string().min(1, "Handler 标识符必填"),
+    serviceId: z.string().uuid("请选择关联服务"),
     scheduleKind: z.enum(["one_time", "cron"]),
     cronExpr: z.string().optional(),
     runAt: z.string().optional(),
     dispatchPolicy: z.enum(["round_robin", "fixed_live_slot"]),
-    executorGroup: z.string().min(1, "执行器组必填"),
     leaseTimeoutSec: z.coerce.number().min(1).max(3600).default(60),
     maxRetries: z.coerce.number().min(0).max(10).default(3),
     payloadText: z.string().default("{}"),
@@ -77,15 +70,10 @@ type JobFormData = z.infer<typeof jobSchema>;
 export function JobForm() {
   const queryClient = useQueryClient();
 
-  const executorsQuery = useQuery({
-    queryKey: ["scheduler", "executors"],
-    queryFn: schedulerApi.listExecutors,
+  const servicesQuery = useQuery({
+    queryKey: ["services"],
+    queryFn: servicesApi.list,
   });
-
-  const groups = useMemo(() => {
-    const set = new Set(executorsQuery.data?.map((e) => e.group) ?? []);
-    return Array.from(set).sort();
-  }, [executorsQuery.data]);
 
   const {
     register,
@@ -98,12 +86,12 @@ export function JobForm() {
     resolver: zodResolver(jobSchema) as any,
     defaultValues: {
       name: "",
-      taskType: "",
+      handlerKey: "",
+      serviceId: "",
       scheduleKind: "one_time",
       cronExpr: "*/5 * * * *",
       runAt: "",
       dispatchPolicy: "round_robin",
-      executorGroup: "default",
       leaseTimeoutSec: 60,
       maxRetries: 3,
       payloadText: "{}",
@@ -113,8 +101,13 @@ export function JobForm() {
   });
 
   const scheduleKind = watch("scheduleKind");
-  const dispatchPolicy = watch("dispatchPolicy");
-  const taskType = watch("taskType");
+  const serviceId = watch("serviceId");
+
+  const selectedService = useMemo(() => {
+    return servicesQuery.data?.find((s) => s.id === serviceId) ?? null;
+  }, [servicesQuery.data, serviceId]);
+
+  const executorGroup = selectedService?.schedulerExecutorGroup ?? "";
 
   const createMutation = useMutation({
     mutationFn: schedulerApi.createJob,
@@ -131,14 +124,15 @@ export function JobForm() {
 
     createMutation.mutate({
       name: data.name,
-      taskType: data.taskType,
+      handlerKey: data.handlerKey,
+      serviceId: data.serviceId,
       payload,
       scheduleKind: data.scheduleKind,
       cronExpr: data.cronExpr,
       runAt,
       enabled: data.enabled,
       dispatchPolicy: data.dispatchPolicy,
-      executorGroup: data.executorGroup,
+      executorGroup,
       leaseTimeoutSec: data.leaseTimeoutSec,
       maxRetries: data.maxRetries,
       metadata,
@@ -167,23 +161,33 @@ export function JobForm() {
         </label>
 
         <label className={styles.field}>
-          <span className={styles.label}>任务类型</span>
-          <input className={styles.input} {...register("taskType")} list="taskTypeExamples" />
-          <datalist id="taskTypeExamples">
-            {taskTypeExamples.map((ex) => (
-              <option key={ex} value={ex} />
-            ))}
-          </datalist>
-          {errors.taskType && <span className={styles.inlineError}>{errors.taskType.message}</span>}
-          <span className={styles.hint}>
-            常见示例：release.deploy、release_switch、release_rollback、custom.task
-          </span>
-          {dispatchPolicy === "fixed_live_slot" && taskType && !taskType.startsWith("release") && (
-            <span className={styles.inlineError}>
-              固定槽位策略仅支持 release 开头的任务类型
-            </span>
-          )}
+          <span className={styles.label}>Handler 标识符</span>
+          <input className={styles.input} {...register("handlerKey")} placeholder="如 deploy、cleanup" />
+          {errors.handlerKey && <span className={styles.inlineError}>{errors.handlerKey.message}</span>}
+          <span className={styles.hint}>执行器端注册 Handler 时使用的路由标识</span>
         </label>
+
+        <label className={styles.field}>
+          <span className={styles.label}>关联服务</span>
+          <select className={styles.select} {...register("serviceId")}>
+            <option value="">请选择服务</option>
+            {(servicesQuery.data ?? []).map((svc) => (
+              <option key={svc.id} value={svc.id}>
+                {svc.name}
+              </option>
+            ))}
+          </select>
+          {errors.serviceId && <span className={styles.inlineError}>{errors.serviceId.message}</span>}
+          <span className={styles.hint}>调度任务将绑定到该服务的执行器组</span>
+        </label>
+
+        {selectedService && (
+          <label className={styles.field}>
+            <span className={styles.label}>执行器组</span>
+            <input className={styles.input} value={executorGroup} readOnly disabled />
+            <span className={styles.hint}>由关联服务自动填充</span>
+          </label>
+        )}
 
         <label className={styles.field}>
           <span className={styles.label}>调度方式</span>
@@ -231,21 +235,7 @@ export function JobForm() {
             <option value="round_robin">轮询</option>
             <option value="fixed_live_slot">固定槽位</option>
           </select>
-          <span className={styles.hint}>轮询：在可用执行器间轮询；固定槽位：绑定到特定执行器</span>
-        </label>
-
-        <label className={styles.field}>
-          <span className={styles.label}>执行器组</span>
-          <input className={styles.input} {...register("executorGroup")} list="executorGroups" />
-          <datalist id="executorGroups">
-            {groups.map((g) => (
-              <option key={g} value={g} />
-            ))}
-          </datalist>
-          {errors.executorGroup && (
-            <span className={styles.inlineError}>{errors.executorGroup.message}</span>
-          )}
-          <span className={styles.hint}>任务分发目标组，如 default</span>
+          <span className={styles.hint}>轮询：在可用执行器间轮询；固定槽位：绑定到当前服务蓝绿槽位</span>
         </label>
 
         <label className={styles.field}>

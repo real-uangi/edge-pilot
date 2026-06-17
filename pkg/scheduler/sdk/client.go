@@ -17,7 +17,7 @@ type Handler func(ctx context.Context, run RunContext) error
 
 type RunContext struct {
 	JobRunID       string
-	TaskType       string
+	HandlerKey     string
 	Payload        map[string]any
 	IdempotencyKey string
 	Attempt        int
@@ -101,10 +101,10 @@ func NewExecutorClient(opts ExecutorClientOptions) *ExecutorClient {
 	}
 }
 
-func (c *ExecutorClient) RegisterHandler(taskType string, handler Handler) {
+func (c *ExecutorClient) RegisterHandler(handlerKey string, handler Handler) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	c.handlers[taskType] = handler
+	c.handlers[handlerKey] = handler
 }
 
 func (c *ExecutorClient) Run(ctx context.Context) error {
@@ -224,7 +224,7 @@ func (c *ExecutorClient) connectOnce(ctx context.Context) error {
 
 			ctxRun := RunContext{
 				JobRunID:       runID,
-				TaskType:       command.GetTaskType(),
+				HandlerKey:     command.GetHandlerKey(),
 				IdempotencyKey: command.GetIdempotencyKey(),
 				Attempt:        int(command.GetAttempt()),
 				Payload:        map[string]any{},
@@ -232,13 +232,13 @@ func (c *ExecutorClient) connectOnce(ctx context.Context) error {
 			if raw := command.GetPayloadJson(); raw != "" {
 				_ = json.Unmarshal([]byte(raw), &ctxRun.Payload)
 			}
-			handler := c.getHandler(ctxRun.TaskType)
+			handler := c.getHandler(ctxRun.HandlerKey)
 			if handler == nil {
 				outbound <- &grpcapi.ExecutorMessage{Payload: &grpcapi.ExecutorMessage_RunUpdate{RunUpdate: &grpcapi.SchedulerRunUpdate{
 					RunId:        runID,
 					Success:      false,
 					Retryable:    false,
-					ErrorMessage: "no handler registered for taskType",
+					ErrorMessage: "no handler registered for handlerKey",
 				}}}
 				return
 			}
@@ -265,8 +265,8 @@ func (c *ExecutorClient) connectOnce(ctx context.Context) error {
 	}
 }
 
-func (c *ExecutorClient) getHandler(taskType string) Handler {
+func (c *ExecutorClient) getHandler(handlerKey string) Handler {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
-	return c.handlers[taskType]
+	return c.handlers[handlerKey]
 }

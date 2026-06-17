@@ -92,7 +92,8 @@ export function JobsPage() {
               <thead>
                 <tr>
                   <th>名称</th>
-                  <th>任务类型</th>
+                  <th>Handler</th>
+                  <th>关联服务</th>
                   <th>调度方式</th>
                   <th>分发策略</th>
                   <th>执行器组</th>
@@ -109,7 +110,8 @@ export function JobsPage() {
                         {job.name}
                       </Link>
                     </td>
-                    <td>{job.taskType}</td>
+                    <td>{job.handlerKey}</td>
+                    <td>{job.serviceId ? job.serviceId.slice(0, 8) : "-"}</td>
                     <td>{scheduleKindLabel[job.scheduleKind] ?? String(job.scheduleKind)}</td>
                     <td>{dispatchPolicyLabel[job.dispatchPolicy] ?? String(job.dispatchPolicy)}</td>
                     <td>{job.executorGroup}</td>

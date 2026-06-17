@@ -145,7 +145,8 @@ func (s *Service) TriggerNow(id uuid.UUID, override map[string]any) (*dto.Schedu
 	run := &model.SchedulerJobRun{
 		ID:              uuid.New(),
 		JobID:           job.ID,
-		TaskType:        job.TaskType,
+		HandlerKey:      job.HandlerKey,
+		ServiceID:       job.ServiceID,
 		Payload:         commondb.NewJSONB(payload),
 		Status:          model.SchedulerJobRunStatusPending,
 		Attempt:         1,
@@ -468,7 +469,8 @@ func (s *Service) EnqueueDueJobs(now time.Time) error {
 			run := &model.SchedulerJobRun{
 				ID:              uuid.New(),
 				JobID:           fresh.ID,
-				TaskType:        fresh.TaskType,
+				HandlerKey:      fresh.HandlerKey,
+				ServiceID:       fresh.ServiceID,
 				Payload:         commondb.NewJSONB(jobPayload(fresh)),
 				Status:          model.SchedulerJobRunStatusPending,
 				Attempt:         1,
@@ -568,13 +570,20 @@ func (s *Service) pickExecutorAndClaim(run *model.SchedulerJobRun, now time.Time
 
 func (s *Service) pickExecutorID(run *model.SchedulerJobRun, online []OnlineExecutor) (string, error) {
 	if run.DispatchPolicy == model.SchedulerDispatchPolicyFixedLiveSlot {
-		runServiceID, err := serviceIDFromPayload(runPayload(run))
-		if err != nil {
-			return "", err
+		var targetServiceID uuid.UUID
+		if run.ServiceID != uuid.Nil {
+			targetServiceID = run.ServiceID
+		} else {
+			var err error
+			targetServiceID, err = serviceIDFromPayload(runPayload(run))
+			if err != nil {
+				return "", err
+			}
 		}
 		targetSlot := model.SlotBlue
 		if s.liveSlot != nil {
-			targetSlot, err = s.liveSlot.ResolveLiveSlot(runServiceID)
+			var err error
+			targetSlot, err = s.liveSlot.ResolveLiveSlot(targetServiceID)
 			if err != nil {
 				return "", err
 			}
@@ -584,7 +593,7 @@ func (s *Service) pickExecutorID(run *model.SchedulerJobRun, online []OnlineExec
 				continue
 			}
 			onlineServiceID, ok := serviceInstanceServiceID(online[i])
-			if !ok || onlineServiceID != runServiceID {
+			if !ok || onlineServiceID != targetServiceID {
 				continue
 			}
 			return online[i].ExecutorID, nil
@@ -646,12 +655,16 @@ func (s *Service) toJobEntity(current *model.SchedulerJob, req dto.UpsertSchedul
 	if err != nil {
 		return nil, err
 	}
-	taskType := strings.TrimSpace(req.TaskType)
-	if taskType == "" {
-		return nil, business.NewBadRequest("taskType required")
+	handlerKey := strings.TrimSpace(req.HandlerKey)
+	if handlerKey == "" {
+		return nil, business.NewBadRequest("handlerKey required")
 	}
-	if policy == model.SchedulerDispatchPolicyFixedLiveSlot && !isReleaseLinkedTaskType(taskType) {
-		return nil, business.NewBadRequest("fixed_live_slot policy requires release-linked taskType")
+	if req.ServiceID == uuid.Nil {
+		return nil, business.NewBadRequest("serviceId required")
+	}
+	executorGroup := strings.TrimSpace(req.ExecutorGroup)
+	if executorGroup == "" {
+		return nil, business.NewBadRequest("executorGroup required")
 	}
 	nextRun, err := calcInitialNextRun(kind, strings.TrimSpace(req.CronExpr), req.RunAt, now)
 	if err != nil {
@@ -674,7 +687,8 @@ func (s *Service) toJobEntity(current *model.SchedulerJob, req dto.UpsertSchedul
 	}
 	entity := &model.SchedulerJob{
 		Name:            strings.TrimSpace(req.Name),
-		TaskType:        taskType,
+		HandlerKey:      handlerKey,
+		ServiceID:       req.ServiceID,
 		Payload:         commondb.NewJSONB(copyAnyMap(req.Payload)),
 		ScheduleKind:    kind,
 		CronExpr:        strings.TrimSpace(req.CronExpr),
@@ -682,7 +696,7 @@ func (s *Service) toJobEntity(current *model.SchedulerJob, req dto.UpsertSchedul
 		NextRunAt:       nextRun,
 		Enabled:         boolPtr(enabled),
 		DispatchPolicy:  policy,
-		ExecutorGroup:   strings.TrimSpace(req.ExecutorGroup),
+		ExecutorGroup:   executorGroup,
 		LeaseTimeoutSec: normalizeLeaseTimeout(req.LeaseTimeoutSec, s.cfg.DefaultLeaseSec),
 		MaxRetries:      effectiveMaxRetries(req.MaxRetries, s.cfg.DefaultMaxRetries),
 		Metadata:        commondb.NewJSONB(copyStringMap(req.Metadata)),
@@ -767,11 +781,6 @@ func calcInitialNextRun(kind model.SchedulerScheduleKind, cronExpr string, runAt
 	default:
 		return nil, business.NewBadRequest("unsupported schedule kind")
 	}
-}
-
-func isReleaseLinkedTaskType(taskType string) bool {
-	clean := strings.ToLower(strings.TrimSpace(taskType))
-	return strings.HasPrefix(clean, "release.") || strings.HasPrefix(clean, "release_")
 }
 
 func effectiveMaxRetries(v int, fallback int) int {
@@ -930,7 +939,8 @@ func toSchedulerJobOutput(job *model.SchedulerJob) dto.SchedulerJobOutput {
 	return dto.SchedulerJobOutput{
 		ID:              job.ID,
 		Name:            job.Name,
-		TaskType:        job.TaskType,
+		HandlerKey:      job.HandlerKey,
+		ServiceID:       job.ServiceID,
 		Payload:         payload,
 		ScheduleKind:    job.ScheduleKind,
 		CronExpr:        job.CronExpr,
@@ -955,7 +965,8 @@ func toSchedulerRunOutput(run *model.SchedulerJobRun) dto.SchedulerRunOutput {
 	return dto.SchedulerRunOutput{
 		ID:             run.ID,
 		JobID:          run.JobID,
-		TaskType:       run.TaskType,
+		HandlerKey:     run.HandlerKey,
+		ServiceID:      run.ServiceID,
 		Payload:        payload,
 		Status:         run.Status,
 		Attempt:        run.Attempt,
