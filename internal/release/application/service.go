@@ -500,6 +500,20 @@ func (s *Service) ListTaskSnapshots(releaseID uuid.UUID) ([]dto.TaskSnapshot, er
 	}
 	out := make([]dto.TaskSnapshot, 0, len(tasks))
 	for i := range tasks {
+		attempts, err := s.repo.ListTaskAttemptsByTask(tasks[i].ID)
+		if err != nil {
+			return nil, err
+		}
+		attemptDTOs := make([]dto.TaskAttempt, 0, len(attempts))
+		for _, a := range attempts {
+			attemptDTOs = append(attemptDTOs, dto.TaskAttempt{
+				ID:          a.ID,
+				Status:      a.Status,
+				Message:     a.Message,
+				StartedAt:   a.StartedAt,
+				CompletedAt: a.CompletedAt,
+			})
+		}
 		out = append(out, dto.TaskSnapshot{
 			ID:               tasks[i].ID,
 			Type:             tasks[i].Type,
@@ -512,6 +526,24 @@ func (s *Service) ListTaskSnapshots(releaseID uuid.UUID) ([]dto.TaskSnapshot, er
 			DispatchedAt:     tasks[i].DispatchedAt,
 			StartedAt:        tasks[i].StartedAt,
 			CompletedAt:      tasks[i].CompletedAt,
+			Attempts:         attemptDTOs,
+		})
+	}
+	return out, nil
+}
+
+func (s *Service) ListReleaseAudits(releaseID uuid.UUID) ([]dto.AuditLog, error) {
+	audits, err := s.repo.ListAuditsByAggregate("release", releaseID.String())
+	if err != nil {
+		return nil, err
+	}
+	out := make([]dto.AuditLog, 0, len(audits))
+	for _, a := range audits {
+		out = append(out, dto.AuditLog{
+			ID:        a.ID,
+			EventType: a.EventType,
+			Message:   a.Message,
+			CreatedAt: a.CreatedAt,
 		})
 	}
 	return out, nil

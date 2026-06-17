@@ -37,9 +37,26 @@ export interface TaskSnapshot {
   dispatchedAt: string | null;
   startedAt: string | null;
   completedAt: string | null;
+  attempts: TaskAttempt[];
+}
+
+export interface TaskAttempt {
+  id: string;
+  status: number;
+  message: string;
+  startedAt: string | null;
+  completedAt: string | null;
+}
+
+export interface AuditLog {
+  id: string;
+  eventType: string;
+  message: string;
+  createdAt: string;
 }
 
 export interface ReleaseDetail {
   release: ReleaseRecord;
   tasks: TaskSnapshot[];
+  audits: AuditLog[];
 }

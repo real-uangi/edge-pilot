@@ -2812,6 +2812,18 @@ func (r *fakeReleaseRepo) CreateAudit(log *model.AuditLog) error {
 	return nil
 }
 
+func (r *fakeReleaseRepo) ListTaskAttemptsByTask(taskID uuid.UUID) ([]model.TaskAttempt, error) {
+	return nil, nil
+}
+
+func (r *fakeReleaseRepo) ListAuditsByAggregate(aggregateType string, aggregateID string) ([]model.AuditLog, error) {
+	out := make([]model.AuditLog, 0, len(r.audits))
+	for _, a := range r.audits {
+		out = append(out, *a)
+	}
+	return out, nil
+}
+
 type fakeDispatcher struct {
 	tasks         []*model.Task
 	replayedTasks []*model.Task

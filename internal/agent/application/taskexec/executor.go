@@ -107,6 +107,17 @@ func (e *Executor) executeDeploy(ctx context.Context, task *grpcapi.TaskCommand,
 		return &TaskExecutionError{Step: "proxy_stack_not_ready", Err: err}
 	}
 	normalizeHealthConfig(task)
+	imageRef := task.GetImageRepo() + ":" + task.GetImageTag()
+	if err := e.docker.EnsureImage(ctx, imageRef, task); err != nil {
+		return &TaskExecutionError{Step: "image_pull_failed", Err: err}
+	}
+	if err := report(&grpcapi.TaskUpdate{
+		TaskId: task.GetTaskId(),
+		Status: grpcapi.TaskStatus_TASK_STATUS_RUNNING,
+		Step:   "image_pulled",
+	}); err != nil {
+		return err
+	}
 	runtime, decision, err := e.ensureDeployContainer(ctx, task)
 	if err != nil {
 		return err

@@ -562,17 +562,21 @@ func TestReconcileManagedContainersOnStartupConservativeScan(t *testing.T) {
 }
 
 type fakeDockerRuntime struct {
-	foundByName       map[string]*ManagedContainer
-	managedItems      []*ManagedContainer
-	statusByID        map[string]*ContainerStatus
-	inspectCalls      map[string]int
-	listenByID        map[string]string
-	logsByID          map[string]string
-	removeErrByID     map[string]error
+	foundByName         map[string]*ManagedContainer
+	managedItems        []*ManagedContainer
+	statusByID          map[string]*ContainerStatus
+	inspectCalls        map[string]int
+	listenByID          map[string]string
+	logsByID            map[string]string
+	removeErrByID       map[string]error
 	removeImageErrByRef map[string]error
-	deployedTasks     []*grpcapi.TaskCommand
-	removedIDs        []string
-	removedImages     []string
+	deployedTasks       []*grpcapi.TaskCommand
+	removedIDs          []string
+	removedImages       []string
+}
+
+func (f *fakeDockerRuntime) EnsureImage(ctx context.Context, imageRef string, task *grpcapi.TaskCommand) error {
+	return nil
 }
 
 func (f *fakeDockerRuntime) DeployContainer(ctx context.Context, task *grpcapi.TaskCommand) (*ContainerRuntime, error) {

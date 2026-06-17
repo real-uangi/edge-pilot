@@ -273,6 +273,22 @@ func (r *repository) ListRuntimeInstancesByService(serviceID uuid.UUID) ([]model
 	return instances, nil
 }
 
+func (r *repository) ListTaskAttemptsByTask(taskID uuid.UUID) ([]model.TaskAttempt, error) {
+	var attempts []model.TaskAttempt
+	if err := r.conn.Where("task_id = ?", taskID).Order("created_at asc").Find(&attempts).Error; err != nil {
+		return nil, err
+	}
+	return attempts, nil
+}
+
+func (r *repository) ListAuditsByAggregate(aggregateType string, aggregateID string) ([]model.AuditLog, error) {
+	var audits []model.AuditLog
+	if err := r.conn.Where("aggregate_type = ? AND aggregate_id = ?", aggregateType, aggregateID).Order("created_at asc").Find(&audits).Error; err != nil {
+		return nil, err
+	}
+	return audits, nil
+}
+
 func (r *repository) CreateAudit(log *model.AuditLog) error {
 	return r.conn.Create(log).Error
 }

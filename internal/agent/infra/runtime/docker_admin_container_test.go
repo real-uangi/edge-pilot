@@ -150,19 +150,19 @@ func TestEnsureManagedContainerReturnsErrorWhenRecreatedContainerStillInvalid(t 
 }
 
 type fakeManagedContainerDaemon struct {
-	t               *testing.T
-	spec            managedContainerSpec
-	mu              sync.Mutex
-	current         *dockerContainerInspect
-	recreateInvalid bool
-	createCount     int
-	removeCount     int
+	t                *testing.T
+	spec             managedContainerSpec
+	mu               sync.Mutex
+	current          *dockerContainerInspect
+	recreateInvalid  bool
+	createCount      int
+	removeCount      int
 	removeImageCount int
-	removeImageRefs []string
-	connectCount    int
-	connectIPs      []string
-	createRequests  []dockerCreateContainerRequest
-	server          *httptest.Server
+	removeImageRefs  []string
+	connectCount     int
+	connectIPs       []string
+	createRequests   []dockerCreateContainerRequest
+	server           *httptest.Server
 }
 
 func newFakeManagedContainerDaemon(t *testing.T, spec managedContainerSpec, initial *dockerContainerInspect, recreateInvalid bool) *fakeManagedContainerDaemon {

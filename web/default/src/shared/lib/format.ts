@@ -95,6 +95,46 @@ export function taskTypeLabel(type: number): string {
   );
 }
 
+export function taskStepLabel(step: string): string {
+  return (
+    {
+      accepted: "接受任务",
+      dispatched: "派发任务",
+      "replayed_after_reconnect": "重连后重派",
+      recovered_running: "恢复运行",
+      image_pulled: "拉取镜像",
+      image_pull_failed: "拉取镜像失败",
+      container_started: "启动服务",
+      startup_grace_started: "启动宽限期",
+      health_probe_retry: "健康探测",
+      healthy: "健康检查通过",
+      "health_check_failed": "健康检查失败",
+      cleanup_pruned: "清理容器",
+      cleanup_failed: "清理失败",
+      traffic_switched: "切换流量",
+      task_timed_out: "任务超时",
+      managed_container_conflict: "容器冲突",
+      proxy_stack_not_ready: "代理栈未就绪",
+      noop: "无操作",
+    }[step] ?? step
+  );
+}
+
+export function auditEventLabel(eventType: string, message: string): string {
+  if (eventType === "traffic_percent_updated") {
+    const match = message.match(/percent=(\d+)/);
+    const percent = match ? match[1] : "?";
+    return `调整流量至 ${percent}%`;
+  }
+  if (eventType === "switch_confirmed") {
+    return "确认切流 100%";
+  }
+  if (eventType === "traffic_switched") {
+    return "流量切换完成";
+  }
+  return eventType;
+}
+
 export function slotLabel(slot: number): string {
   if (slot === 1) {
     return "蓝槽";

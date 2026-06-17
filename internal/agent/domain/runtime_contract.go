@@ -12,6 +12,7 @@ import (
 var ErrProxyNotReady = errors.New("proxy stack not ready")
 
 type DockerRuntime interface {
+	EnsureImage(context.Context, string, *grpcapi.TaskCommand) error
 	DeployContainer(context.Context, *grpcapi.TaskCommand) (*ContainerRuntime, error)
 	InspectContainer(context.Context, string) (*ContainerStatus, error)
 	GetContainerDetails(context.Context, string) (*ContainerDetails, error)

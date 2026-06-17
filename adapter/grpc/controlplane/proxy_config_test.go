@@ -241,7 +241,9 @@ func (r *fakeProxyReleaseRepo) HasActiveRelease(uuid.UUID) (bool, error) { retur
 
 func (r *fakeProxyReleaseRepo) HasTrafficSplitRelease(uuid.UUID) (bool, error) { return false, nil }
 
-func (r *fakeProxyReleaseRepo) HasNewerSuccessfulRelease(uuid.UUID, time.Time) (bool, error) { return false, nil }
+func (r *fakeProxyReleaseRepo) HasNewerSuccessfulRelease(uuid.UUID, time.Time) (bool, error) {
+	return false, nil
+}
 
 func (r *fakeProxyReleaseRepo) FindQueuedOrActiveDuplicate(uuid.UUID, string, string) (*model.Release, error) {
 	return nil, nil
@@ -278,3 +280,11 @@ func (r *fakeProxyReleaseRepo) ListRuntimeInstancesByService(uuid.UUID) ([]model
 }
 
 func (r *fakeProxyReleaseRepo) CreateAudit(*model.AuditLog) error { return nil }
+
+func (r *fakeProxyReleaseRepo) ListTaskAttemptsByTask(uuid.UUID) ([]model.TaskAttempt, error) {
+	return nil, nil
+}
+
+func (r *fakeProxyReleaseRepo) ListAuditsByAggregate(string, string) ([]model.AuditLog, error) {
+	return nil, nil
+}

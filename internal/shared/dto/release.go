@@ -80,4 +80,20 @@ type TaskSnapshot struct {
 	DispatchedAt     *time.Time       `json:"dispatchedAt"`
 	StartedAt        *time.Time       `json:"startedAt"`
 	CompletedAt      *time.Time       `json:"completedAt"`
+	Attempts         []TaskAttempt    `json:"attempts"`
+}
+
+type TaskAttempt struct {
+	ID          uuid.UUID        `json:"id"`
+	Status      model.TaskStatus `json:"status"`
+	Message     string           `json:"message"`
+	StartedAt   *time.Time       `json:"startedAt"`
+	CompletedAt *time.Time       `json:"completedAt"`
+}
+
+type AuditLog struct {
+	ID        uuid.UUID `json:"id"`
+	EventType string    `json:"eventType"`
+	Message   string    `json:"message"`
+	CreatedAt time.Time `json:"createdAt"`
 }

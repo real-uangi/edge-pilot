@@ -49,6 +49,10 @@ type fakeDockerRuntime struct {
 	managedItems []*agentdomain.ManagedContainer
 }
 
+func (f *fakeDockerRuntime) EnsureImage(context.Context, string, *grpcapi.TaskCommand) error {
+	panic("not implemented")
+}
+
 func (f *fakeDockerRuntime) DeployContainer(context.Context, *grpcapi.TaskCommand) (*agentdomain.ContainerRuntime, error) {
 	panic("not implemented")
 }

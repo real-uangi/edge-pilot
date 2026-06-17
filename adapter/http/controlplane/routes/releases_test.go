@@ -35,6 +35,10 @@ func (f *fakeReleaseActions) ListTaskSnapshots(releaseID uuid.UUID) ([]dto.TaskS
 	return nil, nil
 }
 
+func (f *fakeReleaseActions) ListReleaseAudits(releaseID uuid.UUID) ([]dto.AuditLog, error) {
+	return nil, nil
+}
+
 func (f *fakeReleaseActions) Start(id uuid.UUID, operator string) (*dto.ReleaseOutput, error) {
 	f.lastOperator = operator
 	if f.startErr != nil {

@@ -27,6 +27,8 @@ type Repository interface {
 	ListRecoverableTasksByAgent(string) ([]model.Task, error)
 	ListActiveTasks() ([]model.Task, error)
 	CreateTaskAttempt(*model.TaskAttempt) error
+	ListTaskAttemptsByTask(uuid.UUID) ([]model.TaskAttempt, error)
+	ListAuditsByAggregate(string, string) ([]model.AuditLog, error)
 	UpsertRuntimeInstance(*model.RuntimeInstance) error
 	GetRuntimeInstanceByServiceAndSlot(uuid.UUID, model.Slot) (*model.RuntimeInstance, error)
 	ListRuntimeInstancesByService(uuid.UUID) ([]model.RuntimeInstance, error)

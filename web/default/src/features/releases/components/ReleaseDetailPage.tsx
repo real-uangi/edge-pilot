@@ -174,7 +174,7 @@ export function ReleaseDetailPage() {
         onSetTraffic={(percent) => void confirmAction(`确认设置切流比例为 ${percent}%？`, () => trafficMutation.mutate(percent))}
       />
 
-      <TaskTimeline tasks={tasks} />
+      <TaskTimeline tasks={tasks} audits={detailQuery.data.audits || []} />
     </div>
   );
 }

@@ -64,9 +64,6 @@ func (c *DockerClient) Ping(ctx context.Context) error {
 
 func (c *DockerClient) DeployContainer(ctx context.Context, task *grpcapi.TaskCommand) (*agentdomain.ContainerRuntime, error) {
 	imageRef := task.GetImageRepo() + ":" + task.GetImageTag()
-	if err := c.ensureImage(ctx, imageRef, task); err != nil {
-		return nil, err
-	}
 	createReq := buildWorkloadCreateRequest(c.cfg, imageRef, task)
 	body, err := json.Marshal(createReq)
 	if err != nil {
@@ -157,7 +154,7 @@ func buildWorkloadCreateRequest(cfg *config.AgentRuntimeConfig, imageRef string,
 	}
 }
 
-func (c *DockerClient) ensureImage(ctx context.Context, imageRef string, task *grpcapi.TaskCommand) error {
+func (c *DockerClient) EnsureImage(ctx context.Context, imageRef string, task *grpcapi.TaskCommand) error {
 	exists, err := c.imageExists(ctx, imageRef)
 	if err != nil {
 		return err

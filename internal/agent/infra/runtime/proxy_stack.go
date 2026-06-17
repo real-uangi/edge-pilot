@@ -356,13 +356,13 @@ func (m *ManagedProxyRuntime) prepareLocked(ctx context.Context, startup bool) (
 }
 
 func (m *ManagedProxyRuntime) pullProxyImagesLocked(ctx context.Context) error {
-	if err := m.docker.ensureImage(ctx, m.cfg.HAProxyImage, nil); err != nil {
+	if err := m.docker.EnsureImage(ctx, m.cfg.HAProxyImage, nil); err != nil {
 		return err
 	}
 	if strings.TrimSpace(m.cfg.ProxyHelperImage) == "" || m.cfg.ProxyHelperImage == m.cfg.HAProxyImage {
 		return nil
 	}
-	return m.docker.ensureImage(ctx, m.cfg.ProxyHelperImage, nil)
+	return m.docker.EnsureImage(ctx, m.cfg.ProxyHelperImage, nil)
 }
 
 func (m *ManagedProxyRuntime) bootstrapBaseFiles(ctx context.Context) error {
