@@ -84,6 +84,9 @@ Content-Type: application/json
 - `traceId`
   - 选填
   - 对接方自带的链路追踪 ID，建议传入
+- `releaseNotes`
+  - 选填
+  - 本次发布的说明或变更摘要，会写入发布单记录
 
 请求示例：
 

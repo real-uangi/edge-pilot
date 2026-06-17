@@ -54,6 +54,9 @@
   - `internal/release/{application,domain,infra}`：发布单、任务、切流、回滚、审计。
   - `internal/agent/{application,domain,infra}`：agent 注册、鉴权、心跳、执行器、共享代理栈自举/自愈、本机 Docker/HAProxy 适配。
   - `internal/observability/{application,domain,infra}`：总览、实例状态、后端指标快照查询与上报入库。
+  - `internal/adminauth/{application,domain,infra}`：管理后台认证、会话与权限校验。
+  - `internal/registrycredential/{application,domain,infra}`：私有镜像仓库凭据的加密存储与按 registry host 匹配下发。
+  - `internal/scheduler/{application,domain,infra}`：调度器引擎、任务调度、执行器注册/鉴权/心跳与租约管理。
 - 共享层：
   - `internal/shared/config`：环境配置读取。
   - `internal/shared/grpcapi`：control-plane 与 agent 共用的 gRPC 协议与 codec。

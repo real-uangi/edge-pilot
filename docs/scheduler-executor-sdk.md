@@ -47,7 +47,7 @@
 ### `RunContext`
 
 - `JobRunID`
-- `TaskType`
+- `HandlerKey`
 - `Payload`
 - `IdempotencyKey`
 - `Attempt`

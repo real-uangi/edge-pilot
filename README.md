@@ -103,6 +103,9 @@ Edge Pilot 是一个面向单机 Docker 多服务场景的控制面，用来解�
 - `internal/release`：发布单、任务、切流、回滚、审计
 - `internal/agent`：agent 注册、心跳、恢复、执行器、代理栈自举、自愈、Docker/HAProxy 适配
 - `internal/observability`：总览、实例状态和 backend 指标快照
+- `internal/adminauth`：管理后台认证与会话
+- `internal/registrycredential`：私有镜像仓库凭据管理
+- `internal/scheduler`：调度器、任务调度与执行器管理
 
 ## HTTP 接口
 
@@ -114,31 +117,80 @@ Edge Pilot 是一个面向单机 Docker 多服务场景的控制面，用来解�
 
 - 若配置了 `CI_SHARED_TOKEN`，请求头必须带 `X-EdgePilot-Token`
 
-### 管理接口
+### 认证接口
+
+- `POST /api/auth/login`
+- `POST /api/auth/logout`
+- `GET /api/admin/me`
+
+### 服务管理
 
 - `POST /api/admin/services`
 - `PUT /api/admin/services/:id`
+- `DELETE /api/admin/services/:id`
 - `GET /api/admin/services`
 - `GET /api/admin/services/:id`
+
+### 镜像仓库凭据
+
 - `POST /api/admin/registry-credentials`
 - `PUT /api/admin/registry-credentials/:id`
+- `DELETE /api/admin/registry-credentials/:id`
 - `GET /api/admin/registry-credentials`
 - `GET /api/admin/registry-credentials/:id`
-- `DELETE /api/admin/registry-credentials/:id`
+
+### Agent 管理
+
 - `POST /api/admin/agents`
 - `GET /api/admin/agents`
 - `GET /api/admin/agents/:id`
 - `POST /api/admin/agents/:id/reset-token`
 - `POST /api/admin/agents/:id/enable`
 - `POST /api/admin/agents/:id/disable`
+- `DELETE /api/admin/agents/:id`
+
+### 发布管理
+
 - `GET /api/admin/releases`
 - `GET /api/admin/releases/:id`
 - `POST /api/admin/releases/:id/start`
+- `POST /api/admin/releases/:id/retry`
 - `POST /api/admin/releases/:id/skip`
 - `POST /api/admin/releases/:id/confirm-switch`
+- `POST /api/admin/releases/:id/traffic`
 - `POST /api/admin/releases/:id/rollback`
+
+### 实例管理
+
+- `GET /api/admin/instances`
+- `GET /api/admin/instances/:agentId/:containerId`
+- `GET /api/admin/instances/:agentId/:containerId/logs/stream`
+
+### 调度器管理
+
+- `GET /api/admin/scheduler/jobs`
+- `POST /api/admin/scheduler/jobs`
+- `GET /api/admin/scheduler/jobs/:id`
+- `PUT /api/admin/scheduler/jobs/:id`
+- `DELETE /api/admin/scheduler/jobs/:id`
+- `POST /api/admin/scheduler/jobs/:id/enable`
+- `POST /api/admin/scheduler/jobs/:id/disable`
+- `POST /api/admin/scheduler/jobs/:id/trigger`
+- `GET /api/admin/scheduler/jobs/:id/runs`
+- `GET /api/admin/scheduler/runs`
+- `GET /api/admin/scheduler/executors`
+- `POST /api/admin/scheduler/executors`
+- `POST /api/admin/scheduler/executors/:id/reset-token`
+- `POST /api/admin/scheduler/executors/:id/enable`
+- `POST /api/admin/scheduler/executors/:id/disable`
+- `DELETE /api/admin/scheduler/executors/:id`
+
+### 观测与性能
+
 - `GET /api/admin/overview`
 - `GET /api/admin/services/:id/observability`
+- `GET /api/admin/system/performance`
+- `GET /api/admin/system/performance/agents/:id/history`
 - `GET /metrics`
 
 ## 运行配置
@@ -156,6 +208,11 @@ Edge Pilot 是一个面向单机 Docker 多服务场景的控制面，用来解�
 - `GRPC_PORT`：内部 gRPC 监听端口，默认 `9090`
 - `CI_SHARED_TOKEN`：CI 回调鉴权
 - `WEB_THEME`：Web 主题，默认 `default`
+- `SCHEDULER_ENGINE_TICK_SECONDS`：调度器引擎心跳间隔，默认 `2`
+- `SCHEDULER_DISPATCH_BATCH_SIZE`：单次调度批处理量，默认 `100`
+- `SCHEDULER_DEFAULT_LEASE_TIMEOUT_SECONDS`：任务默认租约超时，默认 `60`
+- `SCHEDULER_DEFAULT_MAX_RETRIES`：任务默认最大重试次数，默认 `3`
+- `SCHEDULER_EXECUTOR_HEARTBEAT_TIMEOUT_SECONDS`：执行器心跳超时，默认 `15`
 - `REGISTRY_SECRET_MASTER_KEY`：可选，base64 编码后的 32 字节主密钥；配置后才允许创建、更新和下发私有镜像仓库凭据
 - `SERVICE_SECRET_MASTER_KEY`：可选，base64 编码后的 32 字节主密钥；配置后才允许保存带环境变量的服务配置，并会用于加密服务环境变量与发布任务中的敏感片段
 
@@ -179,6 +236,8 @@ Edge Pilot 是一个面向单机 Docker 多服务场景的控制面，用来解�
 - `HAPROXY_DATAPLANE_PASSWORD`：默认 `edge-pilot-internal`
 - `PROXY_SELF_HEAL_INTERVAL_SECONDS`：默认 `10`
 - `MANAGED_CONTAINER_SCAN_INTERVAL_SECONDS`：托管容器全局检测与内存索引刷新间隔，默认 `5`
+- `SCHEDULER_RELAY_LISTEN_ADDR`：agent 本地调度器 relay 监听地址，默认 `127.0.0.1:19091`
+- `SCHEDULER_RELAY_SHARED_TOKEN`：agent 本地调度器 relay 鉴权令牌，可选
 
 `AGENT_VERSION` 不再通过环境变量读取，而是直接使用编译时注入的 build info。
 
