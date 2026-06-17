@@ -253,6 +253,14 @@ func (r *fakeProxyReleaseRepo) CountQueuedBefore(uuid.UUID, time.Time, uuid.UUID
 	return 0, nil
 }
 
+func (r *fakeProxyReleaseRepo) FindLatestCompletedReleaseBefore(uuid.UUID, time.Time) (*model.Release, error) {
+	return nil, nil
+}
+
+func (r *fakeProxyReleaseRepo) ListReleasesBetween(uuid.UUID, time.Time, time.Time, uuid.UUID) ([]model.Release, error) {
+	return nil, nil
+}
+
 func (r *fakeProxyReleaseRepo) CreateTask(*model.Task) error { return nil }
 
 func (r *fakeProxyReleaseRepo) UpdateTask(*model.Task) error { return nil }

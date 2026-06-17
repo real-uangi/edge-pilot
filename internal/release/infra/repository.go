@@ -175,6 +175,35 @@ func (r *repository) CountQueuedBefore(serviceID uuid.UUID, createdAt time.Time,
 	return int(count), nil
 }
 
+func (r *repository) FindLatestCompletedReleaseBefore(serviceID uuid.UUID, before time.Time) (*model.Release, error) {
+	var release model.Release
+	result := r.conn.Where("service_id = ? AND status IN ? AND completed_at IS NOT NULL AND created_at < ?",
+		serviceID, []model.ReleaseStatus{
+			model.ReleaseStatusCompleted,
+			model.ReleaseStatusSwitched,
+		}, before).
+		Order("created_at desc").
+		First(&release)
+	if result.Error != nil {
+		if result.Error == gorm.ErrRecordNotFound {
+			return nil, nil
+		}
+		return nil, result.Error
+	}
+	return &release, nil
+}
+
+func (r *repository) ListReleasesBetween(serviceID uuid.UUID, after time.Time, before time.Time, includeID uuid.UUID) ([]model.Release, error) {
+	var releases []model.Release
+	if err := r.conn.Where("service_id = ? AND created_at > ? AND created_at <= ? AND id <> ?",
+		serviceID, after, before, includeID).
+		Order("created_at asc").
+		Find(&releases).Error; err != nil {
+		return nil, err
+	}
+	return releases, nil
+}
+
 func (r *repository) CreateTask(task *model.Task) error {
 	return r.conn.Create(task).Error
 }

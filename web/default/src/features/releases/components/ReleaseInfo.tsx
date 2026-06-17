@@ -27,6 +27,10 @@ export function ReleaseInfo({ release, agent }: ReleaseInfoProps) {
           <span className={styles.value}>{release.imageRepo + ":" + release.imageTag}</span>
         </div>
         <div className={styles.keyValue}>
+          <span className={styles.key}>更新说明</span>
+          <span className={styles.value}>{release.releaseNotes || "—"}</span>
+        </div>
+        <div className={styles.keyValue}>
           <span className={styles.key}>节点</span>
           <span className={styles.value}>
             <AgentLabel id={release.agentId} hostname={agent?.hostname} ip={agent?.ip} />

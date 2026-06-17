@@ -206,6 +206,7 @@ type Release struct {
 	CommitSHA        string        `json:"commitSha" gorm:"size:128"`
 	TriggeredBy      string        `json:"triggeredBy" gorm:"size:255"`
 	TraceID          string        `json:"traceId" gorm:"size:255;index"`
+	ReleaseNotes     string        `json:"releaseNotes" gorm:"type:text"`
 	Status           ReleaseStatus `json:"status" gorm:"index;not null"`
 	TrafficPercent   int           `json:"trafficPercent"`
 	TargetSlot       Slot          `json:"targetSlot"`

@@ -118,6 +118,7 @@ func (s *Service) CreateFromCI(req dto.CreateReleaseFromCIRequest) (*dto.Release
 		CommitSHA:        req.CommitSHA,
 		TriggeredBy:      req.TriggeredBy,
 		TraceID:          req.TraceID,
+		ReleaseNotes:     req.ReleaseNotes,
 		Status:           model.ReleaseStatusQueued,
 		TrafficPercent:   0,
 		TargetSlot:       nextSlot(spec.CurrentLiveSlot),
@@ -1239,6 +1240,7 @@ func toReleaseOutput(release *model.Release) dto.ReleaseOutput {
 		CurrentReleaseHeaderName: servicecatalogapp.CurrentReleaseIDHeaderName,
 		LiveReleaseHeaderName:    servicecatalogapp.LiveReleaseIDHeaderName,
 		ReleaseRoleHeaderName:    servicecatalogapp.ReleaseRoleHeaderName,
+		ReleaseNotes:             release.ReleaseNotes,
 		IsActive:                 release.Status.IsActive(),
 		CreatedAt:                release.CreatedAt,
 		UpdatedAt:                release.UpdatedAt,
@@ -1268,6 +1270,45 @@ func (s *Service) enrichReleaseOutput(release *model.Release) (dto.ReleaseOutput
 	}
 	output.QueuePosition = count + 1
 	return output, nil
+}
+
+func (s *Service) GetReleaseNotesAggregate(id uuid.UUID) ([]dto.ReleaseNotesItem, error) {
+	release, err := s.repo.GetRelease(id)
+	if err != nil {
+		return nil, err
+	}
+	if release == nil {
+		return nil, business.ErrNotFound
+	}
+	prev, err := s.repo.FindLatestCompletedReleaseBefore(release.ServiceID, release.CreatedAt)
+	if err != nil {
+		return nil, err
+	}
+	var after time.Time
+	if prev != nil {
+		after = prev.CreatedAt
+	}
+	releases, err := s.repo.ListReleasesBetween(release.ServiceID, after, release.CreatedAt, release.ID)
+	if err != nil {
+		return nil, err
+	}
+	items := make([]dto.ReleaseNotesItem, 0, len(releases)+1)
+	items = append(items, dto.ReleaseNotesItem{
+		ID:           release.ID,
+		ImageTag:     release.ImageTag,
+		ReleaseNotes: release.ReleaseNotes,
+		CreatedAt:    release.CreatedAt,
+	})
+	for i := range releases {
+		r := &releases[i]
+		items = append(items, dto.ReleaseNotesItem{
+			ID:           r.ID,
+			ImageTag:     r.ImageTag,
+			ReleaseNotes: r.ReleaseNotes,
+			CreatedAt:    r.CreatedAt,
+		})
+	}
+	return items, nil
 }
 
 func newAudit(aggregateType string, aggregateID string, eventType string, traceID string, message string) *model.AuditLog {

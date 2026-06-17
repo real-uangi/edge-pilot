@@ -18,6 +18,7 @@ export interface ReleaseRecord {
   stickyCookieTtl: number;
   currentReleaseHeaderName: string;
   liveReleaseHeaderName: string;
+  releaseNotes: string;
   isActive: boolean;
   queuePosition: number;
   createdAt: string;
@@ -55,8 +56,16 @@ export interface AuditLog {
   createdAt: string;
 }
 
+export interface ReleaseNotesItem {
+  id: string;
+  imageTag: string;
+  releaseNotes: string;
+  createdAt: string;
+}
+
 export interface ReleaseDetail {
   release: ReleaseRecord;
   tasks: TaskSnapshot[];
   audits: AuditLog[];
+  releaseNotesAggregate: ReleaseNotesItem[];
 }

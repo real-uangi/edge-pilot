@@ -20,6 +20,8 @@ type Repository interface {
 	HasNewerSuccessfulRelease(serviceID uuid.UUID, createdAt time.Time) (bool, error)
 	FindQueuedOrActiveDuplicate(uuid.UUID, string, string) (*model.Release, error)
 	CountQueuedBefore(uuid.UUID, time.Time, uuid.UUID) (int, error)
+	FindLatestCompletedReleaseBefore(serviceID uuid.UUID, before time.Time) (*model.Release, error)
+	ListReleasesBetween(serviceID uuid.UUID, after time.Time, before time.Time, includeID uuid.UUID) ([]model.Release, error)
 	CreateTask(*model.Task) error
 	UpdateTask(*model.Task) error
 	GetTask(uuid.UUID) (*model.Task, error)

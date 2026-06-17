@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate, useParams } from "react-router-dom";
 import { getErrorMessage } from "../../../shared/lib/api-client";
+import { formatDateTime } from "../../../shared/lib/format";
 import { useDialog } from "../../../shared/components/DialogProvider";
 import { EmptyState, ErrorState, InlineNotice, LoadingState } from "../../../shared/components/StateBlocks";
 import { releasesApi } from "../api";
@@ -167,6 +168,23 @@ export function ReleaseDetailPage() {
       ) : null}
 
       <ReleaseInfo release={release} agent={agent} />
+
+      {detailQuery.data.releaseNotesAggregate?.length > 0 && (
+        <section className={styles.sectionCard}>
+          <h3 className={styles.sectionSubtitle}>本次发布变更汇总</h3>
+          <div className={styles.notesList}>
+            {detailQuery.data.releaseNotesAggregate.map((item) => (
+              <div key={item.id} className={styles.notesItem}>
+                <div className={styles.notesHeader}>
+                  <span className={styles.notesTag}>{item.imageTag}</span>
+                  <span className={styles.notesTime}>{formatDateTime(item.createdAt)}</span>
+                </div>
+                <p className={styles.notesBody}>{item.releaseNotes || "—"}</p>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
 
       <TrafficControl
         release={release}

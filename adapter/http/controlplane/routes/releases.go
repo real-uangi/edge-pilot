@@ -20,6 +20,7 @@ type releaseAdminActions interface {
 	Get(id uuid.UUID) (*dto.ReleaseOutput, error)
 	ListTaskSnapshots(releaseID uuid.UUID) ([]dto.TaskSnapshot, error)
 	ListReleaseAudits(releaseID uuid.UUID) ([]dto.AuditLog, error)
+	GetReleaseNotesAggregate(id uuid.UUID) ([]dto.ReleaseNotesItem, error)
 	Start(id uuid.UUID, operator string) (*dto.ReleaseOutput, error)
 	Retry(id uuid.UUID, operator string) (*dto.ReleaseOutput, error)
 	Skip(id uuid.UUID, operator string) (*dto.ReleaseOutput, error)
@@ -59,10 +60,16 @@ func registerAdminReleaseRoutes(admin *gin.RouterGroup, releases releaseAdminAct
 			c.Render(api.HandleErr(err))
 			return
 		}
+		notes, err := releases.GetReleaseNotesAggregate(id)
+		if err != nil {
+			c.Render(api.HandleErr(err))
+			return
+		}
 		c.Render(http.StatusOK, result.Ok(gin.H{
-			"release": releaseOutput,
-			"tasks":   tasks,
-			"audits":  audits,
+			"release":               releaseOutput,
+			"tasks":                 tasks,
+			"audits":                audits,
+			"releaseNotesAggregate": notes,
 		}))
 	})
 	admin.POST("/releases/:id/start", func(c *gin.Context) {

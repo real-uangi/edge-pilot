@@ -8,12 +8,13 @@ import (
 )
 
 type CreateReleaseFromCIRequest struct {
-	ServiceKey  string `json:"serviceKey" binding:"required"`
-	ImageRepo   string `json:"imageRepo"`
-	ImageTag    string `json:"imageTag" binding:"required"`
-	CommitSHA   string `json:"commitSha"`
-	TriggeredBy string `json:"triggeredBy"`
-	TraceID     string `json:"traceId"`
+	ServiceKey   string `json:"serviceKey" binding:"required"`
+	ImageRepo    string `json:"imageRepo"`
+	ImageTag     string `json:"imageTag" binding:"required"`
+	CommitSHA    string `json:"commitSha"`
+	TriggeredBy  string `json:"triggeredBy"`
+	TraceID      string `json:"traceId"`
+	ReleaseNotes string `json:"releaseNotes"`
 }
 
 type ReleaseOutput struct {
@@ -37,6 +38,7 @@ type ReleaseOutput struct {
 	CurrentReleaseHeaderName string              `json:"currentReleaseHeaderName"`
 	LiveReleaseHeaderName    string              `json:"liveReleaseHeaderName"`
 	ReleaseRoleHeaderName    string              `json:"releaseRoleHeaderName"`
+	ReleaseNotes             string              `json:"releaseNotes"`
 	IsActive                 bool                `json:"isActive"`
 	QueuePosition            int                 `json:"queuePosition"`
 	CreatedAt                time.Time           `json:"createdAt"`
@@ -66,6 +68,13 @@ type RollbackRequest struct {
 
 type AdjustTrafficRequest struct {
 	Percent int `json:"percent" binding:"required,min=0,max=100"`
+}
+
+type ReleaseNotesItem struct {
+	ID           uuid.UUID `json:"id"`
+	ImageTag     string    `json:"imageTag"`
+	ReleaseNotes string    `json:"releaseNotes"`
+	CreatedAt    time.Time `json:"createdAt"`
 }
 
 type TaskSnapshot struct {

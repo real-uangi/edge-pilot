@@ -2696,6 +2696,48 @@ func (r *fakeReleaseRepo) CountQueuedBefore(serviceID uuid.UUID, createdAt time.
 	return count, nil
 }
 
+func (r *fakeReleaseRepo) FindLatestCompletedReleaseBefore(serviceID uuid.UUID, before time.Time) (*model.Release, error) {
+	var matched []*model.Release
+	for _, item := range r.releases {
+		if item.ServiceID != serviceID {
+			continue
+		}
+		if item.Status != model.ReleaseStatusCompleted && item.Status != model.ReleaseStatusSwitched {
+			continue
+		}
+		if item.CompletedAt == nil {
+			continue
+		}
+		if item.CreatedAt.Before(before) {
+			copyRelease := *item
+			matched = append(matched, &copyRelease)
+		}
+	}
+	if len(matched) == 0 {
+		return nil, nil
+	}
+	sort.Slice(matched, func(i, j int) bool {
+		return matched[i].CreatedAt.After(matched[j].CreatedAt)
+	})
+	return matched[0], nil
+}
+
+func (r *fakeReleaseRepo) ListReleasesBetween(serviceID uuid.UUID, after time.Time, before time.Time, includeID uuid.UUID) ([]model.Release, error) {
+	out := make([]model.Release, 0)
+	for _, item := range r.releases {
+		if item.ServiceID != serviceID || item.ID == includeID {
+			continue
+		}
+		if item.CreatedAt.After(after) && !item.CreatedAt.After(before) {
+			out = append(out, *item)
+		}
+	}
+	sort.Slice(out, func(i, j int) bool {
+		return out[i].CreatedAt.Before(out[j].CreatedAt)
+	})
+	return out, nil
+}
+
 func (r *fakeReleaseRepo) CreateTask(task *model.Task) error {
 	copyTask := *task
 	now := time.Now()
