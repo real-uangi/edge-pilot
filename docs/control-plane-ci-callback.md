@@ -20,11 +20,12 @@
 调用前需要满足以下条件：
 
 - 目标服务已经在 control-plane 中完成配置
-- 服务配置已经包含目标 agent、`containerPort`、`routeHost` 和 `routePathPrefix`
 - 请求中的 `serviceKey` 能匹配到已存在服务
 - 服务处于启用状态
 
 若上述任一条件不满足，control-plane 会拒绝创建发布单。
+
+> 注意：`containerPort`、`routeHost`、`routePathPrefix` 等部署所需字段的校验不在 CI 回调阶段进行，而是在管理员后续调用 `start` 时检查。
 
 ## 鉴权方式
 
@@ -97,7 +98,8 @@ Content-Type: application/json
   "imageTag": "v1.3.2",
   "commitSha": "8b5a2f7c2d0b6d7e8a9f0123456789abcdef1234",
   "triggeredBy": "github-actions",
-  "traceId": "gh-run-123456789"
+  "traceId": "gh-run-123456789",
+  "releaseNotes": "fix: resolve connection timeout under high load"
 }
 ```
 
@@ -116,7 +118,7 @@ Content-Type: application/json
 
 `data` 部分为新创建的发布单信息，字段对应：
 
-- [ReleaseOutput](/Users/laopixu/GolandProjects/edge-pilot/internal/shared/dto/release.go)
+- [ReleaseOutput](/internal/shared/dto/release.go)
 
 成功响应示例：
 
@@ -134,11 +136,19 @@ Content-Type: application/json
     "commitSha": "8b5a2f7c2d0b6d7e8a9f0123456789abcdef1234",
     "triggeredBy": "github-actions",
     "traceId": "gh-run-123456789",
+    "releaseNotes": "",
     "status": 1,
+    "trafficPercent": 0,
     "targetSlot": 2,
     "previousLiveSlot": 1,
     "currentTaskId": null,
     "switchConfirmed": false,
+    "verificationUrl": "https://example.com/__ep_release_id=7e2a6cf0-f0d7-49d1-90d8-9cb6f52e2d2f",
+    "stickyCookieName": "ep_release_id_edge_api",
+    "stickyCookieTtl": 600,
+    "currentReleaseHeaderName": "X-Edge-Pilot-Current-Release-Id",
+    "liveReleaseHeaderName": "X-Edge-Pilot-Live-Release-Id",
+    "releaseRoleHeaderName": "X-Edge-Pilot-Release-Role",
     "isActive": false,
     "queuePosition": 1,
     "createdAt": "2026-04-09T09:30:00+08:00",
@@ -153,6 +163,9 @@ Content-Type: application/json
 - `status=1` 当前对应 `queued`
 - 创建成功只表示请求已经进入队列，不代表发布已经开始
 - 真正开始发布需要管理员后续调用 `POST /api/admin/releases/:id/start`
+- `queuePosition` 表示该发布在当前服务的 `queued` 状态队列中的位置，按创建时间先后计算，最小值为 1
+- 当服务已配置 `routeHost` 和 `routePathPrefix` 时，`verificationUrl` 会被填充，用于预览本次发布
+- `stickyCookieName`、`stickyCookieTtl`、`currentReleaseHeaderName`、`liveReleaseHeaderName`、`releaseRoleHeaderName` 为灰度验证相关字段，由系统根据服务配置自动生成
 
 ## 常见失败响应
 
@@ -194,12 +207,12 @@ HTTP 状态码：
 
 常见返回：
 
-- `404`
-- `400`
+- `404`（服务不存在）
+- `400`（服务已禁用）
 
-如果同一服务下已经存在相同镜像的排队请求或活动发布：
+如果同一服务下已经存在相同镜像的未结束发布（包括 `queued`、`dispatching`、`deploying`、`readyToSwitch`、`switched` 状态）：
 
-- `serviceKey + imageTag + commitSha` 相同，会直接返回已有请求
+- `serviceKey + imageTag + commitSha` 相同，会直接返回已有请求，并在审计日志中记录 `release_deduplicated` 事件
 - 当 `commitSha` 为空时，按 `serviceKey + imageTag` 去重
 
 ## 接入建议
@@ -227,7 +240,8 @@ curl -X POST "https://edge-pilot.example.com/api/integration/ci/releases" \
     "imageTag": "v1.3.2",
     "commitSha": "8b5a2f7c2d0b6d7e8a9f0123456789abcdef1234",
     "triggeredBy": "github-actions",
-    "traceId": "gh-run-123456789"
+    "traceId": "gh-run-123456789",
+    "releaseNotes": "fix: resolve connection timeout under high load"
   }'
 ```
 
@@ -245,7 +259,8 @@ curl -X POST "https://edge-pilot.example.com/api/integration/ci/releases" \
         \"imageTag\": \"${{ github.ref_name }}\",
         \"commitSha\": \"${{ github.sha }}\",
         \"triggeredBy\": \"github-actions\",
-        \"traceId\": \"gh-run-${{ github.run_id }}\"
+        \"traceId\": \"gh-run-${{ github.run_id }}\",
+        \"releaseNotes\": \"${{ github.event.head_commit.message }}\"
       }"
 ```
 
