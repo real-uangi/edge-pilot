@@ -1,8 +1,8 @@
 package domain
 
 import (
-	"edge-pilot/internal/shared/dto"
-	"edge-pilot/internal/shared/model"
+	"github.com/real-uangi/edge-pilot/internal/shared/dto"
+	"github.com/real-uangi/edge-pilot/internal/shared/model"
 
 	"github.com/google/uuid"
 )

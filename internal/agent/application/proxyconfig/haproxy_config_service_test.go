@@ -2,11 +2,12 @@ package proxyconfig
 
 import (
 	"context"
-	registryapp "edge-pilot/internal/agent/application/registry"
-	"edge-pilot/internal/shared/config"
-	"edge-pilot/internal/shared/model"
 	"testing"
 	"time"
+
+	registryapp "github.com/real-uangi/edge-pilot/internal/agent/application/registry"
+	"github.com/real-uangi/edge-pilot/internal/shared/config"
+	"github.com/real-uangi/edge-pilot/internal/shared/model"
 )
 
 func TestHAProxyConfigServiceGetHAProxyConfigSuccess(t *testing.T) {

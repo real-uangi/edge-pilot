@@ -3,10 +3,6 @@ package runtime
 import (
 	"context"
 	"crypto/sha256"
-	agentdomain "edge-pilot/internal/agent/domain"
-	servicecatalogapp "edge-pilot/internal/servicecatalog/application"
-	"edge-pilot/internal/shared/config"
-	"edge-pilot/internal/shared/grpcapi"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
@@ -18,6 +14,11 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	agentdomain "github.com/real-uangi/edge-pilot/internal/agent/domain"
+	servicecatalogapp "github.com/real-uangi/edge-pilot/internal/servicecatalog/application"
+	"github.com/real-uangi/edge-pilot/internal/shared/config"
+	"github.com/real-uangi/edge-pilot/internal/shared/grpcapi"
 
 	"github.com/real-uangi/allingo/common/env"
 	"github.com/real-uangi/allingo/common/log"

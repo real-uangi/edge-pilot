@@ -1,8 +1,8 @@
 package infra
 
 import (
-	agentdomain "edge-pilot/internal/agent/domain"
-	servicecatalogdomain "edge-pilot/internal/servicecatalog/domain"
+	agentdomain "github.com/real-uangi/edge-pilot/internal/agent/domain"
+	servicecatalogdomain "github.com/real-uangi/edge-pilot/internal/servicecatalog/domain"
 )
 
 type agentServiceBindingChecker struct {

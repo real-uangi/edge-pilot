@@ -2,14 +2,15 @@ package controlplane
 
 import (
 	"context"
-	agentregistry "edge-pilot/internal/agent/application/registry"
-	"edge-pilot/internal/shared/config"
-	"edge-pilot/internal/shared/grpcapi"
 	"io"
 	"testing"
 	"time"
 
-	"edge-pilot/internal/shared/model"
+	agentregistry "github.com/real-uangi/edge-pilot/internal/agent/application/registry"
+	"github.com/real-uangi/edge-pilot/internal/shared/config"
+	"github.com/real-uangi/edge-pilot/internal/shared/grpcapi"
+
+	"github.com/real-uangi/edge-pilot/internal/shared/model"
 
 	"google.golang.org/grpc/metadata"
 )

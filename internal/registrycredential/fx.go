@@ -1,9 +1,9 @@
 package registrycredential
 
 import (
-	"edge-pilot/internal/registrycredential/application"
-	"edge-pilot/internal/registrycredential/infra"
-	releasedomain "edge-pilot/internal/release/domain"
+	"github.com/real-uangi/edge-pilot/internal/registrycredential/application"
+	"github.com/real-uangi/edge-pilot/internal/registrycredential/infra"
+	releasedomain "github.com/real-uangi/edge-pilot/internal/release/domain"
 
 	"go.uber.org/fx"
 )

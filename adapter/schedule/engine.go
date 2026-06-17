@@ -2,9 +2,10 @@ package schedule
 
 import (
 	"context"
-	schedulerapp "edge-pilot/internal/scheduler/application"
-	"edge-pilot/internal/shared/config"
 	"time"
+
+	schedulerapp "github.com/real-uangi/edge-pilot/internal/scheduler/application"
+	"github.com/real-uangi/edge-pilot/internal/shared/config"
 
 	"github.com/real-uangi/allingo/common/log"
 	"go.uber.org/fx"

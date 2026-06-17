@@ -21,9 +21,9 @@ builds:
     ldflags:
       - -s
       - -w
-      - -X edge-pilot/internal/shared/buildinfo.Version={{ .Version }}
-      - -X edge-pilot/internal/shared/buildinfo.Commit={{ .Commit }}
-      - -X edge-pilot/internal/shared/buildinfo.BuildTime={{ .Date }}
+      - -X github.com/real-uangi/edge-pilot/internal/shared/buildinfo.Version={{ .Version }}
+      - -X github.com/real-uangi/edge-pilot/internal/shared/buildinfo.Commit={{ .Commit }}
+      - -X github.com/real-uangi/edge-pilot/internal/shared/buildinfo.BuildTime={{ .Date }}
   - id: agent
     main: ./cmd/agent
     binary: edge-pilot-agent
@@ -37,9 +37,9 @@ builds:
     ldflags:
       - -s
       - -w
-      - -X edge-pilot/internal/shared/buildinfo.Version={{ .Version }}
-      - -X edge-pilot/internal/shared/buildinfo.Commit={{ .Commit }}
-      - -X edge-pilot/internal/shared/buildinfo.BuildTime={{ .Date }}
+      - -X github.com/real-uangi/edge-pilot/internal/shared/buildinfo.Version={{ .Version }}
+      - -X github.com/real-uangi/edge-pilot/internal/shared/buildinfo.Commit={{ .Commit }}
+      - -X github.com/real-uangi/edge-pilot/internal/shared/buildinfo.BuildTime={{ .Date }}
 
 archives:
   - id: control-plane-binaries

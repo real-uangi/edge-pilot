@@ -1,8 +1,9 @@
 package secret
 
 import (
-	"edge-pilot/internal/shared/config"
 	"testing"
+
+	"github.com/real-uangi/edge-pilot/internal/shared/config"
 )
 
 func TestCodecEncryptDecryptJSONRoundTrip(t *testing.T) {

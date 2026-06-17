@@ -2,9 +2,10 @@ package proxyconfig
 
 import (
 	"context"
-	"edge-pilot/internal/shared/dto"
 	"errors"
 	"time"
+
+	"github.com/real-uangi/edge-pilot/internal/shared/dto"
 
 	"github.com/real-uangi/allingo/common/business"
 )

@@ -6,7 +6,7 @@ import (
 	"io"
 	"strings"
 
-	"edge-pilot/internal/shared/grpcapi"
+	"github.com/real-uangi/edge-pilot/internal/shared/grpcapi"
 )
 
 var ErrProxyNotReady = errors.New("proxy stack not ready")

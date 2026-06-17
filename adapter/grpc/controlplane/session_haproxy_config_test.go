@@ -2,11 +2,12 @@ package controlplane
 
 import (
 	"context"
-	"edge-pilot/internal/agent/application/proxyconfig"
-	"edge-pilot/internal/shared/grpcapi"
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/real-uangi/edge-pilot/internal/agent/application/proxyconfig"
+	"github.com/real-uangi/edge-pilot/internal/shared/grpcapi"
 )
 
 func TestSessionHubRequestHAProxyConfigSuccess(t *testing.T) {

@@ -1,12 +1,13 @@
 package application
 
 import (
-	"edge-pilot/internal/servicecatalog/domain"
-	"edge-pilot/internal/shared/config"
-	"edge-pilot/internal/shared/dto"
-	"edge-pilot/internal/shared/model"
-	"edge-pilot/internal/shared/secret"
 	"testing"
+
+	"github.com/real-uangi/edge-pilot/internal/servicecatalog/domain"
+	"github.com/real-uangi/edge-pilot/internal/shared/config"
+	"github.com/real-uangi/edge-pilot/internal/shared/dto"
+	"github.com/real-uangi/edge-pilot/internal/shared/model"
+	"github.com/real-uangi/edge-pilot/internal/shared/secret"
 
 	"github.com/google/uuid"
 	commondb "github.com/real-uangi/allingo/common/db"

@@ -1,9 +1,10 @@
 package infra
 
 import (
-	"edge-pilot/internal/release/domain"
-	"edge-pilot/internal/shared/model"
 	"time"
+
+	"github.com/real-uangi/edge-pilot/internal/release/domain"
+	"github.com/real-uangi/edge-pilot/internal/shared/model"
 
 	"github.com/google/uuid"
 	"github.com/real-uangi/allingo/common/db"

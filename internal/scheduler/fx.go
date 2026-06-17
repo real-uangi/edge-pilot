@@ -1,11 +1,11 @@
 package scheduler
 
 import (
-	"edge-pilot/internal/scheduler/application"
-	"edge-pilot/internal/scheduler/domain"
-	"edge-pilot/internal/scheduler/infra"
-	servicecatalogapp "edge-pilot/internal/servicecatalog/application"
-	"edge-pilot/internal/shared/model"
+	"github.com/real-uangi/edge-pilot/internal/scheduler/application"
+	"github.com/real-uangi/edge-pilot/internal/scheduler/domain"
+	"github.com/real-uangi/edge-pilot/internal/scheduler/infra"
+	servicecatalogapp "github.com/real-uangi/edge-pilot/internal/servicecatalog/application"
+	"github.com/real-uangi/edge-pilot/internal/shared/model"
 
 	"github.com/google/uuid"
 	"go.uber.org/fx"

@@ -2,12 +2,13 @@ package sdk
 
 import (
 	"context"
-	"edge-pilot/internal/shared/grpcapi"
 	"encoding/json"
 	"errors"
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/real-uangi/edge-pilot/internal/shared/grpcapi"
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"

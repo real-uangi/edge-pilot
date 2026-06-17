@@ -1,10 +1,11 @@
 package runtime
 
 import (
-	"edge-pilot/internal/shared/config"
-	"edge-pilot/internal/shared/grpcapi"
 	"strings"
 	"testing"
+
+	"github.com/real-uangi/edge-pilot/internal/shared/config"
+	"github.com/real-uangi/edge-pilot/internal/shared/grpcapi"
 )
 
 func TestProxySpecUsesLimitedRestartPolicy(t *testing.T) {

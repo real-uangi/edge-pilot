@@ -1,15 +1,16 @@
 package routes
 
 import (
-	adaptermiddleware "edge-pilot/adapter/http/middleware"
-	adminauthapp "edge-pilot/internal/adminauth/application"
-	"edge-pilot/internal/shared/config"
-	"edge-pilot/internal/shared/dto"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
 	"time"
+
+	adaptermiddleware "github.com/real-uangi/edge-pilot/adapter/http/middleware"
+	adminauthapp "github.com/real-uangi/edge-pilot/internal/adminauth/application"
+	"github.com/real-uangi/edge-pilot/internal/shared/config"
+	"github.com/real-uangi/edge-pilot/internal/shared/dto"
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"

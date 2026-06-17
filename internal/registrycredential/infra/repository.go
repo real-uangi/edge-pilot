@@ -1,8 +1,8 @@
 package infra
 
 import (
-	"edge-pilot/internal/registrycredential/domain"
-	"edge-pilot/internal/shared/model"
+	"github.com/real-uangi/edge-pilot/internal/registrycredential/domain"
+	"github.com/real-uangi/edge-pilot/internal/shared/model"
 
 	"github.com/google/uuid"
 	"github.com/real-uangi/allingo/common/db"

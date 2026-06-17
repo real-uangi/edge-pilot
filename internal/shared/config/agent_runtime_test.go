@@ -1,11 +1,12 @@
 package config
 
 import (
-	"edge-pilot/internal/shared/buildinfo"
 	"errors"
 	"net"
 	"testing"
 	"time"
+
+	"github.com/real-uangi/edge-pilot/internal/shared/buildinfo"
 )
 
 func TestLoadAgentRuntimeConfigUsesBuildVersionByDefault(t *testing.T) {

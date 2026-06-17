@@ -2,10 +2,11 @@ package controlplane
 
 import (
 	"context"
-	releasedomain "edge-pilot/internal/release/domain"
-	"edge-pilot/internal/shared/grpcapi"
 	"fmt"
 	"sync"
+
+	releasedomain "github.com/real-uangi/edge-pilot/internal/release/domain"
+	"github.com/real-uangi/edge-pilot/internal/shared/grpcapi"
 
 	"github.com/google/uuid"
 )

@@ -1,4 +1,4 @@
-module edge-pilot
+module github.com/real-uangi/edge-pilot
 
 go 1.26.0
 

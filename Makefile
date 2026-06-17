@@ -5,9 +5,9 @@ BUILD_TIME ?= $(shell date -u +"%Y-%m-%dT%H:%M:%SZ")
 LDFLAGS = \
 	-s \
 	-w \
-	-X edge-pilot/internal/shared/buildinfo.Version=$(VERSION) \
-	-X edge-pilot/internal/shared/buildinfo.Commit=$(COMMIT) \
-	-X edge-pilot/internal/shared/buildinfo.BuildTime=$(BUILD_TIME)
+	-X github.com/real-uangi/edge-pilot/internal/shared/buildinfo.Version=$(VERSION) \
+	-X github.com/real-uangi/edge-pilot/internal/shared/buildinfo.Commit=$(COMMIT) \
+	-X github.com/real-uangi/edge-pilot/internal/shared/buildinfo.BuildTime=$(BUILD_TIME)
 
 .PHONY: proto build build-control-plane build-agent web-install web-build
 

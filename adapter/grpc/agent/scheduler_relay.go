@@ -2,10 +2,11 @@ package agent
 
 import (
 	"context"
-	"edge-pilot/internal/shared/config"
-	"edge-pilot/internal/shared/grpcapi"
 	"net"
 	"sync"
+
+	"github.com/real-uangi/edge-pilot/internal/shared/config"
+	"github.com/real-uangi/edge-pilot/internal/shared/grpcapi"
 
 	"github.com/google/uuid"
 	"github.com/real-uangi/allingo/common/log"

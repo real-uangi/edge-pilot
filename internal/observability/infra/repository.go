@@ -1,8 +1,8 @@
 package infra
 
 import (
-	"edge-pilot/internal/observability/domain"
-	"edge-pilot/internal/shared/model"
+	"github.com/real-uangi/edge-pilot/internal/observability/domain"
+	"github.com/real-uangi/edge-pilot/internal/shared/model"
 
 	"github.com/google/uuid"
 	"github.com/real-uangi/allingo/common/db"

@@ -2,12 +2,6 @@ package agent
 
 import (
 	"context"
-	"edge-pilot/internal/agent/application/containerindex"
-	"edge-pilot/internal/agent/application/taskexec"
-	agentdomain "edge-pilot/internal/agent/domain"
-	"edge-pilot/internal/shared/config"
-	"edge-pilot/internal/shared/grpcapi"
-	"edge-pilot/internal/shared/perf"
 	"encoding/binary"
 	"errors"
 	"fmt"
@@ -15,6 +9,13 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/real-uangi/edge-pilot/internal/agent/application/containerindex"
+	"github.com/real-uangi/edge-pilot/internal/agent/application/taskexec"
+	agentdomain "github.com/real-uangi/edge-pilot/internal/agent/domain"
+	"github.com/real-uangi/edge-pilot/internal/shared/config"
+	"github.com/real-uangi/edge-pilot/internal/shared/grpcapi"
+	"github.com/real-uangi/edge-pilot/internal/shared/perf"
 
 	"github.com/real-uangi/allingo/common/log"
 	"go.uber.org/fx"

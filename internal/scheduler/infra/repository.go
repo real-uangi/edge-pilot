@@ -1,9 +1,10 @@
 package infra
 
 import (
-	schedulerdomain "edge-pilot/internal/scheduler/domain"
-	"edge-pilot/internal/shared/model"
 	"time"
+
+	schedulerdomain "github.com/real-uangi/edge-pilot/internal/scheduler/domain"
+	"github.com/real-uangi/edge-pilot/internal/shared/model"
 
 	"github.com/google/uuid"
 	"github.com/real-uangi/allingo/common/db"

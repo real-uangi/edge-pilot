@@ -1,7 +1,7 @@
 package adminauth
 
 import (
-	"edge-pilot/internal/adminauth/application"
+	"github.com/real-uangi/edge-pilot/internal/adminauth/application"
 
 	"go.uber.org/fx"
 )

@@ -2,13 +2,14 @@ package containerindex
 
 import (
 	"context"
-	agentdomain "edge-pilot/internal/agent/domain"
-	"edge-pilot/internal/shared/config"
-	"edge-pilot/internal/shared/grpcapi"
 	"fmt"
 	"strings"
 	"sync"
 	"time"
+
+	agentdomain "github.com/real-uangi/edge-pilot/internal/agent/domain"
+	"github.com/real-uangi/edge-pilot/internal/shared/config"
+	"github.com/real-uangi/edge-pilot/internal/shared/grpcapi"
 
 	"github.com/real-uangi/allingo/common/log"
 )

@@ -1,8 +1,9 @@
 package domain
 
 import (
-	"edge-pilot/internal/shared/model"
 	"time"
+
+	"github.com/real-uangi/edge-pilot/internal/shared/model"
 )
 
 type Repository interface {

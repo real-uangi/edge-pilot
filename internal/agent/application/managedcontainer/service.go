@@ -2,10 +2,11 @@ package managedcontainer
 
 import (
 	"context"
-	"edge-pilot/internal/shared/dto"
-	"edge-pilot/internal/shared/grpcapi"
 	"sync"
 	"time"
+
+	"github.com/real-uangi/edge-pilot/internal/shared/dto"
+	"github.com/real-uangi/edge-pilot/internal/shared/grpcapi"
 
 	"github.com/real-uangi/allingo/common/log"
 )

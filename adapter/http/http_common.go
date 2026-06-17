@@ -1,8 +1,8 @@
 package http
 
 import (
-	"edge-pilot/adapter/http/middleware"
-	"edge-pilot/internal/shared/config"
+	"github.com/real-uangi/edge-pilot/adapter/http/middleware"
+	"github.com/real-uangi/edge-pilot/internal/shared/config"
 
 	"github.com/gin-contrib/gzip"
 	"github.com/gin-gonic/gin"

@@ -1,10 +1,10 @@
 package controlplane
 
 import (
-	basehttp "edge-pilot/adapter/http"
-	"edge-pilot/adapter/http/controlplane/routes"
-	baseroutes "edge-pilot/adapter/http/routes"
-	"edge-pilot/adapter/http/static"
+	basehttp "github.com/real-uangi/edge-pilot/adapter/http"
+	"github.com/real-uangi/edge-pilot/adapter/http/controlplane/routes"
+	baseroutes "github.com/real-uangi/edge-pilot/adapter/http/routes"
+	"github.com/real-uangi/edge-pilot/adapter/http/static"
 
 	"go.uber.org/fx"
 )

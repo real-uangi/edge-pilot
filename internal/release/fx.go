@@ -1,9 +1,9 @@
 package release
 
 import (
-	"edge-pilot/internal/agent/application/registry"
-	"edge-pilot/internal/release/application"
-	"edge-pilot/internal/release/infra"
+	"github.com/real-uangi/edge-pilot/internal/agent/application/registry"
+	"github.com/real-uangi/edge-pilot/internal/release/application"
+	"github.com/real-uangi/edge-pilot/internal/release/infra"
 
 	"go.uber.org/fx"
 )

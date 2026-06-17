@@ -1,7 +1,7 @@
 package bootstrap
 
 import (
-	"edge-pilot/internal/shared/buildinfo"
+	"github.com/real-uangi/edge-pilot/internal/shared/buildinfo"
 
 	"github.com/real-uangi/allingo/common/log"
 )

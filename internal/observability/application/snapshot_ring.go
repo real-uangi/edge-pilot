@@ -1,8 +1,9 @@
 package application
 
 import (
-	"edge-pilot/internal/shared/perf"
 	"sync"
+
+	"github.com/real-uangi/edge-pilot/internal/shared/perf"
 )
 
 type snapshotRing struct {

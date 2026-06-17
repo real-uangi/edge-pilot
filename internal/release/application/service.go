@@ -1,17 +1,18 @@
 package application
 
 import (
-	releasedomain "edge-pilot/internal/release/domain"
-	servicecatalogapp "edge-pilot/internal/servicecatalog/application"
-	servicecatalogdomain "edge-pilot/internal/servicecatalog/domain"
-	"edge-pilot/internal/shared/dto"
-	"edge-pilot/internal/shared/grpcapi"
-	"edge-pilot/internal/shared/model"
-	"edge-pilot/internal/shared/secret"
 	"errors"
 	"fmt"
 	"strings"
 	"time"
+
+	releasedomain "github.com/real-uangi/edge-pilot/internal/release/domain"
+	servicecatalogapp "github.com/real-uangi/edge-pilot/internal/servicecatalog/application"
+	servicecatalogdomain "github.com/real-uangi/edge-pilot/internal/servicecatalog/domain"
+	"github.com/real-uangi/edge-pilot/internal/shared/dto"
+	"github.com/real-uangi/edge-pilot/internal/shared/grpcapi"
+	"github.com/real-uangi/edge-pilot/internal/shared/model"
+	"github.com/real-uangi/edge-pilot/internal/shared/secret"
 
 	"github.com/google/uuid"
 	"github.com/real-uangi/allingo/common/business"

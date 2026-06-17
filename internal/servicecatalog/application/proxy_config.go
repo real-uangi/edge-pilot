@@ -1,11 +1,12 @@
 package application
 
 import (
-	"edge-pilot/internal/shared/model"
 	"net/url"
 	"sort"
 	"strconv"
 	"strings"
+
+	"github.com/real-uangi/edge-pilot/internal/shared/model"
 
 	"github.com/google/uuid"
 )

@@ -1,10 +1,11 @@
 package application
 
 import (
-	"edge-pilot/internal/shared/perf"
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/real-uangi/edge-pilot/internal/shared/perf"
 )
 
 func TestSnapshotRingWrapAround(t *testing.T) {

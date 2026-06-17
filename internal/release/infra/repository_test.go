@@ -2,9 +2,10 @@ package infra
 
 import (
 	"database/sql/driver"
-	"edge-pilot/internal/shared/model"
 	"testing"
 	"time"
+
+	"github.com/real-uangi/edge-pilot/internal/shared/model"
 
 	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/google/uuid"

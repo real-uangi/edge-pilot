@@ -1,10 +1,11 @@
 package controlplane
 
 import (
-	"edge-pilot/internal/shared/grpcapi"
-	"edge-pilot/internal/shared/model"
 	"testing"
 	"time"
+
+	"github.com/real-uangi/edge-pilot/internal/shared/grpcapi"
+	"github.com/real-uangi/edge-pilot/internal/shared/model"
 
 	"github.com/google/uuid"
 	commondb "github.com/real-uangi/allingo/common/db"

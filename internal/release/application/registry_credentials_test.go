@@ -1,15 +1,16 @@
 package application
 
 import (
-	agentregistry "edge-pilot/internal/agent/application/registry"
-	releasedomain "edge-pilot/internal/release/domain"
-	servicecatalogapp "edge-pilot/internal/servicecatalog/application"
-	"edge-pilot/internal/shared/config"
-	"edge-pilot/internal/shared/dto"
-	"edge-pilot/internal/shared/model"
-	"edge-pilot/internal/shared/secret"
 	"testing"
 	"time"
+
+	agentregistry "github.com/real-uangi/edge-pilot/internal/agent/application/registry"
+	releasedomain "github.com/real-uangi/edge-pilot/internal/release/domain"
+	servicecatalogapp "github.com/real-uangi/edge-pilot/internal/servicecatalog/application"
+	"github.com/real-uangi/edge-pilot/internal/shared/config"
+	"github.com/real-uangi/edge-pilot/internal/shared/dto"
+	"github.com/real-uangi/edge-pilot/internal/shared/model"
+	"github.com/real-uangi/edge-pilot/internal/shared/secret"
 
 	"github.com/google/uuid"
 )

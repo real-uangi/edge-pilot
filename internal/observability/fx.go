@@ -1,10 +1,10 @@
 package observability
 
 import (
-	"edge-pilot/internal/agent/application/registry"
-	"edge-pilot/internal/observability/application"
-	"edge-pilot/internal/observability/infra"
-	"edge-pilot/internal/shared/perf"
+	"github.com/real-uangi/edge-pilot/internal/agent/application/registry"
+	"github.com/real-uangi/edge-pilot/internal/observability/application"
+	"github.com/real-uangi/edge-pilot/internal/observability/infra"
+	"github.com/real-uangi/edge-pilot/internal/shared/perf"
 
 	"go.uber.org/fx"
 )

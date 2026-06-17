@@ -1,10 +1,11 @@
 package controlplane
 
 import (
-	"edge-pilot/internal/shared/grpcapi"
-	"edge-pilot/internal/shared/model"
-	"edge-pilot/internal/shared/secret"
 	"strings"
+
+	"github.com/real-uangi/edge-pilot/internal/shared/grpcapi"
+	"github.com/real-uangi/edge-pilot/internal/shared/model"
+	"github.com/real-uangi/edge-pilot/internal/shared/secret"
 
 	"github.com/real-uangi/allingo/common/business"
 )

@@ -1,14 +1,15 @@
 package application
 
 import (
-	"edge-pilot/internal/scheduler/domain"
-	"edge-pilot/internal/shared/config"
-	"edge-pilot/internal/shared/dto"
-	"edge-pilot/internal/shared/model"
 	"fmt"
 	"sort"
 	"strings"
 	"time"
+
+	"github.com/real-uangi/edge-pilot/internal/scheduler/domain"
+	"github.com/real-uangi/edge-pilot/internal/shared/config"
+	"github.com/real-uangi/edge-pilot/internal/shared/dto"
+	"github.com/real-uangi/edge-pilot/internal/shared/model"
 
 	"github.com/google/uuid"
 	"github.com/real-uangi/allingo/common/business"

@@ -9,7 +9,7 @@
 package static
 
 import (
-	"edge-pilot/web"
+	"github.com/real-uangi/edge-pilot/web"
 
 	"github.com/gin-gonic/gin"
 )

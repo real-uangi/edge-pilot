@@ -2,17 +2,18 @@ package application
 
 import (
 	"context"
-	releaseapp "edge-pilot/internal/release/application"
-	servicecatalogapp "edge-pilot/internal/servicecatalog/application"
-	"edge-pilot/internal/shared/dto"
-	"edge-pilot/internal/shared/grpcapi"
-	"edge-pilot/internal/shared/model"
-	"edge-pilot/internal/shared/perf"
 	"strings"
 	"sync"
 	"time"
 
-	"edge-pilot/internal/observability/domain"
+	releaseapp "github.com/real-uangi/edge-pilot/internal/release/application"
+	servicecatalogapp "github.com/real-uangi/edge-pilot/internal/servicecatalog/application"
+	"github.com/real-uangi/edge-pilot/internal/shared/dto"
+	"github.com/real-uangi/edge-pilot/internal/shared/grpcapi"
+	"github.com/real-uangi/edge-pilot/internal/shared/model"
+	"github.com/real-uangi/edge-pilot/internal/shared/perf"
+
+	"github.com/real-uangi/edge-pilot/internal/observability/domain"
 
 	"github.com/google/uuid"
 	"github.com/real-uangi/allingo/common/log"

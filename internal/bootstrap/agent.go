@@ -1,8 +1,8 @@
 package bootstrap
 
 import (
-	agentgrpc "edge-pilot/adapter/grpc/agent"
-	"edge-pilot/internal/agent"
+	agentgrpc "github.com/real-uangi/edge-pilot/adapter/grpc/agent"
+	"github.com/real-uangi/edge-pilot/internal/agent"
 
 	"github.com/real-uangi/allingo/common/app"
 	"github.com/real-uangi/allingo/common/log"

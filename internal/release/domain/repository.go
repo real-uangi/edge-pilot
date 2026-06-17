@@ -1,9 +1,10 @@
 package domain
 
 import (
-	"edge-pilot/internal/shared/model"
 	"errors"
 	"time"
+
+	"github.com/real-uangi/edge-pilot/internal/shared/model"
 
 	"github.com/google/uuid"
 )

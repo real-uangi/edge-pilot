@@ -2,16 +2,17 @@ package taskexec
 
 import (
 	"context"
-	"edge-pilot/internal/agent/application/containerindex"
-	agentdomain "edge-pilot/internal/agent/domain"
-	"edge-pilot/internal/shared/config"
-	"edge-pilot/internal/shared/grpcapi"
-	"edge-pilot/internal/shared/model"
 	"errors"
 	"fmt"
 	"net/http"
 	"strings"
 	"time"
+
+	"github.com/real-uangi/edge-pilot/internal/agent/application/containerindex"
+	agentdomain "github.com/real-uangi/edge-pilot/internal/agent/domain"
+	"github.com/real-uangi/edge-pilot/internal/shared/config"
+	"github.com/real-uangi/edge-pilot/internal/shared/grpcapi"
+	"github.com/real-uangi/edge-pilot/internal/shared/model"
 
 	"github.com/real-uangi/allingo/common/log"
 )

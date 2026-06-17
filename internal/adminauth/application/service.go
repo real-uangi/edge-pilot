@@ -3,13 +3,14 @@ package application
 import (
 	"crypto/hmac"
 	"crypto/sha256"
-	"edge-pilot/internal/shared/config"
-	"edge-pilot/internal/shared/dto"
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"strings"
 	"time"
+
+	"github.com/real-uangi/edge-pilot/internal/shared/config"
+	"github.com/real-uangi/edge-pilot/internal/shared/dto"
 
 	"github.com/real-uangi/allingo/common/business"
 )

@@ -2,10 +2,11 @@ package domain
 
 import (
 	"crypto/sha1"
-	"edge-pilot/internal/shared/grpcapi"
 	"encoding/hex"
 	"fmt"
 	"strings"
+
+	"github.com/real-uangi/edge-pilot/internal/shared/grpcapi"
 )
 
 const (

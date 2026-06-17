@@ -1,12 +1,13 @@
 package controlplane
 
 import (
-	schedulerapp "edge-pilot/internal/scheduler/application"
-	"edge-pilot/internal/scheduler/domain"
-	"edge-pilot/internal/shared/grpcapi"
-	"edge-pilot/internal/shared/model"
 	"testing"
 	"time"
+
+	schedulerapp "github.com/real-uangi/edge-pilot/internal/scheduler/application"
+	"github.com/real-uangi/edge-pilot/internal/scheduler/domain"
+	"github.com/real-uangi/edge-pilot/internal/shared/grpcapi"
+	"github.com/real-uangi/edge-pilot/internal/shared/model"
 
 	"github.com/google/uuid"
 )

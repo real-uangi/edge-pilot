@@ -2,11 +2,12 @@ package containerindex
 
 import (
 	"context"
-	agentdomain "edge-pilot/internal/agent/domain"
-	"edge-pilot/internal/shared/config"
-	"edge-pilot/internal/shared/grpcapi"
 	"io"
 	"testing"
+
+	agentdomain "github.com/real-uangi/edge-pilot/internal/agent/domain"
+	"github.com/real-uangi/edge-pilot/internal/shared/config"
+	"github.com/real-uangi/edge-pilot/internal/shared/grpcapi"
 )
 
 func TestFindByIdentityReturnsConflictWhenDuplicate(t *testing.T) {

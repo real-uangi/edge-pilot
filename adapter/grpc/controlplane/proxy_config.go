@@ -1,13 +1,14 @@
 package controlplane
 
 import (
-	releasedomain "edge-pilot/internal/release/domain"
-	servicecatalogapp "edge-pilot/internal/servicecatalog/application"
-	servicecatalogdomain "edge-pilot/internal/servicecatalog/domain"
-	"edge-pilot/internal/shared/grpcapi"
-	"edge-pilot/internal/shared/model"
 	"errors"
 	"strings"
+
+	releasedomain "github.com/real-uangi/edge-pilot/internal/release/domain"
+	servicecatalogapp "github.com/real-uangi/edge-pilot/internal/servicecatalog/application"
+	servicecatalogdomain "github.com/real-uangi/edge-pilot/internal/servicecatalog/domain"
+	"github.com/real-uangi/edge-pilot/internal/shared/grpcapi"
+	"github.com/real-uangi/edge-pilot/internal/shared/model"
 
 	"github.com/google/uuid"
 )

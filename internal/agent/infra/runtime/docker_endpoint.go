@@ -2,7 +2,6 @@ package runtime
 
 import (
 	"context"
-	"edge-pilot/internal/shared/config"
 	"fmt"
 	"io"
 	"net"
@@ -12,6 +11,8 @@ import (
 	"runtime"
 	"strings"
 	"time"
+
+	"github.com/real-uangi/edge-pilot/internal/shared/config"
 )
 
 const dockerUnixBaseURL = "http://docker"

@@ -1,10 +1,11 @@
 package application
 
 import (
-	"edge-pilot/internal/shared/config"
-	"edge-pilot/internal/shared/dto"
 	"testing"
 	"time"
+
+	"github.com/real-uangi/edge-pilot/internal/shared/config"
+	"github.com/real-uangi/edge-pilot/internal/shared/dto"
 )
 
 func TestServiceLoginAndParseSession(t *testing.T) {

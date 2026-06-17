@@ -1,9 +1,10 @@
 package application
 
 import (
-	"edge-pilot/internal/shared/config"
 	"encoding/base64"
 	"testing"
+
+	"github.com/real-uangi/edge-pilot/internal/shared/config"
 )
 
 func TestCryptoEncryptDecryptRoundTrip(t *testing.T) {

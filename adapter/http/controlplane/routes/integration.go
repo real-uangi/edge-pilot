@@ -1,9 +1,10 @@
 package routes
 
 import (
-	releaseapp "edge-pilot/internal/release/application"
-	"edge-pilot/internal/shared/dto"
 	"os"
+
+	releaseapp "github.com/real-uangi/edge-pilot/internal/release/application"
+	"github.com/real-uangi/edge-pilot/internal/shared/dto"
 
 	"net/http"
 

@@ -1,9 +1,10 @@
 package persistence
 
 import (
-	"edge-pilot/internal/agent/domain"
-	"edge-pilot/internal/shared/model"
 	"time"
+
+	"github.com/real-uangi/edge-pilot/internal/agent/domain"
+	"github.com/real-uangi/edge-pilot/internal/shared/model"
 
 	"github.com/real-uangi/allingo/common/db"
 	"gorm.io/gorm"

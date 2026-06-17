@@ -1,13 +1,14 @@
 package application
 
 import (
-	"edge-pilot/internal/servicecatalog/domain"
-	"edge-pilot/internal/shared/dto"
-	"edge-pilot/internal/shared/model"
-	"edge-pilot/internal/shared/secret"
 	"fmt"
 	"regexp"
 	"strings"
+
+	"github.com/real-uangi/edge-pilot/internal/servicecatalog/domain"
+	"github.com/real-uangi/edge-pilot/internal/shared/dto"
+	"github.com/real-uangi/edge-pilot/internal/shared/model"
+	"github.com/real-uangi/edge-pilot/internal/shared/secret"
 
 	"github.com/google/uuid"
 	"github.com/real-uangi/allingo/common/business"

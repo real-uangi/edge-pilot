@@ -1,11 +1,12 @@
 package config
 
 import (
-	"edge-pilot/internal/shared/buildinfo"
 	"fmt"
 	"net"
 	"os"
 	"strings"
+
+	"github.com/real-uangi/edge-pilot/internal/shared/buildinfo"
 
 	"github.com/google/uuid"
 	"github.com/real-uangi/allingo/common/log"

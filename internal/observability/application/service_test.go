@@ -2,12 +2,13 @@ package application
 
 import (
 	"context"
-	"edge-pilot/internal/shared/dto"
-	"edge-pilot/internal/shared/grpcapi"
-	"edge-pilot/internal/shared/model"
-	"edge-pilot/internal/shared/perf"
 	"testing"
 	"time"
+
+	"github.com/real-uangi/edge-pilot/internal/shared/dto"
+	"github.com/real-uangi/edge-pilot/internal/shared/grpcapi"
+	"github.com/real-uangi/edge-pilot/internal/shared/model"
+	"github.com/real-uangi/edge-pilot/internal/shared/perf"
 
 	"github.com/google/uuid"
 )

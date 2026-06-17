@@ -1,8 +1,8 @@
 package application
 
 import (
-	releasedomain "edge-pilot/internal/release/domain"
-	servicecatalogdomain "edge-pilot/internal/servicecatalog/domain"
+	releasedomain "github.com/real-uangi/edge-pilot/internal/release/domain"
+	servicecatalogdomain "github.com/real-uangi/edge-pilot/internal/servicecatalog/domain"
 
 	"github.com/google/uuid"
 )

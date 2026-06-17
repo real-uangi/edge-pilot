@@ -1,11 +1,12 @@
 package application
 
 import (
-	"edge-pilot/internal/registrycredential/domain"
-	releasedomain "edge-pilot/internal/release/domain"
-	"edge-pilot/internal/shared/dto"
-	"edge-pilot/internal/shared/model"
 	"strings"
+
+	"github.com/real-uangi/edge-pilot/internal/registrycredential/domain"
+	releasedomain "github.com/real-uangi/edge-pilot/internal/release/domain"
+	"github.com/real-uangi/edge-pilot/internal/shared/dto"
+	"github.com/real-uangi/edge-pilot/internal/shared/model"
 
 	"github.com/google/uuid"
 	"github.com/real-uangi/allingo/common/business"

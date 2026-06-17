@@ -1,12 +1,13 @@
 package routes
 
 import (
-	"edge-pilot/internal/shared/dto"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/real-uangi/edge-pilot/internal/shared/dto"
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"

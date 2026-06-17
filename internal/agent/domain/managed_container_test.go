@@ -1,9 +1,10 @@
 package domain
 
 import (
-	"edge-pilot/internal/shared/grpcapi"
 	"strings"
 	"testing"
+
+	"github.com/real-uangi/edge-pilot/internal/shared/grpcapi"
 )
 
 func TestManagedContainerNameForRelease(t *testing.T) {

@@ -1,21 +1,22 @@
 package application
 
 import (
-	agentregistry "edge-pilot/internal/agent/application/registry"
-	agentdomain "edge-pilot/internal/agent/domain"
-	releasedomain "edge-pilot/internal/release/domain"
-	servicecatalogapp "edge-pilot/internal/servicecatalog/application"
-	servicecatalogdomain "edge-pilot/internal/servicecatalog/domain"
-	"edge-pilot/internal/shared/config"
-	"edge-pilot/internal/shared/dto"
-	"edge-pilot/internal/shared/grpcapi"
-	"edge-pilot/internal/shared/model"
-	"edge-pilot/internal/shared/secret"
 	"errors"
 	"sort"
 	"strings"
 	"testing"
 	"time"
+
+	agentregistry "github.com/real-uangi/edge-pilot/internal/agent/application/registry"
+	agentdomain "github.com/real-uangi/edge-pilot/internal/agent/domain"
+	releasedomain "github.com/real-uangi/edge-pilot/internal/release/domain"
+	servicecatalogapp "github.com/real-uangi/edge-pilot/internal/servicecatalog/application"
+	servicecatalogdomain "github.com/real-uangi/edge-pilot/internal/servicecatalog/domain"
+	"github.com/real-uangi/edge-pilot/internal/shared/config"
+	"github.com/real-uangi/edge-pilot/internal/shared/dto"
+	"github.com/real-uangi/edge-pilot/internal/shared/grpcapi"
+	"github.com/real-uangi/edge-pilot/internal/shared/model"
+	"github.com/real-uangi/edge-pilot/internal/shared/secret"
 
 	"github.com/google/uuid"
 	commondb "github.com/real-uangi/allingo/common/db"

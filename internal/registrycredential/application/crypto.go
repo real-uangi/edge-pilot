@@ -4,9 +4,10 @@ import (
 	"crypto/aes"
 	"crypto/cipher"
 	"crypto/rand"
-	"edge-pilot/internal/shared/config"
 	"encoding/base64"
 	"io"
+
+	"github.com/real-uangi/edge-pilot/internal/shared/config"
 
 	"github.com/real-uangi/allingo/common/business"
 )

@@ -3,12 +3,13 @@ package runtime
 import (
 	"bufio"
 	"context"
-	"edge-pilot/internal/shared/grpcapi"
 	"fmt"
 	"net"
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/real-uangi/edge-pilot/internal/shared/grpcapi"
 )
 
 type HAProxyRuntimeClient struct {

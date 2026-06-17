@@ -1,10 +1,10 @@
 package controlplane
 
 import (
-	"edge-pilot/internal/agent/application/managedcontainer"
-	"edge-pilot/internal/agent/application/proxyconfig"
-	releasedomain "edge-pilot/internal/release/domain"
-	schedulerapp "edge-pilot/internal/scheduler/application"
+	"github.com/real-uangi/edge-pilot/internal/agent/application/managedcontainer"
+	"github.com/real-uangi/edge-pilot/internal/agent/application/proxyconfig"
+	releasedomain "github.com/real-uangi/edge-pilot/internal/release/domain"
+	schedulerapp "github.com/real-uangi/edge-pilot/internal/scheduler/application"
 
 	"go.uber.org/fx"
 )

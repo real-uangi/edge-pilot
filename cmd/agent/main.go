@@ -1,6 +1,6 @@
 package main
 
-import "edge-pilot/internal/bootstrap"
+import "github.com/real-uangi/edge-pilot/internal/bootstrap"
 
 func main() {
 	bootstrap.RunAgent()

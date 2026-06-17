@@ -1,8 +1,9 @@
 package dto
 
 import (
-	"edge-pilot/internal/shared/model"
 	"time"
+
+	"github.com/real-uangi/edge-pilot/internal/shared/model"
 
 	"github.com/google/uuid"
 )

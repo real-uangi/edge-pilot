@@ -1,11 +1,12 @@
 package middleware
 
 import (
-	adminauthapp "edge-pilot/internal/adminauth/application"
-	"edge-pilot/internal/shared/config"
 	"net/http"
 	"strings"
 	"time"
+
+	adminauthapp "github.com/real-uangi/edge-pilot/internal/adminauth/application"
+	"github.com/real-uangi/edge-pilot/internal/shared/config"
 
 	"github.com/gin-gonic/gin"
 	"github.com/real-uangi/allingo/common/result"

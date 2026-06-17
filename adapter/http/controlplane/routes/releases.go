@@ -1,11 +1,11 @@
 package routes
 
 import (
-	adaptermiddleware "edge-pilot/adapter/http/middleware"
-	adminauthapp "edge-pilot/internal/adminauth/application"
-	releaseapp "edge-pilot/internal/release/application"
-	"edge-pilot/internal/shared/config"
-	"edge-pilot/internal/shared/dto"
+	adaptermiddleware "github.com/real-uangi/edge-pilot/adapter/http/middleware"
+	adminauthapp "github.com/real-uangi/edge-pilot/internal/adminauth/application"
+	releaseapp "github.com/real-uangi/edge-pilot/internal/release/application"
+	"github.com/real-uangi/edge-pilot/internal/shared/config"
+	"github.com/real-uangi/edge-pilot/internal/shared/dto"
 
 	"net/http"
 

@@ -1,12 +1,13 @@
 package routes
 
 import (
-	adaptermiddleware "edge-pilot/adapter/http/middleware"
-	adminauthapp "edge-pilot/internal/adminauth/application"
-	registrycredentialapp "edge-pilot/internal/registrycredential/application"
-	"edge-pilot/internal/shared/config"
-	"edge-pilot/internal/shared/dto"
 	"net/http"
+
+	adaptermiddleware "github.com/real-uangi/edge-pilot/adapter/http/middleware"
+	adminauthapp "github.com/real-uangi/edge-pilot/internal/adminauth/application"
+	registrycredentialapp "github.com/real-uangi/edge-pilot/internal/registrycredential/application"
+	"github.com/real-uangi/edge-pilot/internal/shared/config"
+	"github.com/real-uangi/edge-pilot/internal/shared/dto"
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"

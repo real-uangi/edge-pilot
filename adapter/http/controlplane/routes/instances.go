@@ -2,15 +2,16 @@ package routes
 
 import (
 	"context"
-	adaptermiddleware "edge-pilot/adapter/http/middleware"
-	adminauthapp "edge-pilot/internal/adminauth/application"
-	"edge-pilot/internal/agent/application/managedcontainer"
-	"edge-pilot/internal/shared/config"
-	"edge-pilot/internal/shared/dto"
 	"encoding/json"
 	"fmt"
 	"net/http"
 	"time"
+
+	adaptermiddleware "github.com/real-uangi/edge-pilot/adapter/http/middleware"
+	adminauthapp "github.com/real-uangi/edge-pilot/internal/adminauth/application"
+	"github.com/real-uangi/edge-pilot/internal/agent/application/managedcontainer"
+	"github.com/real-uangi/edge-pilot/internal/shared/config"
+	"github.com/real-uangi/edge-pilot/internal/shared/dto"
 
 	"github.com/gin-gonic/gin"
 	"github.com/real-uangi/allingo/common/api"

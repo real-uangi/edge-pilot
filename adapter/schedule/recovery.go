@@ -2,9 +2,10 @@ package schedule
 
 import (
 	"context"
-	"edge-pilot/internal/agent/application/registry"
-	releaseapp "edge-pilot/internal/release/application"
 	"time"
+
+	"github.com/real-uangi/edge-pilot/internal/agent/application/registry"
+	releaseapp "github.com/real-uangi/edge-pilot/internal/release/application"
 
 	"github.com/real-uangi/allingo/common/log"
 	"go.uber.org/fx"

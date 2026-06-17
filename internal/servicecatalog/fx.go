@@ -1,11 +1,11 @@
 package servicecatalog
 
 import (
-	"edge-pilot/internal/agent/application/registry"
-	agentdomain "edge-pilot/internal/agent/domain"
-	"edge-pilot/internal/servicecatalog/application"
-	"edge-pilot/internal/servicecatalog/domain"
-	"edge-pilot/internal/servicecatalog/infra"
+	"github.com/real-uangi/edge-pilot/internal/agent/application/registry"
+	agentdomain "github.com/real-uangi/edge-pilot/internal/agent/domain"
+	"github.com/real-uangi/edge-pilot/internal/servicecatalog/application"
+	"github.com/real-uangi/edge-pilot/internal/servicecatalog/domain"
+	"github.com/real-uangi/edge-pilot/internal/servicecatalog/infra"
 
 	"go.uber.org/fx"
 )
