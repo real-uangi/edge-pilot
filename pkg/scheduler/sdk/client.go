@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"os"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -22,6 +24,15 @@ type RunContext struct {
 	Payload        map[string]any
 	IdempotencyKey string
 	Attempt        int
+
+	ServiceID   string
+	ReleaseID   string
+	Slot        string
+	AgentID     string
+	ExecutorID  string
+	ServiceKey  string
+	BackendName string
+	ServerName  string
 }
 
 type RunResult struct {
@@ -100,6 +111,61 @@ func NewExecutorClient(opts ExecutorClientOptions) *ExecutorClient {
 		},
 		handlers: make(map[string]Handler),
 	}
+}
+
+func NewExecutorClientFromEnv() *ExecutorClient {
+	return &ExecutorClient{
+		opts: ExecutorClientOptions{
+			Addr:       envAddr(),
+			ExecutorID: envOrDefault("EP_EXECUTOR_ID", ""),
+			Token:      "",
+			Group:      envOrDefault("EP_SCHEDULER_EXECUTOR_GROUP", ""),
+			LiveSlot:   envLiveSlot(),
+			Metadata:   envMetadata(),
+		},
+		handlers: make(map[string]Handler),
+	}
+}
+
+func envAddr() string {
+	addr := strings.TrimSpace(os.Getenv("EP_SCHEDULER_SDK_ADDR"))
+	if addr == "" {
+		addr = "127.0.0.1"
+	}
+	portStr := strings.TrimSpace(os.Getenv("EP_SCHEDULER_SDK_PORT"))
+	port, err := strconv.Atoi(portStr)
+	if err != nil || port <= 0 {
+		return addr
+	}
+	return addr + ":" + portStr
+}
+
+func envLiveSlot() grpcapi.Slot {
+	switch strings.ToLower(strings.TrimSpace(os.Getenv("EP_SLOT"))) {
+	case "blue":
+		return grpcapi.Slot_SLOT_BLUE
+	case "green":
+		return grpcapi.Slot_SLOT_GREEN
+	default:
+		return grpcapi.Slot_SLOT_UNSPECIFIED
+	}
+}
+
+func envMetadata() map[string]string {
+	meta := map[string]string{}
+	for _, key := range []string{"EP_SERVICE_ID", "EP_SERVICE_KEY", "EP_RELEASE_ID", "EP_AGENT_ID", "EP_BACKEND_NAME", "EP_SERVER_NAME"} {
+		if v := strings.TrimSpace(os.Getenv(key)); v != "" {
+			meta[strings.ToLower(strings.TrimPrefix(key, "EP_"))] = v
+		}
+	}
+	return meta
+}
+
+func envOrDefault(key, fallback string) string {
+	if v := strings.TrimSpace(os.Getenv(key)); v != "" {
+		return v
+	}
+	return fallback
 }
 
 func (c *ExecutorClient) RegisterHandler(handlerKey string, handler Handler) {
@@ -229,6 +295,14 @@ func (c *ExecutorClient) connectOnce(ctx context.Context) error {
 				IdempotencyKey: command.GetIdempotencyKey(),
 				Attempt:        int(command.GetAttempt()),
 				Payload:        map[string]any{},
+				ServiceID:      envOrDefault("EP_SERVICE_ID", ""),
+				ReleaseID:      envOrDefault("EP_RELEASE_ID", ""),
+				Slot:           envOrDefault("EP_SLOT", ""),
+				AgentID:        envOrDefault("EP_AGENT_ID", ""),
+				ExecutorID:     envOrDefault("EP_EXECUTOR_ID", ""),
+				ServiceKey:     envOrDefault("EP_SERVICE_KEY", ""),
+				BackendName:    envOrDefault("EP_BACKEND_NAME", ""),
+				ServerName:     envOrDefault("EP_SERVER_NAME", ""),
 			}
 			if raw := command.GetPayloadJson(); raw != "" {
 				_ = json.Unmarshal([]byte(raw), &ctxRun.Payload)

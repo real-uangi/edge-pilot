@@ -37,6 +37,7 @@ type UpsertServiceRequest struct {
 	HTTPProbeIntervalSecond int               `json:"httpProbeIntervalSecond"`
 	HTTPSuccessThreshold    int               `json:"httpSuccessThreshold"`
 	SchedulerSDKPort        int               `json:"schedulerSdkPort"`
+	SchedulerSDKAddr        string            `json:"schedulerSdkAddr"`
 	SchedulerExecutorGroup  string            `json:"schedulerExecutorGroup"`
 	RouteHost               string            `json:"routeHost"`
 	RouteHosts              []string          `json:"routeHosts"`
@@ -70,6 +71,7 @@ type ServiceOutput struct {
 	HTTPProbeIntervalSecond int               `json:"httpProbeIntervalSecond"`
 	HTTPSuccessThreshold    int               `json:"httpSuccessThreshold"`
 	SchedulerSDKPort        int               `json:"schedulerSdkPort"`
+	SchedulerSDKAddr        string            `json:"schedulerSdkAddr"`
 	SchedulerExecutorGroup  string            `json:"schedulerExecutorGroup"`
 	RouteHost               string            `json:"routeHost"`
 	RouteHosts              []string          `json:"routeHosts"`
@@ -105,6 +107,7 @@ type ServiceDeploymentSpec struct {
 	HTTPProbeIntervalSecond int
 	HTTPSuccessThreshold    int
 	SchedulerSDKPort        int
+	SchedulerSDKAddr        string
 	SchedulerExecutorGroup  string
 	RouteHost               string
 	RouteHosts              []string

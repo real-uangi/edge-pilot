@@ -9,6 +9,7 @@ export interface ServiceRecord {
   memoryLimitMB: number;
   currentLiveSlot: number;
   schedulerSdkPort: number;
+  schedulerSdkAddr: string;
   schedulerExecutorGroup: string;
   dockerHealthCheck: boolean | null;
   httpHealthPath: string;
@@ -51,6 +52,7 @@ export interface UpsertServiceInput {
   httpProbeIntervalSecond: number;
   httpSuccessThreshold: number;
   schedulerSdkPort: number;
+  schedulerSdkAddr: string;
   schedulerExecutorGroup: string;
   routeHost: string;
   routeHosts: string[];

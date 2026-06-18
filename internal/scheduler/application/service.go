@@ -335,7 +335,7 @@ func (s *Service) RegisterServiceInstanceExecutor(executorID string, group strin
 		return nil, business.NewBadRequest("relayAgentID required")
 	}
 	cleanMeta := sanitizeExecutorMetadata(metadata)
-	serviceID, err := serviceIDFromServiceInstanceMetadata(cleanMeta)
+	_, err := serviceIDFromServiceInstanceMetadata(cleanMeta)
 	if err != nil {
 		return nil, err
 	}
@@ -343,12 +343,11 @@ func (s *Service) RegisterServiceInstanceExecutor(executorID string, group strin
 	if releaseID == "" {
 		return nil, business.NewBadRequest("release_id required in metadata")
 	}
-	containerID := strings.TrimSpace(cleanMeta["container_id"])
-	if containerID == "" {
-		return nil, business.NewBadRequest("container_id required in metadata")
+	metaExecutorID := strings.TrimSpace(cleanMeta["executor_id"])
+	if metaExecutorID == "" {
+		return nil, business.NewBadRequest("executor_id required in metadata")
 	}
-	expectedExecutorID := schedulerServiceInstanceExecutorID(serviceID.String(), releaseID, liveSlot, containerID)
-	if expectedExecutorID == "" || executorID != expectedExecutorID {
+	if executorID != metaExecutorID {
 		return nil, business.NewBadRequest("executorId mismatch with service instance metadata")
 	}
 	if relayRoutingKey != "" && relayRoutingKey != executorID {

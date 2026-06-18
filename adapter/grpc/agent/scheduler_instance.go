@@ -126,8 +126,12 @@ func (c *schedulerInstanceConnector) reconcile(ctx context.Context) {
 		if service == nil || !isSchedulerReleaseContainer(container.ReleaseID, service) {
 			continue
 		}
+		executorID := c.resolveExecutorID(ctx, container)
+		if executorID == "" {
+			continue
+		}
 		target := schedulerInstanceTarget{
-			executorID:  schedulerInstanceExecutorID(container.ServiceID, container.ReleaseID, container.Slot, container.ContainerID),
+			executorID:  executorID,
 			serviceID:   container.ServiceID,
 			serviceKey:  container.ServiceKey,
 			releaseID:   container.ReleaseID,
@@ -136,12 +140,36 @@ func (c *schedulerInstanceConnector) reconcile(ctx context.Context) {
 			group:       service.GetSchedulerExecutorGroup(),
 			port:        int(service.GetSchedulerSdkPort()),
 		}
-		if target.executorID == "" {
-			continue
-		}
 		wanted[target.executorID] = target
 	}
 	c.applyWanted(ctx, wanted)
+}
+
+func (c *schedulerInstanceConnector) resolveExecutorID(ctx context.Context, container *agentdomain.ManagedContainer) string {
+	if container == nil {
+		return ""
+	}
+	c.mu.Lock()
+	for _, session := range c.sessions {
+		if session.target.containerID == container.ContainerID {
+			c.mu.Unlock()
+			return session.target.executorID
+		}
+	}
+	c.mu.Unlock()
+	details, err := c.docker.GetContainerDetails(ctx, container.ContainerID)
+	if err != nil {
+		c.logger.Errorf(err, "get container details for executor id failed: containerId=%s", container.ContainerID)
+		return ""
+	}
+	if details == nil || details.Env == nil {
+		return ""
+	}
+	executorID := strings.TrimSpace(details.Env["EP_EXECUTOR_ID"])
+	if executorID == "" {
+		c.logger.Warnf("container missing EP_EXECUTOR_ID env: containerId=%s", container.ContainerID)
+	}
+	return executorID
 }
 
 func (c *schedulerInstanceConnector) listContainers(ctx context.Context) ([]*agentdomain.ManagedContainer, error) {
@@ -321,6 +349,7 @@ func (c *schedulerInstanceConnector) sendServiceInstanceHello(session *relayExec
 					"service_key":              target.serviceKey,
 					"release_id":               target.releaseID,
 					"container_id":             target.containerID,
+					"executor_id":              target.executorID,
 				},
 				RoutingKey: target.executorID,
 			},

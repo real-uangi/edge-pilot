@@ -24,6 +24,10 @@ export function ServiceSummary({ service }: ServiceSummaryProps) {
           <span className={styles.value}>{service.schedulerSdkPort || "-"}</span>
         </div>
         <div className={styles.keyValue}>
+          <span className={styles.key}>调度地址</span>
+          <span className={styles.value}>{service.schedulerSdkAddr || "127.0.0.1"}</span>
+        </div>
+        <div className={styles.keyValue}>
           <span className={styles.key}>执行器组</span>
           <span className={styles.value}>{service.schedulerExecutorGroup || "-"}</span>
         </div>

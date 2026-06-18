@@ -144,6 +144,7 @@ type Service struct {
 	MemoryLimitMB           int64                              `json:"memoryLimitMB"`
 	CurrentLiveSlot         Slot                               `json:"currentLiveSlot"`
 	SchedulerSDKPort        int                                `json:"schedulerSdkPort"`
+	SchedulerSDKAddr        string                             `json:"schedulerSdkAddr" gorm:"size:255"`
 	SchedulerExecutorGroup  string                             `json:"schedulerExecutorGroup" gorm:"size:128"`
 	DockerHealthCheck       *bool                              `json:"dockerHealthCheck" gorm:"not null"`
 	HTTPHealthPath          string                             `json:"httpHealthPath" gorm:"size:255"`
@@ -270,6 +271,7 @@ type TaskPayload struct {
 	HTTPProbeIntervalSecond int               `json:"httpProbeIntervalSecond"`
 	HTTPSuccessThreshold    int               `json:"httpSuccessThreshold"`
 	SchedulerSDKPort        int               `json:"schedulerSdkPort"`
+	SchedulerSDKAddr        string            `json:"schedulerSdkAddr,omitempty"`
 	SchedulerExecutorGroup  string            `json:"schedulerExecutorGroup"`
 	BackendName             string            `json:"backendName"`
 	ServerName              string            `json:"serverName"`

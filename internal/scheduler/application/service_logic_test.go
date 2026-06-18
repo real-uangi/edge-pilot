@@ -124,13 +124,12 @@ func TestRegisterServiceInstanceExecutor(t *testing.T) {
 
 	serviceID := uuid.New().String()
 	releaseID := "release-a"
-	containerID := "abcdef0123456789"
-	executorID := schedulerServiceInstanceExecutorID(serviceID, releaseID, model.SlotBlue, containerID)
+	executorID := "svc:" + serviceID + ":rel:release-a:slot:blue:inst:uuid-test-123"
 	executor, err := svc.RegisterServiceInstanceExecutor(
 		executorID,
 		"default",
 		model.SlotBlue,
-		map[string]string{"service_id": serviceID, "release_id": releaseID, "container_id": containerID, "relay_token": "secret"},
+		map[string]string{"service_id": serviceID, "release_id": releaseID, "executor_id": executorID, "relay_token": "secret"},
 		"agent-a",
 		executorID,
 	)
@@ -153,12 +152,12 @@ func TestRegisterServiceInstanceExecutorRejectsMismatchedExecutorID(t *testing.T
 	svc := NewService(repo, nil, nil, nil)
 
 	_, err := svc.RegisterServiceInstanceExecutor(
-		"svc:wrong:rel:r1:slot:blue:ctr:abcdef012345",
+		"wrong-executor-id",
 		"default",
 		model.SlotBlue,
-		map[string]string{"service_id": uuid.New().String(), "release_id": "r1", "container_id": "abcdef0123456789"},
+		map[string]string{"service_id": uuid.New().String(), "release_id": "r1", "executor_id": "expected-executor-id"},
 		"agent-a",
-		"svc:wrong:rel:r1:slot:blue:ctr:abcdef012345",
+		"wrong-executor-id",
 	)
 	if err == nil {
 		t.Fatalf("expected executorId mismatch error")
@@ -170,8 +169,7 @@ func TestRegisterServiceInstanceExecutorRejectsRebindToDifferentAgent(t *testing
 	existingEnabled := true
 	serviceID := uuid.New().String()
 	releaseID := "release-a"
-	containerID := "abcdef0123456789"
-	executorID := schedulerServiceInstanceExecutorID(serviceID, releaseID, model.SlotGreen, containerID)
+	executorID := "svc:" + serviceID + ":rel:release-a:slot:green:inst:uuid-test-456"
 	repo.executor = &model.SchedulerExecutor{
 		ID:           executorID,
 		RelayAgentID: "agent-bound",
@@ -183,7 +181,7 @@ func TestRegisterServiceInstanceExecutorRejectsRebindToDifferentAgent(t *testing
 		executorID,
 		"default",
 		model.SlotGreen,
-		map[string]string{"service_id": serviceID, "release_id": releaseID, "container_id": containerID},
+		map[string]string{"service_id": serviceID, "release_id": releaseID, "executor_id": executorID},
 		"agent-other",
 		executorID,
 	)

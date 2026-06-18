@@ -150,6 +150,7 @@ message TaskCommand {
   repeated string network_aliases = 36;
   double cpu_limit_cores = 37;
   int64 memory_limit_mb = 38;
+  string scheduler_sdk_addr = 39;
 }
 
 message TaskUpdate {

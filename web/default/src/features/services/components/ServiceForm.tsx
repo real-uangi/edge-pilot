@@ -150,6 +150,11 @@ export function ServiceForm({
             <input className={styles.input} type="number" {...form.register("schedulerSdkPort")} />
           </label>
           <label className={styles.field}>
+            <span className={styles.label}>调度 SDK 地址</span>
+            <input className={styles.input} {...form.register("schedulerSdkAddr")} placeholder="127.0.0.1" />
+            <span className={styles.hint}>默认 127.0.0.1，容器内 SDK 连接 scheduler 的地址</span>
+          </label>
+          <label className={styles.field}>
             <span className={styles.label}>执行器组</span>
             <input className={styles.input} {...form.register("schedulerExecutorGroup")} />
           </label>

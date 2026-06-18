@@ -16,6 +16,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/google/uuid"
 	agentdomain "github.com/real-uangi/edge-pilot/internal/agent/domain"
 	"github.com/real-uangi/edge-pilot/internal/shared/config"
 	"github.com/real-uangi/edge-pilot/internal/shared/grpcapi"
@@ -120,9 +121,12 @@ func (c *DockerClient) DeployContainer(ctx context.Context, task *grpcapi.TaskCo
 
 func buildWorkloadCreateRequest(cfg *config.AgentRuntimeConfig, imageRef string, task *grpcapi.TaskCommand) dockerCreateRequest {
 	networkAliases := task.GetNetworkAliases()
+	systemEnv := buildSystemEnv(task)
+	userEnv := task.GetEnv()
+	mergedEnv := mergeEnv(systemEnv, userEnv)
 	return dockerCreateRequest{
 		Image:      imageRef,
-		Env:        flattenEnv(task.GetEnv()),
+		Env:        flattenEnv(mergedEnv),
 		Cmd:        task.GetCommand(),
 		Entrypoint: task.GetEntrypoint(),
 		Labels: map[string]string{
@@ -152,6 +156,45 @@ func buildWorkloadCreateRequest(cfg *config.AgentRuntimeConfig, imageRef string,
 				},
 			},
 		},
+	}
+}
+
+func buildSystemEnv(task *grpcapi.TaskCommand) map[string]string {
+	return map[string]string{
+		"EP_SERVICE_ID":               task.GetServiceId(),
+		"EP_SERVICE_KEY":              task.GetServiceKey(),
+		"EP_RELEASE_ID":               task.GetReleaseId(),
+		"EP_AGENT_ID":                 task.GetAgentId(),
+		"EP_SLOT":                     slotToString(task.GetTargetSlot()),
+		"EP_CONTAINER_PORT":           fmt.Sprintf("%d", task.GetContainerPort()),
+		"EP_SCHEDULER_SDK_PORT":       fmt.Sprintf("%d", task.GetSchedulerSdkPort()),
+		"EP_SCHEDULER_EXECUTOR_GROUP": task.GetSchedulerExecutorGroup(),
+		"EP_SCHEDULER_SDK_ADDR":       firstNonEmpty(task.GetSchedulerSdkAddr(), "127.0.0.1"),
+		"EP_BACKEND_NAME":             task.GetBackendName(),
+		"EP_SERVER_NAME":              task.GetServerName(),
+		"EP_EXECUTOR_ID":              uuid.NewString(),
+	}
+}
+
+func mergeEnv(systemEnv, userEnv map[string]string) map[string]string {
+	merged := make(map[string]string, len(systemEnv)+len(userEnv))
+	for k, v := range systemEnv {
+		merged[k] = v
+	}
+	for k, v := range userEnv {
+		merged[k] = v
+	}
+	return merged
+}
+
+func slotToString(slot grpcapi.Slot) string {
+	switch slot {
+	case grpcapi.Slot_SLOT_BLUE:
+		return "blue"
+	case grpcapi.Slot_SLOT_GREEN:
+		return "green"
+	default:
+		return "unknown"
 	}
 }
 

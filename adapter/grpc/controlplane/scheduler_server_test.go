@@ -46,7 +46,7 @@ func TestHandleRelayExecutorMessageRejectsServiceInstanceHelloWithoutRelaySessio
 				"edge_pilot_service_instance": "true",
 				"service_id":                  uuid.New().String(),
 				"release_id":                  "r1",
-				"container_id":                "abcdef0123456789",
+				"executor_id":                 "svc:x:rel:r1:slot:blue:inst:abc123",
 			},
 		}},
 	})
@@ -61,8 +61,7 @@ func TestHandleRelayExecutorMessageRegistersServiceInstanceWithServiceID(t *test
 	srv := &SchedulerServer{hub: NewSchedulerSessionHub(), service: svc}
 	serviceID := uuid.New().String()
 	releaseID := "release-a"
-	containerID := "abcdef0123456789"
-	executorID := "svc:" + serviceID + ":rel:" + releaseID + ":slot:blue:ctr:abcdef012345"
+	executorID := "svc:" + serviceID + ":rel:release-a:slot:blue:inst:abc123"
 
 	err := srv.handleRelayExecutorMessage("agent-a", &grpcapi.SchedulerRelayEnvelope{RelaySessionId: "relay-1", RoutingKey: executorID}, &grpcapi.ExecutorMessage{
 		Payload: &grpcapi.ExecutorMessage_Hello{Hello: &grpcapi.ExecutorHello{
@@ -73,7 +72,7 @@ func TestHandleRelayExecutorMessageRegistersServiceInstanceWithServiceID(t *test
 				"edge_pilot_service_instance": "true",
 				"service_id":                  serviceID,
 				"release_id":                  releaseID,
-				"container_id":                containerID,
+				"executor_id":                 executorID,
 			},
 		}},
 	})
