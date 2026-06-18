@@ -46,6 +46,7 @@ export interface SchedulerExecutorRecord {
   relayAgentId: string;
   relayRoutingKey: string;
   enabled: boolean | null;
+  online: boolean;
   lastSeenAt: string | null;
   liveSlot: number;
   instanceMeta: Record<string, string>;

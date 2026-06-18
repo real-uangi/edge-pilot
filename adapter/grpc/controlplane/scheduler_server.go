@@ -451,8 +451,12 @@ func (s *executorSession) send(message *grpcapi.SchedulerMessage) error {
 			PayloadBytes:   payloadBytes,
 		})
 	}
-	s.sendCh <- message
-	return nil
+	select {
+	case s.sendCh <- message:
+		return nil
+	default:
+		return status.Error(codes.Unavailable, "executor send queue full")
+	}
 }
 
 func (s *executorSession) close() {

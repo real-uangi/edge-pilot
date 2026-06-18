@@ -72,6 +72,7 @@ type SchedulerExecutorOutput struct {
 	RelayAgentID    string                             `json:"relayAgentId"`
 	RelayRoutingKey string                             `json:"relayRoutingKey"`
 	Enabled         *bool                              `json:"enabled"`
+	Online          bool                               `json:"online"`
 	LastSeenAt      *time.Time                         `json:"lastSeenAt"`
 	LiveSlot        model.Slot                         `json:"liveSlot"`
 	InstanceMeta    map[string]string                  `json:"instanceMeta"`

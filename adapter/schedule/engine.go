@@ -62,13 +62,8 @@ func (s *SchedulerEngine) run(ctx context.Context) {
 			return
 		case <-ticker.C:
 			now := time.Now().UTC()
-			if err := s.service.EnqueueDueJobs(now); err != nil {
-				s.logger.Errorf(err, "enqueue due scheduler jobs failed")
-			}
-			if s.dispatcher != nil {
-				if err := s.service.DispatchDueRuns(now, s.dispatcher); err != nil {
-					s.logger.Errorf(err, "dispatch scheduler runs failed")
-				}
+			if _, err := s.service.RunDueCycle(now, s.dispatcher); err != nil {
+				s.logger.Errorf(err, "scheduler engine tick failed")
 			}
 		}
 	}

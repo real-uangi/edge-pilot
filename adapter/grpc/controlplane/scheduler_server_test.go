@@ -89,6 +89,19 @@ func TestHandleRelayExecutorMessageRegistersServiceInstanceWithServiceID(t *test
 	}
 }
 
+func TestExecutorSessionSendReturnsUnavailableWhenQueueFull(t *testing.T) {
+	session := &executorSession{
+		executorID:  "exec-1",
+		channelType: schedulerChannelDirect,
+		sendCh:      make(chan *grpcapi.SchedulerMessage, 1),
+	}
+	session.sendCh <- &grpcapi.SchedulerMessage{}
+
+	if err := session.send(&grpcapi.SchedulerMessage{}); err == nil {
+		t.Fatalf("expected send queue full error")
+	}
+}
+
 type schedulerAuthRepo struct {
 	executors map[string]*model.SchedulerExecutor
 }
@@ -108,6 +121,9 @@ func (r *schedulerAuthRepo) ListJobsDue(now time.Time, limit int) ([]model.Sched
 }
 func (r *schedulerAuthRepo) DeleteJob(id uuid.UUID) error               { panic("not implemented") }
 func (r *schedulerAuthRepo) CreateRun(run *model.SchedulerJobRun) error { panic("not implemented") }
+func (r *schedulerAuthRepo) CreateRunIfNotExists(run *model.SchedulerJobRun) (bool, error) {
+	panic("not implemented")
+}
 func (r *schedulerAuthRepo) UpdateRun(run *model.SchedulerJobRun) error { panic("not implemented") }
 func (r *schedulerAuthRepo) GetRun(id uuid.UUID) (*model.SchedulerJobRun, error) {
 	panic("not implemented")
@@ -122,6 +138,21 @@ func (r *schedulerAuthRepo) ListDispatchableRuns(now time.Time, limit int) ([]mo
 	panic("not implemented")
 }
 func (r *schedulerAuthRepo) ClaimRun(runID uuid.UUID, leasedBy string, leaseExpiresAt time.Time, now time.Time) (bool, error) {
+	panic("not implemented")
+}
+func (r *schedulerAuthRepo) MarkRunRunning(runID uuid.UUID, executorID string, startedAt time.Time) (bool, error) {
+	panic("not implemented")
+}
+func (r *schedulerAuthRepo) RenewRunLease(runID uuid.UUID, executorID string, leaseExpiresAt time.Time, now time.Time) (bool, error) {
+	panic("not implemented")
+}
+func (r *schedulerAuthRepo) CompleteRun(runID uuid.UUID, executorID string, status model.SchedulerJobRunStatus, attempt int, nextRetryAt *time.Time, completedAt *time.Time, errorMessage string) (bool, error) {
+	panic("not implemented")
+}
+func (r *schedulerAuthRepo) MarkRunDispatchFailed(runID uuid.UUID, executorID string, errorMessage string) (bool, error) {
+	panic("not implemented")
+}
+func (r *schedulerAuthRepo) MarkExpiredRunFailed(runID uuid.UUID, now time.Time, errorMessage string) (bool, error) {
 	panic("not implemented")
 }
 func (r *schedulerAuthRepo) GetDispatchCursor(jobID uuid.UUID, executorGroup string) (*model.SchedulerDispatchCursor, error) {
@@ -175,5 +206,8 @@ func (r *schedulerAuthRepo) MarkExecutorSeen(id string, at time.Time) error {
 	return nil
 }
 func (r *schedulerAuthRepo) WithTx(fn func(tx domain.Repository) error) error {
+	panic("not implemented")
+}
+func (r *schedulerAuthRepo) WithEngineLock(lockKey int64, fn func(tx domain.Repository) error) (bool, error) {
 	panic("not implemented")
 }

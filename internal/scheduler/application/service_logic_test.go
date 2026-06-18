@@ -1,6 +1,7 @@
 package application
 
 import (
+	"errors"
 	"testing"
 	"time"
 
@@ -84,7 +85,7 @@ func TestPickExecutorIDFixedLiveSlotPrefersMatchingServiceInstance(t *testing.T)
 		Payload:        commondb.NewJSONB(map[string]any{"serviceId": serviceID.String()}),
 	}
 
-	got, err := svc.pickExecutorID(run, []OnlineExecutor{
+	got, err := svc.pickExecutorID(newAuthOnlyRepo(), run, []OnlineExecutor{
 		{ExecutorID: "instance-other-green", Group: "default", LiveSlot: model.SlotGreen, ServiceInstance: true, ServiceID: otherServiceID.String()},
 		{ExecutorID: "instance-target-green", Group: "default", LiveSlot: model.SlotGreen, ServiceInstance: true, ServiceID: serviceID.String()},
 		{ExecutorID: "manual-green", Group: "default", LiveSlot: model.SlotGreen},
@@ -105,7 +106,7 @@ func TestPickExecutorIDFixedLiveSlotFallsBackWhenServiceInstanceMismatched(t *te
 		Payload:        commondb.NewJSONB(map[string]any{"serviceId": serviceID.String()}),
 	}
 
-	got, err := svc.pickExecutorID(run, []OnlineExecutor{
+	got, err := svc.pickExecutorID(newAuthOnlyRepo(), run, []OnlineExecutor{
 		{ExecutorID: "instance-green", Group: "default", LiveSlot: model.SlotGreen, ServiceInstance: true, ServiceID: serviceID.String()},
 		{ExecutorID: "instance-blue-other", Group: "default", LiveSlot: model.SlotBlue, ServiceInstance: true, ServiceID: uuid.New().String()},
 		{ExecutorID: "manual-blue", Group: "default", LiveSlot: model.SlotBlue},
@@ -283,6 +284,259 @@ func TestAuthenticateExecutor_RelayRebindAllowed(t *testing.T) {
 	}
 }
 
+func TestCompleteRunSuccessClearsLeaseAndError(t *testing.T) {
+	runID := uuid.New()
+	now := time.Now().UTC()
+	repo := newRunStateRepo(&model.SchedulerJobRun{
+		ID:             runID,
+		Status:         model.SchedulerJobRunStatusRunning,
+		Attempt:        1,
+		MaxRetries:     3,
+		LeasedBy:       "exec-1",
+		LeaseExpiresAt: timePtr(now.Add(time.Minute)),
+		ErrorMessage:   "previous failure",
+	})
+	svc := NewService(repo, nil, nil, nil)
+
+	if err := svc.CompleteRun(runID, "exec-1", true, false, "ignored"); err != nil {
+		t.Fatalf("CompleteRun() error = %v", err)
+	}
+	if repo.run.Status != model.SchedulerJobRunStatusSucceeded {
+		t.Fatalf("status = %v, want succeeded", repo.run.Status)
+	}
+	if repo.run.LeasedBy != "" || repo.run.LeaseExpiresAt != nil {
+		t.Fatalf("expected lease to be cleared, leasedBy=%q lease=%v", repo.run.LeasedBy, repo.run.LeaseExpiresAt)
+	}
+	if repo.run.ErrorMessage != "" {
+		t.Fatalf("expected error message cleared, got %q", repo.run.ErrorMessage)
+	}
+	if repo.run.CompletedAt == nil {
+		t.Fatalf("expected completedAt to be set")
+	}
+}
+
+func TestCompleteRunRejectsTerminalRun(t *testing.T) {
+	runID := uuid.New()
+	repo := newRunStateRepo(&model.SchedulerJobRun{
+		ID:       runID,
+		Status:   model.SchedulerJobRunStatusSucceeded,
+		LeasedBy: "exec-1",
+	})
+	svc := NewService(repo, nil, nil, nil)
+
+	if err := svc.CompleteRun(runID, "exec-1", true, false, ""); err == nil {
+		t.Fatalf("expected terminal run conflict")
+	}
+	if repo.completeCalled {
+		t.Fatalf("terminal run should not call repository completion update")
+	}
+}
+
+func TestDispatchDueRunsMarksExpiredRunFailedAfterRetriesExhausted(t *testing.T) {
+	runID := uuid.New()
+	now := time.Now().UTC()
+	repo := newRunStateRepo(&model.SchedulerJobRun{
+		ID:             runID,
+		Status:         model.SchedulerJobRunStatusRunning,
+		Attempt:        4,
+		MaxRetries:     3,
+		LeasedBy:       "exec-1",
+		LeaseExpiresAt: timePtr(now.Add(-time.Second)),
+	})
+	repo.dispatchable = []model.SchedulerJobRun{*repo.run}
+	svc := NewService(repo, nil, nil, nil)
+
+	if err := svc.DispatchDueRuns(now, fakeRunDispatcher{}); err != nil {
+		t.Fatalf("DispatchDueRuns() error = %v", err)
+	}
+	if repo.run.Status != model.SchedulerJobRunStatusFailed {
+		t.Fatalf("status = %v, want failed", repo.run.Status)
+	}
+	if repo.run.LeasedBy != "" || repo.run.LeaseExpiresAt != nil {
+		t.Fatalf("expected expired run lease to be cleared")
+	}
+	if repo.run.CompletedAt == nil {
+		t.Fatalf("expected completedAt to be set")
+	}
+}
+
+func TestShouldFailExpiredRunRequiresExhaustedRetries(t *testing.T) {
+	now := time.Now().UTC()
+	run := &model.SchedulerJobRun{
+		Status:         model.SchedulerJobRunStatusRunning,
+		Attempt:        3,
+		MaxRetries:     3,
+		LeaseExpiresAt: timePtr(now.Add(-time.Second)),
+	}
+	if shouldFailExpiredRun(run, now) {
+		t.Fatalf("attempt equal to maxRetries should still be reclaimable")
+	}
+	run.Attempt = 4
+	if !shouldFailExpiredRun(run, now) {
+		t.Fatalf("expected expired run with exhausted retries to fail")
+	}
+}
+
+func TestPickExecutorAndClaimSkipsDisabledExecutor(t *testing.T) {
+	enabled := false
+	lastSeen := time.Now().UTC()
+	repo := newRunStateRepo(nil)
+	repo.executor = &model.SchedulerExecutor{
+		ID:         "exec-1",
+		Group:      "default",
+		Enabled:    &enabled,
+		LastSeenAt: &lastSeen,
+	}
+	svc := NewService(repo, nil, nil, nil)
+	run := &model.SchedulerJobRun{
+		ID:              uuid.New(),
+		JobID:           uuid.New(),
+		Status:          model.SchedulerJobRunStatusPending,
+		DispatchPolicy:  model.SchedulerDispatchPolicyRoundRobin,
+		ExecutorGroup:   "default",
+		LeaseTimeoutSec: 60,
+	}
+
+	executorID, _, err := svc.pickExecutorAndClaim(repo, run, time.Now().UTC(), fakeRunDispatcher{})
+	if !errors.Is(err, domain.ErrExecutorOffline) {
+		t.Fatalf("pickExecutorAndClaim() error = %v, want ErrExecutorOffline", err)
+	}
+	if executorID != "" {
+		t.Fatalf("expected no executor to be selected, got %q", executorID)
+	}
+	if repo.claimCalled {
+		t.Fatalf("disabled executor should not be claimed")
+	}
+}
+
+func TestPickExecutorAndClaimSkipsStaleExecutor(t *testing.T) {
+	now := time.Now().UTC()
+	lastSeen := now.Add(-time.Minute)
+	repo := newRunStateRepo(nil)
+	repo.executor = &model.SchedulerExecutor{
+		ID:         "exec-1",
+		Group:      "default",
+		Enabled:    boolPtr(true),
+		LastSeenAt: &lastSeen,
+	}
+	svc := NewService(repo, nil, &config.SchedulerConfig{DefaultLeaseSec: 60, DefaultMaxRetries: 3, HeartbeatTimeout: 15 * time.Second}, nil)
+	run := &model.SchedulerJobRun{
+		ID:              uuid.New(),
+		JobID:           uuid.New(),
+		Status:          model.SchedulerJobRunStatusPending,
+		DispatchPolicy:  model.SchedulerDispatchPolicyRoundRobin,
+		ExecutorGroup:   "default",
+		LeaseTimeoutSec: 60,
+	}
+
+	executorID, _, err := svc.pickExecutorAndClaim(repo, run, now, fakeRunDispatcher{})
+	if !errors.Is(err, domain.ErrExecutorOffline) {
+		t.Fatalf("pickExecutorAndClaim() error = %v, want ErrExecutorOffline", err)
+	}
+	if executorID != "" {
+		t.Fatalf("expected no executor to be selected, got %q", executorID)
+	}
+	if repo.claimCalled {
+		t.Fatalf("stale executor should not be claimed")
+	}
+}
+
+func TestListExecutorsIncludesOnlineStatus(t *testing.T) {
+	now := time.Now().UTC()
+	repo := newAuthOnlyRepo()
+	repo.executor = &model.SchedulerExecutor{
+		ID:         "exec-1",
+		Group:      "default",
+		Enabled:    boolPtr(true),
+		LastSeenAt: &now,
+	}
+	svc := NewService(repo, nil, &config.SchedulerConfig{HeartbeatTimeout: time.Minute}, nil)
+
+	out, err := svc.ListExecutors()
+	if err != nil {
+		t.Fatalf("ListExecutors() error = %v", err)
+	}
+	if len(out) != 1 {
+		t.Fatalf("expected one executor, got %d", len(out))
+	}
+	if !out[0].Online {
+		t.Fatalf("expected executor to be online")
+	}
+}
+
+func TestEnqueueDueJobsUsesStableIdempotencyKeyAndAdvancesDuplicate(t *testing.T) {
+	now := time.Date(2026, 6, 18, 10, 0, 0, 0, time.UTC)
+	jobID := uuid.New()
+	enabled := true
+	nextRun := now.Add(-time.Minute)
+	repo := newEnqueueRepo(&model.SchedulerJob{
+		ID:              jobID,
+		Name:            "nightly",
+		HandlerKey:      "handler",
+		ServiceID:       uuid.New(),
+		ScheduleKind:    model.SchedulerScheduleKindCron,
+		CronExpr:        "*/5 * * * *",
+		NextRunAt:       &nextRun,
+		Enabled:         &enabled,
+		DispatchPolicy:  model.SchedulerDispatchPolicyRoundRobin,
+		ExecutorGroup:   "default",
+		LeaseTimeoutSec: 60,
+		MaxRetries:      3,
+	})
+	repo.runAlreadyExists = true
+	svc := NewService(repo, nil, &config.SchedulerConfig{DispatchBatchSize: 100, DefaultLeaseSec: 60, DefaultMaxRetries: 3}, nil)
+
+	if err := svc.EnqueueDueJobs(now); err != nil {
+		t.Fatalf("EnqueueDueJobs() error = %v", err)
+	}
+	wantKey := scheduledRunIdempotencyKey(jobID, nextRun)
+	if repo.createdRun == nil || repo.createdRun.IdempotencyKey != wantKey {
+		t.Fatalf("idempotencyKey = %q, want %q", repo.createdRun.IdempotencyKey, wantKey)
+	}
+	if repo.job.NextRunAt == nil || !repo.job.NextRunAt.After(nextRun) {
+		t.Fatalf("expected nextRunAt advanced after duplicate insert, got %v", repo.job.NextRunAt)
+	}
+	if repo.job.Enabled == nil || !*repo.job.Enabled {
+		t.Fatalf("expected cron job to remain enabled")
+	}
+}
+
+func TestRunDueCycleSkipsWhenEngineLockNotAcquired(t *testing.T) {
+	now := time.Date(2026, 6, 18, 10, 0, 0, 0, time.UTC)
+	enabled := true
+	nextRun := now.Add(-time.Minute)
+	repo := newEnqueueRepo(&model.SchedulerJob{
+		ID:              uuid.New(),
+		Name:            "nightly",
+		HandlerKey:      "handler",
+		ServiceID:       uuid.New(),
+		ScheduleKind:    model.SchedulerScheduleKindCron,
+		CronExpr:        "*/5 * * * *",
+		NextRunAt:       &nextRun,
+		Enabled:         &enabled,
+		DispatchPolicy:  model.SchedulerDispatchPolicyRoundRobin,
+		ExecutorGroup:   "default",
+		LeaseTimeoutSec: 60,
+		MaxRetries:      3,
+	})
+	repo.engineLockAcquired = false
+	svc := NewService(repo, nil, &config.SchedulerConfig{DispatchBatchSize: 100, DefaultLeaseSec: 60, DefaultMaxRetries: 3}, nil)
+
+	acquired, err := svc.RunDueCycle(now, fakeRunDispatcher{})
+	if err != nil {
+		t.Fatalf("RunDueCycle() error = %v", err)
+	}
+	if acquired {
+		t.Fatalf("expected engine lock not acquired")
+	}
+	if repo.createdRun != nil {
+		t.Fatalf("expected no run to be created without engine lock")
+	}
+	if repo.job.NextRunAt == nil || !repo.job.NextRunAt.Equal(nextRun) {
+		t.Fatalf("nextRunAt changed without lock: got %v want %v", repo.job.NextRunAt, nextRun)
+	}
+}
+
 type authOnlyRepo struct {
 	executor *model.SchedulerExecutor
 }
@@ -319,6 +573,10 @@ func (r *authOnlyRepo) CreateRun(run *model.SchedulerJobRun) error {
 	panic("not implemented")
 }
 
+func (r *authOnlyRepo) CreateRunIfNotExists(run *model.SchedulerJobRun) (bool, error) {
+	panic("not implemented")
+}
+
 func (r *authOnlyRepo) UpdateRun(run *model.SchedulerJobRun) error {
 	panic("not implemented")
 }
@@ -340,6 +598,26 @@ func (r *authOnlyRepo) ListDispatchableRuns(now time.Time, limit int) ([]model.S
 }
 
 func (r *authOnlyRepo) ClaimRun(runID uuid.UUID, leasedBy string, leaseExpiresAt time.Time, now time.Time) (bool, error) {
+	panic("not implemented")
+}
+
+func (r *authOnlyRepo) MarkRunRunning(runID uuid.UUID, executorID string, startedAt time.Time) (bool, error) {
+	panic("not implemented")
+}
+
+func (r *authOnlyRepo) RenewRunLease(runID uuid.UUID, executorID string, leaseExpiresAt time.Time, now time.Time) (bool, error) {
+	panic("not implemented")
+}
+
+func (r *authOnlyRepo) CompleteRun(runID uuid.UUID, executorID string, status model.SchedulerJobRunStatus, attempt int, nextRetryAt *time.Time, completedAt *time.Time, errorMessage string) (bool, error) {
+	panic("not implemented")
+}
+
+func (r *authOnlyRepo) MarkRunDispatchFailed(runID uuid.UUID, executorID string, errorMessage string) (bool, error) {
+	panic("not implemented")
+}
+
+func (r *authOnlyRepo) MarkExpiredRunFailed(runID uuid.UUID, now time.Time, errorMessage string) (bool, error) {
 	panic("not implemented")
 }
 
@@ -373,7 +651,11 @@ func (r *authOnlyRepo) ListExecutorsByGroup(group string) ([]model.SchedulerExec
 }
 
 func (r *authOnlyRepo) ListExecutors() ([]model.SchedulerExecutor, error) {
-	panic("not implemented")
+	if r.executor == nil {
+		return nil, nil
+	}
+	copy := *r.executor
+	return []model.SchedulerExecutor{copy}, nil
 }
 
 func (r *authOnlyRepo) DeleteExecutor(id string) error {
@@ -386,4 +668,150 @@ func (r *authOnlyRepo) MarkExecutorSeen(id string, at time.Time) error {
 
 func (r *authOnlyRepo) WithTx(fn func(tx domain.Repository) error) error {
 	panic("not implemented")
+}
+
+func (r *authOnlyRepo) WithEngineLock(lockKey int64, fn func(tx domain.Repository) error) (bool, error) {
+	panic("not implemented")
+}
+
+type runStateRepo struct {
+	*authOnlyRepo
+	run            *model.SchedulerJobRun
+	dispatchable   []model.SchedulerJobRun
+	completeCalled bool
+	claimCalled    bool
+}
+
+func newRunStateRepo(run *model.SchedulerJobRun) *runStateRepo {
+	return &runStateRepo{authOnlyRepo: newAuthOnlyRepo(), run: run}
+}
+
+func (r *runStateRepo) GetRun(id uuid.UUID) (*model.SchedulerJobRun, error) {
+	if r.run == nil || r.run.ID != id {
+		return nil, nil
+	}
+	copy := *r.run
+	return &copy, nil
+}
+
+func (r *runStateRepo) ListDispatchableRuns(now time.Time, limit int) ([]model.SchedulerJobRun, error) {
+	return append([]model.SchedulerJobRun(nil), r.dispatchable...), nil
+}
+
+func (r *runStateRepo) ClaimRun(runID uuid.UUID, leasedBy string, leaseExpiresAt time.Time, now time.Time) (bool, error) {
+	r.claimCalled = true
+	if r.run == nil || r.run.ID != runID {
+		return false, nil
+	}
+	r.run.Status = model.SchedulerJobRunStatusDispatched
+	r.run.LeasedBy = leasedBy
+	r.run.LeaseExpiresAt = &leaseExpiresAt
+	return true, nil
+}
+
+func (r *runStateRepo) MarkRunRunning(runID uuid.UUID, executorID string, startedAt time.Time) (bool, error) {
+	if r.run == nil || r.run.ID != runID || r.run.LeasedBy != executorID || r.run.Status.IsTerminal() {
+		return false, nil
+	}
+	r.run.Status = model.SchedulerJobRunStatusRunning
+	if r.run.StartedAt == nil {
+		r.run.StartedAt = &startedAt
+	}
+	return true, nil
+}
+
+func (r *runStateRepo) RenewRunLease(runID uuid.UUID, executorID string, leaseExpiresAt time.Time, now time.Time) (bool, error) {
+	if r.run == nil || r.run.ID != runID || r.run.LeasedBy != executorID || r.run.LeaseExpiresAt == nil || !r.run.LeaseExpiresAt.After(now) {
+		return false, nil
+	}
+	r.run.LeaseExpiresAt = &leaseExpiresAt
+	return true, nil
+}
+
+func (r *runStateRepo) CompleteRun(runID uuid.UUID, executorID string, status model.SchedulerJobRunStatus, attempt int, nextRetryAt *time.Time, completedAt *time.Time, errorMessage string) (bool, error) {
+	r.completeCalled = true
+	if r.run == nil || r.run.ID != runID || r.run.LeasedBy != executorID || r.run.Status.IsTerminal() {
+		return false, nil
+	}
+	r.run.Status = status
+	r.run.Attempt = attempt
+	r.run.NextRetryAt = nextRetryAt
+	r.run.CompletedAt = completedAt
+	r.run.LeaseExpiresAt = nil
+	r.run.LeasedBy = ""
+	r.run.ErrorMessage = errorMessage
+	return true, nil
+}
+
+func (r *runStateRepo) MarkExpiredRunFailed(runID uuid.UUID, now time.Time, errorMessage string) (bool, error) {
+	if !shouldFailExpiredRun(r.run, now) || r.run.ID != runID {
+		return false, nil
+	}
+	r.run.Status = model.SchedulerJobRunStatusFailed
+	r.run.CompletedAt = &now
+	r.run.LeasedBy = ""
+	r.run.LeaseExpiresAt = nil
+	r.run.ErrorMessage = errorMessage
+	return true, nil
+}
+
+type fakeRunDispatcher struct{}
+
+func (fakeRunDispatcher) ListOnlineExecutors(group string) []OnlineExecutor {
+	return []OnlineExecutor{{ExecutorID: "exec-1", Group: group}}
+}
+
+func (fakeRunDispatcher) DispatchRun(executorID string, run *model.SchedulerJobRun) error {
+	return nil
+}
+
+type enqueueRepo struct {
+	*authOnlyRepo
+	job                *model.SchedulerJob
+	createdRun         *model.SchedulerJobRun
+	runAlreadyExists   bool
+	engineLockAcquired bool
+}
+
+func newEnqueueRepo(job *model.SchedulerJob) *enqueueRepo {
+	return &enqueueRepo{authOnlyRepo: newAuthOnlyRepo(), job: job, engineLockAcquired: true}
+}
+
+func (r *enqueueRepo) ListJobsDue(now time.Time, limit int) ([]model.SchedulerJob, error) {
+	if r.job == nil || r.job.Enabled == nil || !*r.job.Enabled || r.job.NextRunAt == nil || r.job.NextRunAt.After(now) {
+		return nil, nil
+	}
+	copy := *r.job
+	return []model.SchedulerJob{copy}, nil
+}
+
+func (r *enqueueRepo) GetJob(id uuid.UUID) (*model.SchedulerJob, error) {
+	if r.job == nil || r.job.ID != id {
+		return nil, nil
+	}
+	copy := *r.job
+	return &copy, nil
+}
+
+func (r *enqueueRepo) CreateRunIfNotExists(run *model.SchedulerJobRun) (bool, error) {
+	copy := *run
+	r.createdRun = &copy
+	return !r.runAlreadyExists, nil
+}
+
+func (r *enqueueRepo) UpdateJob(job *model.SchedulerJob) error {
+	copy := *job
+	r.job = &copy
+	return nil
+}
+
+func (r *enqueueRepo) WithTx(fn func(tx domain.Repository) error) error {
+	return fn(r)
+}
+
+func (r *enqueueRepo) WithEngineLock(lockKey int64, fn func(tx domain.Repository) error) (bool, error) {
+	if !r.engineLockAcquired {
+		return false, nil
+	}
+	return true, fn(r)
 }

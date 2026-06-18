@@ -52,6 +52,15 @@ func TestConnectRejectsInvalidToken(t *testing.T) {
 	}
 }
 
+func TestAgentSessionSendReturnsOfflineWhenQueueFull(t *testing.T) {
+	session := &agentSession{sendCh: make(chan *grpcapi.ControlMessage, 1)}
+	session.sendCh <- &grpcapi.ControlMessage{}
+
+	if err := session.send(&grpcapi.ControlMessage{}); err == nil {
+		t.Fatalf("expected send queue full error")
+	}
+}
+
 type fakeStream struct {
 	recvMessages []*grpcapi.AgentMessage
 	sentMessages []*grpcapi.ControlMessage

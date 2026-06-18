@@ -25,7 +25,7 @@ func (r *repository) CreateJob(job *model.SchedulerJob) error {
 }
 
 func (r *repository) UpdateJob(job *model.SchedulerJob) error {
-	return r.conn.Model(job).Updates(job).Error
+	return r.conn.Model(job).Select("*").Omit("ID", "CreatedAt").Updates(job).Error
 }
 
 func (r *repository) GetJob(id uuid.UUID) (*model.SchedulerJob, error) {
@@ -75,8 +75,19 @@ func (r *repository) CreateRun(run *model.SchedulerJobRun) error {
 	return r.conn.Create(run).Error
 }
 
+func (r *repository) CreateRunIfNotExists(run *model.SchedulerJobRun) (bool, error) {
+	result := r.conn.Clauses(clause.OnConflict{
+		Columns:   []clause.Column{{Name: "idempotency_key"}},
+		DoNothing: true,
+	}).Create(run)
+	if result.Error != nil {
+		return false, result.Error
+	}
+	return result.RowsAffected > 0, nil
+}
+
 func (r *repository) UpdateRun(run *model.SchedulerJobRun) error {
-	return r.conn.Model(run).Updates(run).Error
+	return r.conn.Model(run).Select("*").Omit("ID", "CreatedAt").Updates(run).Error
 }
 
 func (r *repository) GetRun(id uuid.UUID) (*model.SchedulerJobRun, error) {
@@ -134,7 +145,7 @@ func (r *repository) ListDispatchableRuns(now time.Time, limit int) ([]model.Sch
 
 func (r *repository) ClaimRun(runID uuid.UUID, leasedBy string, leaseExpiresAt time.Time, now time.Time) (bool, error) {
 	result := r.conn.Model(&model.SchedulerJobRun{}).
-		Where("id = ? AND (status = ? OR (status = ? AND next_retry_at IS NOT NULL AND next_retry_at <= ?) OR (status = ? AND lease_expires_at IS NOT NULL AND lease_expires_at <= ?) OR (status = ? AND lease_expires_at IS NOT NULL AND lease_expires_at <= ?))",
+		Where("id = ? AND (status = ? OR (status = ? AND next_retry_at IS NOT NULL AND next_retry_at <= ?) OR (status = ? AND lease_expires_at IS NOT NULL AND lease_expires_at <= ? AND attempt <= max_retries) OR (status = ? AND lease_expires_at IS NOT NULL AND lease_expires_at <= ? AND attempt <= max_retries))",
 			runID,
 			model.SchedulerJobRunStatusPending,
 			model.SchedulerJobRunStatusRetryWaiting,
@@ -150,6 +161,98 @@ func (r *repository) ClaimRun(runID uuid.UUID, leasedBy string, leaseExpiresAt t
 			"lease_expires_at": leaseExpiresAt,
 			"dispatched_at":    now,
 			"next_retry_at":    nil,
+			"attempt": gorm.Expr(
+				"CASE WHEN status IN ? AND lease_expires_at IS NOT NULL AND lease_expires_at <= ? THEN attempt + 1 ELSE attempt END",
+				[]model.SchedulerJobRunStatus{model.SchedulerJobRunStatusDispatched, model.SchedulerJobRunStatusRunning},
+				now,
+			),
+		})
+	if result.Error != nil {
+		return false, result.Error
+	}
+	return result.RowsAffected > 0, nil
+}
+
+func (r *repository) MarkRunRunning(runID uuid.UUID, executorID string, startedAt time.Time) (bool, error) {
+	result := r.conn.Model(&model.SchedulerJobRun{}).
+		Where("id = ? AND leased_by = ? AND status IN ?", runID, executorID, []model.SchedulerJobRunStatus{
+			model.SchedulerJobRunStatusDispatched,
+			model.SchedulerJobRunStatusRunning,
+		}).
+		Updates(map[string]any{
+			"status":     model.SchedulerJobRunStatusRunning,
+			"started_at": gorm.Expr("COALESCE(started_at, ?)", startedAt),
+		})
+	if result.Error != nil {
+		return false, result.Error
+	}
+	return result.RowsAffected > 0, nil
+}
+
+func (r *repository) RenewRunLease(runID uuid.UUID, executorID string, leaseExpiresAt time.Time, now time.Time) (bool, error) {
+	result := r.conn.Model(&model.SchedulerJobRun{}).
+		Where("id = ? AND leased_by = ? AND status IN ? AND lease_expires_at IS NOT NULL AND lease_expires_at > ?",
+			runID,
+			executorID,
+			[]model.SchedulerJobRunStatus{model.SchedulerJobRunStatusDispatched, model.SchedulerJobRunStatusRunning},
+			now,
+		).
+		Updates(map[string]any{"lease_expires_at": leaseExpiresAt})
+	if result.Error != nil {
+		return false, result.Error
+	}
+	return result.RowsAffected > 0, nil
+}
+
+func (r *repository) CompleteRun(runID uuid.UUID, executorID string, status model.SchedulerJobRunStatus, attempt int, nextRetryAt *time.Time, completedAt *time.Time, errorMessage string) (bool, error) {
+	result := r.conn.Model(&model.SchedulerJobRun{}).
+		Where("id = ? AND leased_by = ? AND status IN ?", runID, executorID, []model.SchedulerJobRunStatus{
+			model.SchedulerJobRunStatusDispatched,
+			model.SchedulerJobRunStatusRunning,
+		}).
+		Updates(map[string]any{
+			"status":           status,
+			"attempt":          attempt,
+			"next_retry_at":    nextRetryAt,
+			"completed_at":     completedAt,
+			"lease_expires_at": nil,
+			"leased_by":        "",
+			"error_message":    errorMessage,
+		})
+	if result.Error != nil {
+		return false, result.Error
+	}
+	return result.RowsAffected > 0, nil
+}
+
+func (r *repository) MarkRunDispatchFailed(runID uuid.UUID, executorID string, errorMessage string) (bool, error) {
+	result := r.conn.Model(&model.SchedulerJobRun{}).
+		Where("id = ? AND leased_by = ? AND status = ?", runID, executorID, model.SchedulerJobRunStatusDispatched).
+		Updates(map[string]any{
+			"status":           model.SchedulerJobRunStatusPending,
+			"leased_by":        "",
+			"lease_expires_at": nil,
+			"error_message":    errorMessage,
+		})
+	if result.Error != nil {
+		return false, result.Error
+	}
+	return result.RowsAffected > 0, nil
+}
+
+func (r *repository) MarkExpiredRunFailed(runID uuid.UUID, now time.Time, errorMessage string) (bool, error) {
+	result := r.conn.Model(&model.SchedulerJobRun{}).
+		Where("id = ? AND status IN ? AND lease_expires_at IS NOT NULL AND lease_expires_at <= ? AND attempt > max_retries",
+			runID,
+			[]model.SchedulerJobRunStatus{model.SchedulerJobRunStatusDispatched, model.SchedulerJobRunStatusRunning},
+			now,
+		).
+		Updates(map[string]any{
+			"status":           model.SchedulerJobRunStatusFailed,
+			"completed_at":     now,
+			"leased_by":        "",
+			"lease_expires_at": nil,
+			"error_message":    errorMessage,
 		})
 	if result.Error != nil {
 		return false, result.Error
@@ -195,7 +298,7 @@ func (r *repository) UpsertExecutor(executor *model.SchedulerExecutor) error {
 		return r.conn.Create(executor).Error
 	}
 	executor.CreatedAt = current.CreatedAt
-	return r.conn.Model(executor).Where("id = ?", executor.ID).Updates(executor).Error
+	return r.conn.Model(executor).Where("id = ?", executor.ID).Select("*").Omit("ID", "CreatedAt").Updates(executor).Error
 }
 
 func (r *repository) GetExecutor(id string) (*model.SchedulerExecutor, error) {
@@ -239,4 +342,22 @@ func (r *repository) WithTx(fn func(tx schedulerdomain.Repository) error) error 
 		tx := &repository{conn: txConn}
 		return fn(tx)
 	})
+}
+
+func (r *repository) WithEngineLock(lockKey int64, fn func(tx schedulerdomain.Repository) error) (bool, error) {
+	acquired := false
+	err := r.conn.Transaction(func(txConn *gorm.DB) error {
+		if err := txConn.Raw("SELECT pg_try_advisory_xact_lock(?)", lockKey).Scan(&acquired).Error; err != nil {
+			return err
+		}
+		if !acquired {
+			return nil
+		}
+		tx := &repository{conn: txConn}
+		return fn(tx)
+	})
+	if err != nil {
+		return false, err
+	}
+	return acquired, nil
 }

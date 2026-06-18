@@ -94,6 +94,7 @@ export function ExecutorsPage() {
                   <th>通道模式</th>
                   <th>活跃槽位</th>
                   <th>状态</th>
+                  <th>在线</th>
                   <th>最近心跳</th>
                   <th>操作</th>
                 </tr>
@@ -106,6 +107,7 @@ export function ExecutorsPage() {
                     <td>{executor.channelMode === 2 ? "代理中继" : "直连"}</td>
                     <td>{executor.liveSlot}</td>
                     <td>{executor.enabled ? "启用" : "停用"}</td>
+                    <td>{executor.online ? "在线" : "离线"}</td>
                     <td>{executor.lastSeenAt ? formatDateTime(executor.lastSeenAt) : "-"}</td>
                     <td className={styles.buttonRow}>
                       <ActionButton label="重置Token" pending={resetTokenMutation.isPending} onClick={() => handleResetToken(executor)} />

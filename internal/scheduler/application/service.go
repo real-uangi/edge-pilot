@@ -29,6 +29,8 @@ type RunDispatcher interface {
 	DispatchRun(executorID string, run *model.SchedulerJobRun) error
 }
 
+const schedulerEngineLockKey int64 = 0x45505f5343484544
+
 type Service struct {
 	repo     domain.Repository
 	auth     *config.AgentAuthConfig
@@ -218,7 +220,7 @@ func (s *Service) CreateExecutor(req dto.UpsertSchedulerExecutorRequest) (*dto.S
 	if err := s.repo.UpsertExecutor(executor); err != nil {
 		return nil, err
 	}
-	out := toSchedulerExecutorOutput(executor)
+	out := s.toSchedulerExecutorOutput(executor)
 	out.Token = token
 	return &out, nil
 }
@@ -239,7 +241,7 @@ func (s *Service) ResetExecutorToken(executorID string) (*dto.SchedulerExecutorO
 	if err := s.repo.UpsertExecutor(executor); err != nil {
 		return nil, err
 	}
-	out := toSchedulerExecutorOutput(executor)
+	out := s.toSchedulerExecutorOutput(executor)
 	out.Token = token
 	return &out, nil
 }
@@ -256,7 +258,7 @@ func (s *Service) SetExecutorEnabled(executorID string, enabled bool) (*dto.Sche
 	if err := s.repo.UpsertExecutor(executor); err != nil {
 		return nil, err
 	}
-	out := toSchedulerExecutorOutput(executor)
+	out := s.toSchedulerExecutorOutput(executor)
 	return &out, nil
 }
 
@@ -267,7 +269,7 @@ func (s *Service) ListExecutors() ([]dto.SchedulerExecutorOutput, error) {
 	}
 	out := make([]dto.SchedulerExecutorOutput, 0, len(executors))
 	for i := range executors {
-		out = append(out, toSchedulerExecutorOutput(&executors[i]))
+		out = append(out, s.toSchedulerExecutorOutput(&executors[i]))
 	}
 	return out, nil
 }
@@ -392,11 +394,18 @@ func (s *Service) MarkRunRunning(runID uuid.UUID, executorID string) error {
 	if run == nil {
 		return business.ErrNotFound
 	}
+	if run.Status.IsTerminal() {
+		return business.NewErrorWithCode("run already completed", 409)
+	}
 	now := time.Now().UTC()
-	run.Status = model.SchedulerJobRunStatusRunning
-	run.StartedAt = &now
-	run.LeasedBy = executorID
-	return s.repo.UpdateRun(run)
+	updated, err := s.repo.MarkRunRunning(runID, executorID, now)
+	if err != nil {
+		return err
+	}
+	if !updated {
+		return business.NewErrorWithCode("run lease state changed", 409)
+	}
+	return nil
 }
 
 func (s *Service) RenewRunLease(runID uuid.UUID, executorID string) error {
@@ -412,8 +421,14 @@ func (s *Service) RenewRunLease(runID uuid.UUID, executorID string) error {
 	}
 	now := time.Now().UTC()
 	lease := now.Add(time.Duration(effectiveLeaseTimeout(run, s.cfg.DefaultLeaseSec)) * time.Second)
-	run.LeaseExpiresAt = &lease
-	return s.repo.UpdateRun(run)
+	updated, err := s.repo.RenewRunLease(runID, executorID, lease, now)
+	if err != nil {
+		return err
+	}
+	if !updated {
+		return business.NewErrorWithCode("run lease state changed", 409)
+	}
+	return nil
 }
 
 func (s *Service) CompleteRun(runID uuid.UUID, executorID string, success bool, retryable bool, errMsg string) error {
@@ -427,37 +442,61 @@ func (s *Service) CompleteRun(runID uuid.UUID, executorID string, success bool, 
 	if run.LeasedBy != executorID {
 		return business.NewErrorWithCode("lease owner mismatch", 409)
 	}
+	if run.Status.IsTerminal() {
+		return business.NewErrorWithCode("run already completed", 409)
+	}
 	now := time.Now().UTC()
+	status := model.SchedulerJobRunStatusFailed
+	attempt := run.Attempt
+	var nextRetryAt *time.Time
+	var completedAt *time.Time
+	errorMessage := strings.TrimSpace(errMsg)
 	if success {
-		run.Status = model.SchedulerJobRunStatusSucceeded
-		run.CompletedAt = &now
-		run.ErrorMessage = ""
-		return s.repo.UpdateRun(run)
+		status = model.SchedulerJobRunStatusSucceeded
+		completedAt = &now
+		errorMessage = ""
+	} else if retryable && run.Attempt <= run.MaxRetries {
+		status = model.SchedulerJobRunStatusRetryWaiting
+		nextRetryAt = timePtr(now.Add(retryBackoff(run.Attempt)))
+		attempt++
+	} else {
+		completedAt = &now
 	}
-	run.ErrorMessage = strings.TrimSpace(errMsg)
-	if retryable && run.Attempt <= run.MaxRetries {
-		run.Status = model.SchedulerJobRunStatusRetryWaiting
-		run.NextRetryAt = timePtr(now.Add(retryBackoff(run.Attempt)))
-		run.LeaseExpiresAt = nil
-		run.LeasedBy = ""
-		run.Attempt++
-		return s.repo.UpdateRun(run)
+	updated, err := s.repo.CompleteRun(runID, executorID, status, attempt, nextRetryAt, completedAt, errorMessage)
+	if err != nil {
+		return err
 	}
-	run.Status = model.SchedulerJobRunStatusFailed
-	run.CompletedAt = &now
-	run.LeaseExpiresAt = nil
-	run.LeasedBy = ""
-	return s.repo.UpdateRun(run)
+	if !updated {
+		return business.NewErrorWithCode("run lease state changed", 409)
+	}
+	return nil
 }
 
 func (s *Service) EnqueueDueJobs(now time.Time) error {
-	dueJobs, err := s.repo.ListJobsDue(now.UTC(), s.cfg.DispatchBatchSize)
+	return s.enqueueDueJobs(s.repo, now)
+}
+
+func (s *Service) DispatchDueRuns(now time.Time, dispatcher RunDispatcher) error {
+	return s.dispatchDueRuns(s.repo, now, dispatcher)
+}
+
+func (s *Service) RunDueCycle(now time.Time, dispatcher RunDispatcher) (bool, error) {
+	return s.repo.WithEngineLock(schedulerEngineLockKey, func(tx domain.Repository) error {
+		if err := s.enqueueDueJobs(tx, now); err != nil {
+			return err
+		}
+		return s.dispatchDueRuns(tx, now, dispatcher)
+	})
+}
+
+func (s *Service) enqueueDueJobs(repo domain.Repository, now time.Time) error {
+	dueJobs, err := repo.ListJobsDue(now.UTC(), s.cfg.DispatchBatchSize)
 	if err != nil {
 		return err
 	}
 	for i := range dueJobs {
 		job := dueJobs[i]
-		if err := s.repo.WithTx(func(tx domain.Repository) error {
+		if err := repo.WithTx(func(tx domain.Repository) error {
 			fresh, err := tx.GetJob(job.ID)
 			if err != nil {
 				return err
@@ -480,8 +519,8 @@ func (s *Service) EnqueueDueJobs(now time.Time) error {
 				DispatchPolicy:  fresh.DispatchPolicy,
 				ExecutorGroup:   fresh.ExecutorGroup,
 			}
-			run.IdempotencyKey = run.ID.String()
-			if err := tx.CreateRun(run); err != nil {
+			run.IdempotencyKey = scheduledRunIdempotencyKey(fresh.ID, scheduled)
+			if _, err := tx.CreateRunIfNotExists(run); err != nil {
 				return err
 			}
 			next, enabled, err := s.computeNextSchedule(fresh, scheduled)
@@ -498,22 +537,28 @@ func (s *Service) EnqueueDueJobs(now time.Time) error {
 	return nil
 }
 
-func (s *Service) DispatchDueRuns(now time.Time, dispatcher RunDispatcher) error {
+func (s *Service) dispatchDueRuns(repo domain.Repository, now time.Time, dispatcher RunDispatcher) error {
 	if dispatcher == nil {
 		return nil
 	}
-	runs, err := s.repo.ListDispatchableRuns(now.UTC(), s.cfg.DispatchBatchSize)
+	runs, err := repo.ListDispatchableRuns(now.UTC(), s.cfg.DispatchBatchSize)
 	if err != nil {
 		return err
 	}
 	for i := range runs {
 		run := runs[i]
-		executorID, leaseExpiresAt, err := s.pickExecutorAndClaim(&run, now.UTC(), dispatcher)
+		if shouldFailExpiredRun(&run, now.UTC()) {
+			if _, failErr := repo.MarkExpiredRunFailed(run.ID, now.UTC(), "run lease expired and retries exhausted"); failErr != nil {
+				return failErr
+			}
+			continue
+		}
+		executorID, _, err := s.pickExecutorAndClaim(repo, &run, now.UTC(), dispatcher)
 		if err != nil {
-			stored, getErr := s.repo.GetRun(run.ID)
+			stored, getErr := repo.GetRun(run.ID)
 			if getErr == nil && stored != nil {
 				stored.ErrorMessage = err.Error()
-				_ = s.repo.UpdateRun(stored)
+				_ = repo.UpdateRun(stored)
 			}
 			continue
 		}
@@ -521,36 +566,33 @@ func (s *Service) DispatchDueRuns(now time.Time, dispatcher RunDispatcher) error
 			continue
 		}
 		if dispatchErr := dispatcher.DispatchRun(executorID, &run); dispatchErr != nil {
-			stored, getErr := s.repo.GetRun(run.ID)
+			stored, getErr := repo.GetRun(run.ID)
 			if getErr != nil || stored == nil {
 				continue
 			}
-			stored.Status = model.SchedulerJobRunStatusPending
-			stored.LeasedBy = ""
-			stored.LeaseExpiresAt = nil
-			stored.ErrorMessage = dispatchErr.Error()
-			_ = s.repo.UpdateRun(stored)
+			_, _ = repo.MarkRunDispatchFailed(run.ID, executorID, dispatchErr.Error())
 			continue
 		}
-		stored, getErr := s.repo.GetRun(run.ID)
-		if getErr != nil || stored == nil {
-			continue
-		}
-		stored.LeaseExpiresAt = &leaseExpiresAt
-		stored.LeasedBy = executorID
-		_ = s.repo.UpdateRun(stored)
 	}
 	return nil
 }
 
-func (s *Service) pickExecutorAndClaim(run *model.SchedulerJobRun, now time.Time, dispatcher RunDispatcher) (string, time.Time, error) {
+func (s *Service) pickExecutorAndClaim(repo domain.Repository, run *model.SchedulerJobRun, now time.Time, dispatcher RunDispatcher) (string, time.Time, error) {
 	online := dispatcher.ListOnlineExecutors(run.ExecutorGroup)
+	if len(online) == 0 {
+		return "", time.Time{}, domain.ErrExecutorOffline
+	}
+	filtered, err := s.filterEnabledOnlineExecutors(repo, online, now)
+	if err != nil {
+		return "", time.Time{}, err
+	}
+	online = filtered
 	if len(online) == 0 {
 		return "", time.Time{}, domain.ErrExecutorOffline
 	}
 	sort.Slice(online, func(i, j int) bool { return online[i].ExecutorID < online[j].ExecutorID })
 
-	chosen, err := s.pickExecutorID(run, online)
+	chosen, err := s.pickExecutorID(repo, run, online)
 	if err != nil {
 		return "", time.Time{}, err
 	}
@@ -558,7 +600,7 @@ func (s *Service) pickExecutorAndClaim(run *model.SchedulerJobRun, now time.Time
 		return "", time.Time{}, domain.ErrExecutorOffline
 	}
 	leaseExpiresAt := now.Add(time.Duration(effectiveLeaseTimeout(run, s.cfg.DefaultLeaseSec)) * time.Second)
-	claimed, err := s.repo.ClaimRun(run.ID, chosen, leaseExpiresAt, now)
+	claimed, err := repo.ClaimRun(run.ID, chosen, leaseExpiresAt, now)
 	if err != nil {
 		return "", time.Time{}, err
 	}
@@ -568,7 +610,39 @@ func (s *Service) pickExecutorAndClaim(run *model.SchedulerJobRun, now time.Time
 	return chosen, leaseExpiresAt, nil
 }
 
-func (s *Service) pickExecutorID(run *model.SchedulerJobRun, online []OnlineExecutor) (string, error) {
+func (s *Service) filterEnabledOnlineExecutors(repo domain.Repository, online []OnlineExecutor, now time.Time) ([]OnlineExecutor, error) {
+	if len(online) == 0 {
+		return nil, nil
+	}
+	out := make([]OnlineExecutor, 0, len(online))
+	for i := range online {
+		executor, err := repo.GetExecutor(online[i].ExecutorID)
+		if err != nil {
+			return nil, err
+		}
+		if !s.executorDispatchable(executor, now) {
+			continue
+		}
+		out = append(out, online[i])
+	}
+	return out, nil
+}
+
+func (s *Service) executorDispatchable(executor *model.SchedulerExecutor, now time.Time) bool {
+	if executor == nil || executor.Enabled == nil || !*executor.Enabled {
+		return false
+	}
+	if executor.LastSeenAt == nil {
+		return false
+	}
+	timeout := s.cfg.HeartbeatTimeout
+	if timeout <= 0 {
+		timeout = 15 * time.Second
+	}
+	return executor.LastSeenAt.After(now.UTC().Add(-timeout))
+}
+
+func (s *Service) pickExecutorID(repo domain.Repository, run *model.SchedulerJobRun, online []OnlineExecutor) (string, error) {
 	if run.DispatchPolicy == model.SchedulerDispatchPolicyFixedLiveSlot {
 		var targetServiceID uuid.UUID
 		if run.ServiceID != uuid.Nil {
@@ -605,7 +679,7 @@ func (s *Service) pickExecutorID(run *model.SchedulerJobRun, online []OnlineExec
 		}
 		return "", domain.ErrExecutorOffline
 	}
-	cursor, err := s.repo.GetDispatchCursor(run.JobID, run.ExecutorGroup)
+	cursor, err := repo.GetDispatchCursor(run.JobID, run.ExecutorGroup)
 	if err != nil {
 		return "", err
 	}
@@ -624,7 +698,7 @@ func (s *Service) pickExecutorID(run *model.SchedulerJobRun, online []OnlineExec
 	} else {
 		cursor.LastExecutorID = chosen
 	}
-	if err := s.repo.SaveDispatchCursor(cursor); err != nil {
+	if err := repo.SaveDispatchCursor(cursor); err != nil {
 		return "", err
 	}
 	return chosen, nil
@@ -814,6 +888,20 @@ func retryBackoff(attempt int) time.Duration {
 	return time.Duration(s) * time.Second
 }
 
+func scheduledRunIdempotencyKey(jobID uuid.UUID, scheduled time.Time) string {
+	return fmt.Sprintf("scheduler:%s:%d", jobID.String(), scheduled.UTC().UnixNano())
+}
+
+func shouldFailExpiredRun(run *model.SchedulerJobRun, now time.Time) bool {
+	if run == nil || run.LeaseExpiresAt == nil {
+		return false
+	}
+	if run.Status != model.SchedulerJobRunStatusDispatched && run.Status != model.SchedulerJobRunStatusRunning {
+		return false
+	}
+	return !run.LeaseExpiresAt.After(now.UTC()) && run.Attempt > run.MaxRetries
+}
+
 func effectiveLeaseTimeout(run *model.SchedulerJobRun, fallback int) int {
 	if run == nil {
 		return fallback
@@ -984,7 +1072,7 @@ func toSchedulerRunOutput(run *model.SchedulerJobRun) dto.SchedulerRunOutput {
 	}
 }
 
-func toSchedulerExecutorOutput(executor *model.SchedulerExecutor) dto.SchedulerExecutorOutput {
+func (s *Service) toSchedulerExecutorOutput(executor *model.SchedulerExecutor) dto.SchedulerExecutorOutput {
 	meta := map[string]string{}
 	if executor.InstanceMeta != nil {
 		meta = copyStringMap(executor.InstanceMeta.Get())
@@ -996,6 +1084,7 @@ func toSchedulerExecutorOutput(executor *model.SchedulerExecutor) dto.SchedulerE
 		RelayAgentID:    executor.RelayAgentID,
 		RelayRoutingKey: executor.RelayRoutingKey,
 		Enabled:         executor.Enabled,
+		Online:          s.executorDispatchable(executor, time.Now().UTC()),
 		LastSeenAt:      executor.LastSeenAt,
 		LiveSlot:        executor.LiveSlot,
 		InstanceMeta:    meta,

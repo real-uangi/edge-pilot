@@ -453,8 +453,12 @@ func (s *agentSession) send(message *grpcapi.ControlMessage) error {
 	if s.closed {
 		return releasedomain.ErrAgentOffline
 	}
-	s.sendCh <- message
-	return nil
+	select {
+	case s.sendCh <- message:
+		return nil
+	default:
+		return releasedomain.ErrAgentOffline
+	}
 }
 
 func (s *agentSession) markReplay(taskID string) bool {

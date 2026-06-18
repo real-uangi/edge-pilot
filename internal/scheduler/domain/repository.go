@@ -17,12 +17,18 @@ type Repository interface {
 	DeleteJob(id uuid.UUID) error
 
 	CreateRun(run *model.SchedulerJobRun) error
+	CreateRunIfNotExists(run *model.SchedulerJobRun) (bool, error)
 	UpdateRun(run *model.SchedulerJobRun) error
 	GetRun(id uuid.UUID) (*model.SchedulerJobRun, error)
 	ListRunsByJob(jobID uuid.UUID, limit int) ([]model.SchedulerJobRun, error)
 	ListAllRuns(limit int) ([]model.SchedulerJobRun, error)
 	ListDispatchableRuns(now time.Time, limit int) ([]model.SchedulerJobRun, error)
 	ClaimRun(runID uuid.UUID, leasedBy string, leaseExpiresAt time.Time, now time.Time) (bool, error)
+	MarkRunRunning(runID uuid.UUID, executorID string, startedAt time.Time) (bool, error)
+	RenewRunLease(runID uuid.UUID, executorID string, leaseExpiresAt time.Time, now time.Time) (bool, error)
+	CompleteRun(runID uuid.UUID, executorID string, status model.SchedulerJobRunStatus, attempt int, nextRetryAt *time.Time, completedAt *time.Time, errorMessage string) (bool, error)
+	MarkRunDispatchFailed(runID uuid.UUID, executorID string, errorMessage string) (bool, error)
+	MarkExpiredRunFailed(runID uuid.UUID, now time.Time, errorMessage string) (bool, error)
 
 	GetDispatchCursor(jobID uuid.UUID, executorGroup string) (*model.SchedulerDispatchCursor, error)
 	SaveDispatchCursor(cursor *model.SchedulerDispatchCursor) error
@@ -35,6 +41,7 @@ type Repository interface {
 	MarkExecutorSeen(id string, at time.Time) error
 
 	WithTx(fn func(tx Repository) error) error
+	WithEngineLock(lockKey int64, fn func(tx Repository) error) (bool, error)
 }
 
 type LiveSlotResolver interface {
