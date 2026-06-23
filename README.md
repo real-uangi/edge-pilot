@@ -1,303 +1,167 @@
 # Edge Pilot
 
-Edge Pilot 是一个面向单机 Docker 多服务场景的控制面，用来解决三类问题：
+Edge Pilot 是面向单机 Docker 多服务部署的轻量控制面。它把服务配置、镜像发布、蓝绿切流、Agent 执行与运行态观测放到同一套管理流程中，适合需要可控发布但不想引入完整 Kubernetes 集群的场景。
 
-- 多服务发布过程可控
-- 蓝绿发布流量切换自动化
-- API 与运行态观测沉淀
+## 适用场景
 
-当前仓库采用单仓库双二进制形态：
+- 一台或少量 Linux 主机承载多个 HTTP 服务。
+- 服务以 Docker 容器运行，镜像由 CI/CD 构建并推送到镜像仓库。
+- 发布需要先部署候选版本，再人工确认切流。
+- 希望统一管理 Agent 凭证、私有镜像凭据、发布队列、任务进度和运行指标。
 
-- `edge-pilot-control`：control-plane，负责管理 API、CI 集成、Web 控制台、发布编排、任务持久化、审计和观测
-- `edge-pilot-agent`：agent，负责连接 control-plane，托管本机代理栈，执行本机 Docker 与 HAProxy 操作，并回报任务进度与运行指标
+Edge Pilot 当前聚焦 HTTP 服务蓝绿发布。它不是通用容器编排平台，也不负责 worker、非 HTTP 协议、HTTPS 证书托管或多 frontend 流量入口。
 
-## 架构概览
+## 核心能力
 
-- `control-plane` 是唯一持久化中心，连接 PostgreSQL
-- `agent` 不连接数据库，只通过内部 gRPC 双向流连接 `control-plane`
-- `agent` 必须先在 control-plane 中创建独立凭证，并手动配置中心签发的 UUID `AGENT_ID` 与随机 `AGENT_TOKEN`
-- 私有镜像凭据由 `control-plane` 按 registry host 统一管理，并在发布时按 `imageRepo` 自动匹配下发给目标 agent
-- CI 回调只负责创建排队中的发布请求，真正开始发布由管理员显式触发
-- `agent` 仅依赖 `docker.sock`，并在本机自举共享 `haproxy(s6, 内含 dataplaneapi) + epNet` 代理栈
-- `control-plane` 在 agent 建连后和服务配置变更后，会把该 agent 负责的完整代理配置快照立即推送给 agent
+- **Control Plane**：提供管理后台、HTTP API、CI 回调入口、发布编排、任务持久化、审计与观测。
+- **Agent**：连接 control-plane，访问宿主机 Docker，托管本机 `HAProxy + Data Plane API` 代理栈，并执行部署、探活、切流和清理任务。
+- **蓝绿发布**：CI 只创建排队发布请求，管理员在管理后台确认启动、验证候选版本、切流或回滚。
+- **私有镜像凭据**：control-plane 按 registry host 管理凭据，发布时自动匹配并下发给目标 agent。
+- **调度执行器**：外部 Go 执行器可通过 SDK 接入调度中心，支持 direct 与 agent relay 两种连接模式。
 
-当前核心链路：
+## 快速部署路径
 
-1. CI 调用 `POST /api/integration/ci/releases`
-2. `control-plane` 校验服务配置后创建 `queued` 状态的发布请求
-3. 同一服务允许多个请求排队，但同一时刻只能有一个活动发布
-4. 管理员调用 `POST /api/admin/releases/:id/start` 开始指定请求
-5. `control-plane` 创建首个 `deploy_green` 任务并通过 gRPC 长连接推送给目标 `agent`
-6. `agent` 先确保共享代理栈健康并且最近一次代理配置快照已经应用成功
-7. `agent` 用固定名称拉起目标槽位容器，业务容器接入 `epNet`，按配置执行 Docker health + HTTP probe
-8. 健康通过后，发布单进入 `ready_to_switch`
-9. 管理员调用确认切流接口
-10. `agent` 通过 HAProxy Runtime API 切换流量
-11. 保留当前 live 槽位和当前 rollback 槽位容器，并清理更旧的受管容器
+### 1. 部署 control-plane
 
-## 当前发布与恢复语义
+control-plane 需要 PostgreSQL，并至少配置以下环境变量：
 
-### 蓝绿发布
+- `DB_DSN`
+- `ADMIN_USERNAME`
+- `ADMIN_PASSWORD`
+- `ADMIN_SESSION_SECRET`
 
-- CI 回调只会创建排队请求，不会直接启动发布
-- 管理员可以对 `queued` 请求执行：
-  - `start`
-  - `skip`
-- `skip` 是终态，不会重新入队
-- 容器固定命名：
-  - `ep-<serviceKey>-blue`
-  - `ep-<serviceKey>-green`
-- 受管容器固定标签：
-  - `ep.managed=true`
-  - `ep.agent_id`
-  - `ep.service_id`
-  - `ep.service_key`
-  - `ep.slot`
-  - `ep.release_id`
-- agent 只管理当前 agent 自己创建的受管容器，不会接管或删除外部容器
-- 若宿主机上存在同名但非受管容器，任务直接失败，不做接管
+常用端口：
 
-### 代理栈托管
+- HTTP 管理面：`8080`
+- 内部 gRPC：`9090`
 
-- 每个 agent 维护一套共享代理栈：
-  - `edge-pilot-haproxy`
-  - Docker 网络 `epNet`
-- `haproxytech/haproxy-debian:s6-3.3` 单容器同时承载 HAProxy 和 Data Plane API
-- 共享 frontend 固定监听 HTTP `:80`
-- Runtime API 只负责运行态切流、摘挂 server 和 stats
-- Data Plane API 负责 frontend、route、backend、blue/green server 结构同步
-- 服务只需要配置：
-  - `containerPort`
-  - `routeHost`
-  - `routePathPrefix`
-- 服务可选配置：
-  - `publishedPorts`
-- backend 名称由系统按 `serviceId` 稳定派生，server 名称固定为 `blue` / `green`
-- HAProxy upstream 固定使用受管容器名，不使用业务容器固定 IP
+Docker 部署示例、非 root 用户和 Linux 权限配置见 [Docker 部署说明](docs/docker-deploy.md)。
 
-### 断线恢复
+### 2. 创建 agent 凭证
 
-- `agent` 每 `5s` 发送一次 heartbeat
-- `control-plane` 在 heartbeat 时使用 `running_task_ids` 对账
-- 未完成但不在运行中的当前任务会被重放一次
-- 同一 session 内同一任务只会重放一次
-- `15s` 无心跳会把 agent 标记为 offline
-- `10m` 无进展的任务会被标记为 `timed_out`，对应发布单进入失败态
+agent 不支持首次自动注册。启动 agent 前，需要先在 control-plane 管理后台或 API 中创建 agent，拿到：
 
-### 旧容器清理
+- `AGENT_ID`
+- `AGENT_TOKEN`
 
-- 当前稳态只保留两类受管容器：
-  - 当前 live 槽位容器
-  - 当前 rollback 槽位容器
-- 切流成功后会 best-effort 清理更旧的受管容器
+token 明文只会在创建或重置时返回一次，请使用 secret 管理。
 
-## 目录结构
+### 3. 部署 agent
 
-- `cmd/control-plane`：control-plane 二进制入口
-- `cmd/agent`：agent 二进制入口
-- `adapter/http/controlplane`：管理 API、CI 集成与静态站点挂载
-- `adapter/grpc/controlplane`：内部 gRPC 服务端与 agent session 管理
-- `adapter/grpc/agent`：agent gRPC 长连接客户端
-- `adapter/schedule`：离线扫描、任务超时扫描等后台调度
-- `internal/servicecatalog`：服务定义、镜像、端口、探活、host/path 路由配置
-- `internal/release`：发布单、任务、切流、回滚、审计
-- `internal/agent`：agent 注册、心跳、恢复、执行器、代理栈自举、自愈、Docker/HAProxy 适配
-- `internal/observability`：总览、实例状态和 backend 指标快照
-- `internal/adminauth`：管理后台认证与会话
-- `internal/registrycredential`：私有镜像仓库凭据管理
-- `internal/scheduler`：调度器、任务调度与执行器管理
+agent 至少需要：
 
-## HTTP 接口
+- `AGENT_ID`
+- `AGENT_TOKEN`
+- `CONTROL_PLANE_GRPC_ADDR`
+- Docker socket 访问权限
 
-### CI 集成
+agent 启动后会连接 control-plane，并在本机自举共享代理栈：
 
-- `POST /api/integration/ci/releases`
+- Docker 网络：默认 `epNet`
+- HAProxy 容器：默认 `edge-pilot-haproxy`
+- HTTP 入口：默认监听宿主机 `:80`
 
-认证方式：
+agent 只管理自己创建的 Edge Pilot 受管容器，不会接管或删除外部容器。
 
-- 若配置了 `CI_SHARED_TOKEN`，请求头必须带 `X-EdgePilot-Token`
+### 4. 配置服务
 
-### 认证接口
+在管理后台创建服务时，通常需要提供：
 
-- `POST /api/auth/login`
-- `POST /api/auth/logout`
-- `GET /api/admin/me`
+- 服务标识 `serviceKey`
+- 镜像仓库 `imageRepo`
+- 容器端口 `containerPort`
+- 路由域名 `routeHost`
+- 路由路径前缀 `routePathPrefix`
+- 目标 agent
+- Docker health 或 HTTP probe 配置
 
-### 服务管理
+如果镜像是私有仓库镜像，请先在“镜像仓库凭据”中配置对应 registry host 的用户名和密码或 token。
 
-- `POST /api/admin/services`
-- `PUT /api/admin/services/:id`
-- `DELETE /api/admin/services/:id`
-- `GET /api/admin/services`
-- `GET /api/admin/services/:id`
+### 5. 从 CI 创建发布请求
 
-### 镜像仓库凭据
+镜像构建并推送完成后，CI 调用：
 
-- `POST /api/admin/registry-credentials`
-- `PUT /api/admin/registry-credentials/:id`
-- `DELETE /api/admin/registry-credentials/:id`
-- `GET /api/admin/registry-credentials`
-- `GET /api/admin/registry-credentials/:id`
-
-### Agent 管理
-
-- `POST /api/admin/agents`
-- `GET /api/admin/agents`
-- `GET /api/admin/agents/:id`
-- `POST /api/admin/agents/:id/reset-token`
-- `POST /api/admin/agents/:id/enable`
-- `POST /api/admin/agents/:id/disable`
-- `DELETE /api/admin/agents/:id`
-
-### 发布管理
-
-- `GET /api/admin/releases`
-- `GET /api/admin/releases/:id`
-- `POST /api/admin/releases/:id/start`
-- `POST /api/admin/releases/:id/retry`
-- `POST /api/admin/releases/:id/skip`
-- `POST /api/admin/releases/:id/confirm-switch`
-- `POST /api/admin/releases/:id/traffic`
-- `POST /api/admin/releases/:id/rollback`
-
-### 实例管理
-
-- `GET /api/admin/instances`
-- `GET /api/admin/instances/:agentId/:containerId`
-- `GET /api/admin/instances/:agentId/:containerId/logs/stream`
-
-### 调度器管理
-
-- `GET /api/admin/scheduler/jobs`
-- `POST /api/admin/scheduler/jobs`
-- `GET /api/admin/scheduler/jobs/:id`
-- `PUT /api/admin/scheduler/jobs/:id`
-- `DELETE /api/admin/scheduler/jobs/:id`
-- `POST /api/admin/scheduler/jobs/:id/enable`
-- `POST /api/admin/scheduler/jobs/:id/disable`
-- `POST /api/admin/scheduler/jobs/:id/trigger`
-- `GET /api/admin/scheduler/jobs/:id/runs`
-- `GET /api/admin/scheduler/runs`
-- `GET /api/admin/scheduler/executors`
-- `POST /api/admin/scheduler/executors`
-- `POST /api/admin/scheduler/executors/:id/reset-token`
-- `POST /api/admin/scheduler/executors/:id/enable`
-- `POST /api/admin/scheduler/executors/:id/disable`
-- `DELETE /api/admin/scheduler/executors/:id`
-
-### 观测与性能
-
-- `GET /api/admin/overview`
-- `GET /api/admin/services/:id/observability`
-- `GET /api/admin/system/performance`
-- `GET /api/admin/system/performance/agents/:id/history`
-- `GET /metrics`
-
-## 运行配置
-
-### control-plane
-
-关键配置：
-
-- PostgreSQL 连接配置：由 `allingo` 的数据库模块提供
-- `ADMIN_USERNAME`：管理后台登录用户名
-- `ADMIN_PASSWORD`：管理后台登录密码
-- `ADMIN_SESSION_SECRET`：管理后台 Cookie 会话签名密钥
-- `TRUSTED_PROXY_CIDRS`：可信反代网段或 IP，逗号分隔，用于识别 `X-Forwarded-Proto`
-- `TRUST_CLOUDFLARE`：是否启用 Cloudflare 平台真实 IP 识别
-- `GRPC_PORT`：内部 gRPC 监听端口，默认 `9090`
-- `CI_SHARED_TOKEN`：CI 回调鉴权
-- `WEB_THEME`：Web 主题，默认 `default`
-- `SCHEDULER_ENGINE_TICK_SECONDS`：调度器引擎心跳间隔，默认 `2`
-- `SCHEDULER_DISPATCH_BATCH_SIZE`：单次调度批处理量，默认 `100`
-- `SCHEDULER_DEFAULT_LEASE_TIMEOUT_SECONDS`：任务默认租约超时，默认 `60`
-- `SCHEDULER_DEFAULT_MAX_RETRIES`：任务默认最大重试次数，默认 `3`
-- `SCHEDULER_EXECUTOR_HEARTBEAT_TIMEOUT_SECONDS`：执行器心跳超时，默认 `15`
-- `REGISTRY_SECRET_MASTER_KEY`：可选，base64 编码后的 32 字节主密钥；配置后才允许创建、更新和下发私有镜像仓库凭据
-- `SERVICE_SECRET_MASTER_KEY`：可选，base64 编码后的 32 字节主密钥；配置后才允许保存带环境变量的服务配置，并会用于加密服务环境变量与发布任务中的敏感片段
-
-### agent
-
-关键配置：
-
-- `AGENT_ID`：必填，必须是 control-plane 创建 agent 后签发的 UUID
-- `AGENT_TOKEN`：必填，必须是 control-plane 创建或重置 agent 后一次性拿到的随机 token
-- `CONTROL_PLANE_GRPC_ADDR`：control-plane gRPC 地址，默认 `127.0.0.1:9090`
-- `DOCKER_HOST`：优先于 `DOCKER_SOCKET_PATH`。支持 `unix:///var/run/docker.sock`、裸路径 `/var/run/docker.sock`、`tcp://127.0.0.1:2375`、`http://127.0.0.1:2375`
-- `DOCKER_SOCKET_PATH`：兼容旧配置；当未设置 `DOCKER_HOST` 时作为 fallback，默认 `/var/run/docker.sock`
-- `HTTP_PROBE_TIMEOUT_SECONDS`：默认 `5`
-- `PROXY_NETWORK_NAME`：默认 `epNet`
-- `PROXY_NETWORK_SUBNET`：默认 `172.29.0.0/24`
-- `HAPROXY_IMAGE`：默认 `haproxytech/haproxy-debian:s6-3.3`
-- `HAPROXY_IP`：默认 `172.29.0.233`
-- `HAPROXY_RUNTIME_PORT`：默认 `19999`
-- `DATAPLANEAPI_PORT`：默认 `5555`
-- `HAPROXY_DATAPLANE_USERNAME`：默认 `admin`
-- `HAPROXY_DATAPLANE_PASSWORD`：默认 `edge-pilot-internal`
-- `PROXY_SELF_HEAL_INTERVAL_SECONDS`：默认 `10`
-- `MANAGED_CONTAINER_SCAN_INTERVAL_SECONDS`：托管容器全局检测与内存索引刷新间隔，默认 `5`
-- `SCHEDULER_RELAY_LISTEN_ADDR`：agent 本地调度器 relay 监听地址，默认 `127.0.0.1:19091`
-- `SCHEDULER_RELAY_SHARED_TOKEN`：agent 本地调度器 relay 鉴权令牌，可选
-
-`AGENT_VERSION` 不再通过环境变量读取，而是直接使用编译时注入的 build info。
-
-推荐运维流程：
-
-1. 先调用 `POST /api/admin/agents` 创建 agent 凭证
-2. 把返回的 `id` 和 `token` 手动写入 agent 环境变量
-3. 如 token 泄露或轮换，调用 `POST /api/admin/agents/:id/reset-token`
-
-私有镜像说明：
-
-1. 在管理面板的“镜像仓库”页面为对应 registry host 配置用户名和密码/令牌
-2. 服务仍然只配置 `imageRepo`
-3. 开始发布时，control-plane 会按 `imageRepo` 自动解析 registry host 并匹配共享凭据
-4. 未配置匹配凭据时，agent 会按匿名方式拉镜像；若目标镜像为私有镜像，则会在拉取阶段失败
-
-## 本地构建
-
-```bash
-cd web/default && pnpm install
-cd ../..
-make proto
-make build VERSION=v0.1.0
+```http
+POST /api/integration/ci/releases
 ```
 
-产物输出到 `dist/`：
+该接口只创建 `queued` 发布请求，不会直接启动部署。管理员后续在管理后台选择开始、跳过、切流或回滚。
 
-- `dist/edge-pilot-control`
-- `dist/edge-pilot-agent`
+CI 请求格式、鉴权 header、响应字段和去重语义见 [Control-Plane CI 回调触发说明](docs/control-plane-ci-callback.md)。
 
-启动时会打印编译信息：
+### 6. 发布与验证
 
-- `version`
-- `commit`
-- `build_time`
+典型发布流程：
 
-## 发布产物
+1. CI 创建排队发布请求。
+2. 管理员启动发布。
+3. agent 拉起目标槽位容器并执行探活。
+4. 发布进入可切流状态后，管理员访问候选版本验证。
+5. 验证通过后确认切流。
+6. 系统保留当前 live 与 rollback 槽位，清理更旧的受管容器。
 
-GitHub Actions 对 `v*` tag 触发 release：
+业务前端可读取 Edge Pilot 注入的发布响应头，并通过 `__ep/beta` / `__ep/normalize` 控制会话进入候选版本或归位到 live 版本。接入方式见 [发布响应头与归位接口接入说明](docs/edge-pilot-release-headers.md)。
 
-- 产出 GitHub Release 二进制归档
-- 推送两个 GHCR 镜像：
-  - `ghcr.io/<owner>/edge-pilot-control`
-  - `ghcr.io/<owner>/edge-pilot-agent`
+## 调度执行器接入
 
-镜像基础镜像当前为 `debian:bookworm-slim`。
+Edge Pilot 的调度中心支持两类执行器：
 
-Docker 部署和 Linux 用户授权说明见：[docs/docker-deploy.md](docs/docker-deploy.md)
+- **服务实例执行器**：服务配置了 `schedulerSdkPort` 后，agent 部署容器时注入 `EP_EXECUTOR_ID`、`EP_SCHEDULER_*`、`EP_SERVICE_*` 等变量；随后 agent 扫描 live/candidate 受管容器，主动连接容器内的 `SchedulerInstanceControl.Attach` 服务，并通过 agent relay 向 control-plane 注册执行器。此模式不需要用户在管理页复制或配置执行器 token。
+- **外部独立执行器**：独立进程使用普通 Go SDK 客户端连接调度中心。此模式需要 `executorId/token/group`，其中 token 属于外部执行器凭证，不是服务实例自动注入路径的一部分。
 
-Control-Plane CI 回调触发说明见：[docs/control-plane-ci-callback.md](docs/control-plane-ci-callback.md)
+外部独立执行器支持两种连接方式：
 
-业务前端如何根据 `X-Edge-Pilot-*` 响应头识别发布信息，并通过 `__ep/normalize` 归位粘滞会话，见：[docs/edge-pilot-release-headers.md](docs/edge-pilot-release-headers.md)
+- **direct**：执行器直接连接 control-plane gRPC 地址。
+- **agent relay**：执行器连接本机 agent relay，由 agent 代转到 control-plane。
 
-调度执行器 Go SDK 对接说明见：[docs/scheduler-executor-sdk.md](docs/scheduler-executor-sdk.md)
+外部独立执行器的 direct / agent relay 连接不需要在管理端预先固定绑定，control-plane 会根据实际连接状态回填展示字段。SDK 使用方式、服务实例链路、错误语义、重试与租约说明见 [调度执行器 SDK 对接说明](docs/scheduler-executor-sdk.md)。
+
+## 配置摘要
+
+control-plane 常用配置：
+
+- `DB_DSN`
+- `ADMIN_USERNAME`
+- `ADMIN_PASSWORD`
+- `ADMIN_SESSION_SECRET`
+- `CI_SHARED_TOKEN`
+- `GRPC_PORT`
+- `WEB_THEME`
+- `REGISTRY_SECRET_MASTER_KEY`
+- `SERVICE_SECRET_MASTER_KEY`
+
+agent 常用配置：
+
+- `AGENT_ID`
+- `AGENT_TOKEN`
+- `CONTROL_PLANE_GRPC_ADDR`
+- `DOCKER_HOST`
+- `PROXY_NETWORK_NAME`
+- `HAPROXY_IMAGE`
+- `SCHEDULER_RELAY_LISTEN_ADDR`
+- `SCHEDULER_RELAY_SHARED_TOKEN`
+
+完整部署配置以 [Docker 部署说明](docs/docker-deploy.md) 为准。
+
+## 文档索引
+
+使用文档：
+
+- [Docker 部署说明](docs/docker-deploy.md)
+- [Control-Plane CI 回调触发说明](docs/control-plane-ci-callback.md)
+- [发布响应头与归位接口接入说明](docs/edge-pilot-release-headers.md)
+- [调度执行器 SDK 对接说明](docs/scheduler-executor-sdk.md)
+
+参考文件与排错素材：
+
+- [HAProxy Data Plane API 规格](docs/dataplane-spec.json)
+- [Data Plane 失败快照示例](docs/fail.json)
+- [HAProxy 失败配置示例](docs/fail.cfg)
 
 ## 当前限制
 
-- 当前聚焦 HTTP 服务的蓝绿发布，不支持 worker 与非 HTTP 协议
-- 切流仍然是人工确认，不做灰度权重
-- gRPC 当前未启用 TLS
-- 当前共享入口只支持 HTTP `:80`，不支持 HTTPS、证书和多 frontend
-- 业务容器默认不暴露宿主机端口；如需额外暴露，使用服务配置中的 `publishedPorts`
-- `cleanup_old` 未单独扩展为独立发布步骤，旧容器清理作为 agent 的后处理执行
+- 当前聚焦 HTTP 服务蓝绿发布，不支持 worker 与非 HTTP 协议。
+- 切流由管理员人工确认，不提供自动灰度权重。
+- gRPC 当前未启用 TLS。
+- 共享入口默认只支持 HTTP `:80`，不包含 HTTPS、证书和多 frontend 托管。
+- 业务容器默认不暴露宿主机端口；如需额外暴露，使用服务配置中的 `publishedPorts`。
