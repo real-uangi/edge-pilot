@@ -63,6 +63,20 @@ function parsePublishedPorts(text: string): Array<{ hostPort: number; containerP
   });
 }
 
+function parseTCPProxyPorts(text: string): Array<{ listenPort: number; containerPort: number; idleTimeoutSecond: number }> {
+  return lineList(text).map((line) => {
+    const parts = line.split(":").map((item) => item.trim());
+    if (parts.length !== 2 && parts.length !== 3) {
+      throw new Error(`Invalid TCP proxy port line: ${line}`);
+    }
+    return {
+      listenPort: Number(parts[0]),
+      containerPort: Number(parts[1]),
+      idleTimeoutSecond: parts.length === 3 && parts[2] ? Number(parts[2]) : 3600,
+    };
+  });
+}
+
 function parseNetworkAliases(text: string): string[] {
   return lineList(text);
 }
@@ -101,6 +115,7 @@ export const serviceFormSchema = z.object({
   volumesText: z.string(),
   networkAliasesText: z.string(),
   publishedPortsText: z.string(),
+  tcpProxyPortsText: z.string(),
 });
 
 export type ServiceFormInput = z.input<typeof serviceFormSchema>;
@@ -137,6 +152,7 @@ export function toServicePayload(values: ServiceFormValues): UpsertServiceInput 
     volumes: parseVolumes(values.volumesText),
     networkAliases: parseNetworkAliases(values.networkAliasesText),
     publishedPorts: parsePublishedPorts(values.publishedPortsText),
+    tcpProxyPorts: parseTCPProxyPorts(values.tcpProxyPortsText),
   };
 }
 
@@ -179,6 +195,9 @@ export function toServiceFormDefaults(service?: ServiceRecord): ServiceFormInput
     networkAliasesText: (service?.networkAliases ?? []).join("\n"),
     publishedPortsText: (service?.publishedPorts ?? [])
       .map((item) => `${item.hostPort}:${item.containerPort}`)
+      .join("\n"),
+    tcpProxyPortsText: (service?.tcpProxyPorts ?? [])
+      .map((item) => `${item.listenPort}:${item.containerPort}:${item.idleTimeoutSecond}`)
       .join("\n"),
   };
 }

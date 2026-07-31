@@ -83,6 +83,45 @@ func TestBuildProxyConfigSnapshotCarriesRouteHosts(t *testing.T) {
 	}
 }
 
+func TestBuildProxyConfigSnapshotCarriesTCPProxyPorts(t *testing.T) {
+	enabled := true
+	serviceID := uuid.MustParse("11111111-1111-1111-1111-111111111111")
+	services := []model.Service{{
+		ID:              serviceID,
+		ServiceKey:      "tcp-service",
+		AgentID:         "agent-a",
+		RouteHost:       "tcp.example.com",
+		RoutePathPrefix: "/",
+		CurrentLiveSlot: model.SlotBlue,
+		ContainerPort:   8080,
+		TCPProxyPorts: commondb.NewJSONB([]model.TCPProxyPort{{
+			ListenPort:        15432,
+			ContainerPort:     5432,
+			IdleTimeoutSecond: 3600,
+		}}),
+		Enabled: &enabled,
+	}}
+	liveReleaseID := uuid.MustParse("22222222-2222-2222-2222-222222222222")
+	publisher := &ProxyConfigPublisher{releases: &fakeProxyReleaseRepo{
+		runtimeInstances: []model.RuntimeInstance{{ServiceID: serviceID, Slot: model.SlotBlue, ReleaseID: liveReleaseID}},
+	}}
+
+	snapshot, err := publisher.buildProxyConfigSnapshot("agent-a", services)
+	if err != nil {
+		t.Fatalf("buildProxyConfigSnapshot() error = %v", err)
+	}
+	ports := snapshot.GetServices()[0].GetTcpProxyPorts()
+	if len(ports) != 1 {
+		t.Fatalf("expected one TCP proxy port, got %#v", ports)
+	}
+	if got := ports[0]; got.GetListenPort() != 15432 || got.GetContainerPort() != 5432 || got.GetIdleTimeoutSecond() != 3600 {
+		t.Fatalf("unexpected TCP proxy port %#v", got)
+	}
+	if got := ports[0].GetLiveBackendName(); got == "" {
+		t.Fatal("expected live TCP backend name")
+	}
+}
+
 func TestCandidateTrafficPercentIgnoresCompletedAndSwitchedReleases(t *testing.T) {
 	for _, status := range []model.ReleaseStatus{
 		model.ReleaseStatusCompleted,

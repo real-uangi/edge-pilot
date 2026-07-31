@@ -24,6 +24,10 @@ type dataPlaneTransaction struct {
 	ID string `json:"id"`
 }
 
+type namedSection struct {
+	Name string `json:"name"`
+}
+
 type frontendSection struct {
 	Name                     string                  `json:"name"`
 	Mode                     string                  `json:"mode"`
@@ -33,6 +37,7 @@ type frontendSection struct {
 	BackendSwitchingRuleList []frontendSwitchRule    `json:"backend_switching_rule_list,omitempty"`
 	HTTPRequestRules         []httpRequestRule       `json:"http_request_rule_list,omitempty"`
 	HTTPAfterResponseRules   []httpAfterResponseRule `json:"http_after_response_rule_list,omitempty"`
+	ClientTimeout            *int64                  `json:"client_timeout,omitempty"`
 }
 
 type frontendBind struct {
@@ -98,6 +103,7 @@ type backendSection struct {
 	Balance           *backendBalance    `json:"balance,omitempty"`
 	HTTPRequestRules  []httpRequestRule  `json:"http_request_rule_list,omitempty"`
 	HTTPResponseRules []httpResponseRule `json:"http_response_rule_list,omitempty"`
+	ServerTimeout     *int64             `json:"server_timeout,omitempty"`
 }
 
 type backendBalance struct {
@@ -548,6 +554,48 @@ func (c *DataPlaneAPIClient) DeleteBackendInTransaction(ctx context.Context, bac
 		return nil
 	}
 	return err
+}
+
+func (c *DataPlaneAPIClient) ListFrontends(ctx context.Context) ([]string, error) {
+	body, err := c.do(ctx, http.MethodGet, "/v3/services/haproxy/configuration/frontends", nil)
+	if err != nil {
+		return nil, err
+	}
+	return decodeSectionNames(body)
+}
+
+func (c *DataPlaneAPIClient) DeleteFrontendInTransaction(ctx context.Context, frontendName string, transactionID string) error {
+	path := c.configurationPath("/v3/services/haproxy/configuration/frontends/"+url.PathEscape(frontendName), "", transactionID, false)
+	_, err := c.do(ctx, http.MethodDelete, path, nil)
+	if isHTTPStatus(err, http.StatusNotFound) {
+		return nil
+	}
+	return err
+}
+
+func decodeSectionNames(body []byte) ([]string, error) {
+	var list []namedSection
+	if err := json.Unmarshal(body, &list); err == nil {
+		return collectSectionNames(list), nil
+	}
+	var wrapped struct {
+		Data []namedSection `json:"data"`
+	}
+	if err := json.Unmarshal(body, &wrapped); err != nil {
+		return nil, err
+	}
+	return collectSectionNames(wrapped.Data), nil
+}
+
+func collectSectionNames(items []namedSection) []string {
+	out := make([]string, 0, len(items))
+	for _, item := range items {
+		if name := strings.TrimSpace(item.Name); name != "" {
+			out = append(out, name)
+		}
+	}
+	sort.Strings(out)
+	return out
 }
 
 func (c *DataPlaneAPIClient) StartTransaction(ctx context.Context, version string) (string, error) {

@@ -29,6 +29,7 @@ export interface ServiceRecord {
   volumes: Array<{ source: string; target: string; readOnly: boolean }>;
   networkAliases: string[];
   publishedPorts: Array<{ hostPort: number; containerPort: number }>;
+  tcpProxyPorts: Array<{ listenPort: number; containerPort: number; idleTimeoutSecond: number }>;
   enabled: boolean | null;
   createdAt: string;
   updatedAt: string;
@@ -63,6 +64,7 @@ export interface UpsertServiceInput {
   volumes: Array<{ source: string; target: string; readOnly: boolean }>;
   networkAliases: string[];
   publishedPorts: Array<{ hostPort: number; containerPort: number }>;
+  tcpProxyPorts: Array<{ listenPort: number; containerPort: number; idleTimeoutSecond: number }>;
   enabled: boolean;
 }
 

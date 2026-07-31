@@ -201,6 +201,11 @@ export function ServiceForm({
             <textarea className={styles.textarea} {...form.register("publishedPortsText")} />
             <span className={styles.hint}>格式：`host:container`</span>
           </label>
+          <label className={styles.field}>
+            <span className={styles.label}>TCP 代理端口</span>
+            <textarea className={styles.textarea} {...form.register("tcpProxyPortsText")} />
+            <span className={styles.hint}>格式：`公网端口:容器端口[:空闲秒]`，默认空闲超时 3600 秒</span>
+          </label>
         </div>
 
         {submitError ? <InlineNotice message={submitError} tone="error" /> : null}

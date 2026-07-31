@@ -184,6 +184,15 @@ message ProxyServiceConfig {
   int32 scheduler_sdk_port = 15;
   string scheduler_executor_group = 16;
   repeated string route_hosts = 17;
+  repeated TCPProxyPortConfig tcp_proxy_ports = 18;
+}
+
+message TCPProxyPortConfig {
+  int32 listen_port = 1;
+  int32 container_port = 2;
+  int32 idle_timeout_second = 3;
+  string live_backend_name = 4;
+  string candidate_backend_name = 5;
 }
 
 message ProxyConfigSnapshot {

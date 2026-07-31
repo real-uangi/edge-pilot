@@ -21,6 +21,7 @@ const (
 	DefaultHTTPProbeTimeoutSecond  = 2
 	DefaultHTTPProbeIntervalSecond = 1
 	DefaultHTTPSuccessThreshold    = 2
+	DefaultTCPProxyIdleTimeoutSec  = 3600
 )
 
 type ReleaseStatus int
@@ -166,6 +167,7 @@ type Service struct {
 	Volumes                 *commondb.JSONB[[]VolumeMount]     `json:"volumes" gorm:"type:jsonb"`
 	NetworkAliases          *commondb.JSONB[[]string]          `json:"networkAliases" gorm:"type:jsonb"`
 	PublishedPorts          *commondb.JSONB[[]PublishedPort]   `json:"publishedPorts" gorm:"type:jsonb"`
+	TCPProxyPorts           *commondb.JSONB[[]TCPProxyPort]    `json:"tcpProxyPorts" gorm:"type:jsonb"`
 	Enabled                 *bool                              `json:"enabled" gorm:"not null"`
 }
 
@@ -195,6 +197,12 @@ type VolumeMount struct {
 type PublishedPort struct {
 	HostPort      int `json:"hostPort"`
 	ContainerPort int `json:"containerPort"`
+}
+
+type TCPProxyPort struct {
+	ListenPort        int `json:"listenPort"`
+	ContainerPort     int `json:"containerPort"`
+	IdleTimeoutSecond int `json:"idleTimeoutSecond"`
 }
 
 type Release struct {

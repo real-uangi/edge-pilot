@@ -39,6 +39,7 @@ type ProxyServiceConfig struct {
 	ContainerPort          int
 	SchedulerSDKPort       int
 	SchedulerExecutorGroup string
+	TCPProxyPorts          []model.TCPProxyPort
 }
 
 func NormalizeRouteHost(value string) string {
@@ -73,6 +74,23 @@ func BackendNameForRelease(serviceID uuid.UUID, releaseID string) string {
 		return ""
 	}
 	return "be_" + svc + "_" + rel
+}
+
+func TCPFrontendName(listenPort int) string {
+	return "ep_tcp_" + strconv.Itoa(listenPort)
+}
+
+func TCPUnavailableBackendName(listenPort int) string {
+	return "ep_tcp_unavailable_" + strconv.Itoa(listenPort)
+}
+
+func TCPBackendNameForRelease(serviceID uuid.UUID, releaseID string, listenPort int) string {
+	service := strings.ReplaceAll(serviceID.String(), "-", "")
+	release := strings.ReplaceAll(strings.TrimSpace(releaseID), "-", "")
+	if service == "" || release == "" || listenPort <= 0 {
+		return ""
+	}
+	return "tcp_" + service + "_" + release + "_" + strconv.Itoa(listenPort)
 }
 
 func BackendNameForSlot(base string, slot model.Slot) string {
@@ -165,6 +183,7 @@ func BuildProxyServiceConfigs(services []model.Service) []ProxyServiceConfig {
 			ContainerPort:          item.ContainerPort,
 			SchedulerSDKPort:       item.SchedulerSDKPort,
 			SchedulerExecutorGroup: item.SchedulerExecutorGroup,
+			TCPProxyPorts:          getJSON(item.TCPProxyPorts),
 		})
 	}
 	sort.Slice(out, func(i, j int) bool {

@@ -53,6 +53,16 @@ func (p *ProxyConfigPublisher) buildProxyConfigSnapshot(agentID string, services
 		if err != nil {
 			return nil, err
 		}
+		tcpProxyPorts := make([]*grpcapi.TCPProxyPortConfig, 0, len(item.TCPProxyPorts))
+		for _, port := range item.TCPProxyPorts {
+			tcpProxyPorts = append(tcpProxyPorts, &grpcapi.TCPProxyPortConfig{
+				ListenPort:           int32(port.ListenPort),
+				ContainerPort:        int32(port.ContainerPort),
+				IdleTimeoutSecond:    int32(port.IdleTimeoutSecond),
+				LiveBackendName:      servicecatalogapp.TCPBackendNameForRelease(item.ServiceID, liveReleaseID, port.ListenPort),
+				CandidateBackendName: servicecatalogapp.TCPBackendNameForRelease(item.ServiceID, candidateReleaseID, port.ListenPort),
+			})
+		}
 		out = append(out, &grpcapi.ProxyServiceConfig{
 			ServiceId:               item.ServiceID.String(),
 			ServiceKey:              item.ServiceKey,
@@ -69,6 +79,7 @@ func (p *ProxyConfigPublisher) buildProxyConfigSnapshot(agentID string, services
 			CandidateTrafficPercent: int32(candidateTrafficPercent),
 			SchedulerSdkPort:        int32(item.SchedulerSDKPort),
 			SchedulerExecutorGroup:  item.SchedulerExecutorGroup,
+			TcpProxyPorts:           tcpProxyPorts,
 		})
 	}
 	return &grpcapi.ProxyConfigSnapshot{

@@ -54,6 +54,60 @@ func TestCreateRejectsDuplicateRouteOnSameAgent(t *testing.T) {
 	}
 }
 
+func TestCreateServiceNormalizesTCPProxyPortDefaultTimeout(t *testing.T) {
+	svc := NewServiceWithPublisher(newFakeServiceCatalogRepo(), nil, nil)
+
+	created, err := svc.Create(dto.UpsertServiceRequest{
+		Name:          "tcp-service",
+		ServiceKey:    "tcp-service",
+		AgentID:       "11111111-1111-1111-1111-111111111111",
+		ImageRepo:     "repo/tcp-service",
+		ContainerPort: 8080,
+		RouteHost:     "tcp.example.com",
+		TCPProxyPorts: []dto.TCPProxyPort{{ListenPort: 15432, ContainerPort: 5432}},
+	})
+	if err != nil {
+		t.Fatalf("Create() error = %v", err)
+	}
+	if len(created.TCPProxyPorts) != 1 {
+		t.Fatalf("expected one TCP proxy port, got %#v", created.TCPProxyPorts)
+	}
+	if got := created.TCPProxyPorts[0]; got.ListenPort != 15432 || got.ContainerPort != 5432 || got.IdleTimeoutSecond != model.DefaultTCPProxyIdleTimeoutSec {
+		t.Fatalf("unexpected TCP proxy port %#v", got)
+	}
+}
+
+func TestCreateServiceRejectsTCPProxyPortHostPortConflict(t *testing.T) {
+	svc := NewServiceWithPublisher(newFakeServiceCatalogRepo(), nil, nil)
+	base := dto.UpsertServiceRequest{
+		AgentID:       "11111111-1111-1111-1111-111111111111",
+		ImageRepo:     "repo/service",
+		ContainerPort: 8080,
+	}
+	if _, err := svc.Create(dto.UpsertServiceRequest{
+		Name:          "tcp-service",
+		ServiceKey:    "tcp-service",
+		AgentID:       base.AgentID,
+		ImageRepo:     base.ImageRepo,
+		ContainerPort: base.ContainerPort,
+		RouteHost:     "tcp.example.com",
+		TCPProxyPorts: []dto.TCPProxyPort{{ListenPort: 15432, ContainerPort: 5432}},
+	}); err != nil {
+		t.Fatalf("Create() first service error = %v", err)
+	}
+	if _, err := svc.Create(dto.UpsertServiceRequest{
+		Name:           "direct-service",
+		ServiceKey:     "direct-service",
+		AgentID:        base.AgentID,
+		ImageRepo:      base.ImageRepo,
+		ContainerPort:  base.ContainerPort,
+		RouteHost:      "direct.example.com",
+		PublishedPorts: []dto.PublishedPort{{HostPort: 15432, ContainerPort: 15432}},
+	}); err == nil {
+		t.Fatal("expected host port conflict")
+	}
+}
+
 func TestBuildStickyBetaPath(t *testing.T) {
 	for _, item := range []struct {
 		prefix string

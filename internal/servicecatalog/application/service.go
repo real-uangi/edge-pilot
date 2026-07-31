@@ -68,13 +68,19 @@ func (s *Service) Create(req dto.UpsertServiceRequest) (*dto.ServiceOutput, erro
 	if err := validatePublishedPorts(entity.PublishedPorts.Get()); err != nil {
 		return nil, err
 	}
+	if err := validateTCPProxyPorts(entity.TCPProxyPorts.Get()); err != nil {
+		return nil, err
+	}
+	if err := validateHostPortSets(entity.PublishedPorts.Get(), entity.TCPProxyPorts.Get()); err != nil {
+		return nil, err
+	}
 	if err := s.ensureAgentAssignable(entity.AgentID); err != nil {
 		return nil, err
 	}
 	if err := s.ensureRouteAvailable(entity.AgentID, routeHostsFromService(entity), entity.RoutePathPrefix, entity.ID); err != nil {
 		return nil, err
 	}
-	if err := s.ensurePublishedPortsAvailable(entity.AgentID, entity.PublishedPorts.Get(), entity.ID); err != nil {
+	if err := s.ensureHostPortsAvailable(entity.AgentID, entity.PublishedPorts.Get(), entity.TCPProxyPorts.Get(), entity.ID); err != nil {
 		return nil, err
 	}
 	if err := s.repo.Create(entity); err != nil {
@@ -118,13 +124,19 @@ func (s *Service) Update(id uuid.UUID, req dto.UpsertServiceRequest) (*dto.Servi
 	if err := validatePublishedPorts(updated.PublishedPorts.Get()); err != nil {
 		return nil, err
 	}
+	if err := validateTCPProxyPorts(updated.TCPProxyPorts.Get()); err != nil {
+		return nil, err
+	}
+	if err := validateHostPortSets(updated.PublishedPorts.Get(), updated.TCPProxyPorts.Get()); err != nil {
+		return nil, err
+	}
 	if err := s.ensureAgentAssignable(updated.AgentID); err != nil {
 		return nil, err
 	}
 	if err := s.ensureRouteAvailable(updated.AgentID, routeHostsFromService(updated), updated.RoutePathPrefix, updated.ID); err != nil {
 		return nil, err
 	}
-	if err := s.ensurePublishedPortsAvailable(updated.AgentID, updated.PublishedPorts.Get(), updated.ID); err != nil {
+	if err := s.ensureHostPortsAvailable(updated.AgentID, updated.PublishedPorts.Get(), updated.TCPProxyPorts.Get(), updated.ID); err != nil {
 		return nil, err
 	}
 	if err := s.repo.Update(updated); err != nil {
@@ -327,6 +339,7 @@ func (s *Service) buildServiceEntity(id uuid.UUID, req dto.UpsertServiceRequest)
 		Volumes:                 commondb.NewJSONB(toModelVolumes(req.Volumes)),
 		NetworkAliases:          commondb.NewJSONB(networkAliases),
 		PublishedPorts:          commondb.NewJSONB(toModelPublishedPorts(req.PublishedPorts)),
+		TCPProxyPorts:           commondb.NewJSONB(toModelTCPProxyPorts(req.TCPProxyPorts)),
 		Enabled:                 enabled,
 	}, nil
 }
@@ -436,6 +449,7 @@ func (s *Service) toServiceOutput(service *model.Service) (dto.ServiceOutput, er
 		Volumes:                 toDTOVolumes(getJSON(service.Volumes)),
 		NetworkAliases:          getJSON(service.NetworkAliases),
 		PublishedPorts:          toDTOPublishedPorts(getJSON(service.PublishedPorts)),
+		TCPProxyPorts:           toDTOTCPProxyPorts(getJSON(service.TCPProxyPorts)),
 		Enabled:                 service.Enabled,
 		CreatedAt:               service.CreatedAt,
 		UpdatedAt:               service.UpdatedAt,
@@ -479,6 +493,7 @@ func (s *Service) toDeploymentSpec(service *model.Service) (dto.ServiceDeploymen
 		Volumes:                 toDTOVolumes(getJSON(service.Volumes)),
 		NetworkAliases:          getJSON(service.NetworkAliases),
 		PublishedPorts:          toDTOPublishedPorts(getJSON(service.PublishedPorts)),
+		TCPProxyPorts:           toDTOTCPProxyPorts(getJSON(service.TCPProxyPorts)),
 		Enabled:                 service.Enabled != nil && *service.Enabled,
 	}, nil
 }
@@ -556,6 +571,34 @@ func toDTOPublishedPorts(items []model.PublishedPort) []dto.PublishedPort {
 	return out
 }
 
+func toModelTCPProxyPorts(items []dto.TCPProxyPort) []model.TCPProxyPort {
+	out := make([]model.TCPProxyPort, 0, len(items))
+	for _, item := range items {
+		idleTimeoutSecond := item.IdleTimeoutSecond
+		if idleTimeoutSecond == 0 {
+			idleTimeoutSecond = model.DefaultTCPProxyIdleTimeoutSec
+		}
+		out = append(out, model.TCPProxyPort{
+			ListenPort:        item.ListenPort,
+			ContainerPort:     item.ContainerPort,
+			IdleTimeoutSecond: idleTimeoutSecond,
+		})
+	}
+	return out
+}
+
+func toDTOTCPProxyPorts(items []model.TCPProxyPort) []dto.TCPProxyPort {
+	out := make([]dto.TCPProxyPort, 0, len(items))
+	for _, item := range items {
+		out = append(out, dto.TCPProxyPort{
+			ListenPort:        item.ListenPort,
+			ContainerPort:     item.ContainerPort,
+			IdleTimeoutSecond: item.IdleTimeoutSecond,
+		})
+	}
+	return out
+}
+
 func boolPointer(v bool) *bool {
 	return &v
 }
@@ -614,7 +657,7 @@ func validatePublishedPorts(items []model.PublishedPort) error {
 		if item.ContainerPort <= 0 || item.ContainerPort > 65535 {
 			return business.NewBadRequest("publishedPorts.containerPort 非法")
 		}
-		if item.HostPort == SharedFrontendBindPort {
+		if isReservedProxyPort(item.HostPort) {
 			return business.NewBadRequest("publishedPorts.hostPort 与代理保留端口冲突")
 		}
 		if _, ok := seen[item.HostPort]; ok {
@@ -623,6 +666,46 @@ func validatePublishedPorts(items []model.PublishedPort) error {
 		seen[item.HostPort] = struct{}{}
 	}
 	return nil
+}
+
+func validateTCPProxyPorts(items []model.TCPProxyPort) error {
+	seen := make(map[int]struct{}, len(items))
+	for _, item := range items {
+		if item.ListenPort <= 0 || item.ListenPort > 65535 {
+			return business.NewBadRequest("tcpProxyPorts.listenPort 非法")
+		}
+		if item.ContainerPort <= 0 || item.ContainerPort > 65535 {
+			return business.NewBadRequest("tcpProxyPorts.containerPort 非法")
+		}
+		if item.IdleTimeoutSecond <= 0 {
+			return business.NewBadRequest("tcpProxyPorts.idleTimeoutSecond 非法")
+		}
+		if isReservedProxyPort(item.ListenPort) {
+			return business.NewBadRequest("tcpProxyPorts.listenPort 与代理保留端口冲突")
+		}
+		if _, ok := seen[item.ListenPort]; ok {
+			return business.NewBadRequest("tcpProxyPorts.listenPort 重复")
+		}
+		seen[item.ListenPort] = struct{}{}
+	}
+	return nil
+}
+
+func validateHostPortSets(publishedPorts []model.PublishedPort, tcpProxyPorts []model.TCPProxyPort) error {
+	published := make(map[int]struct{}, len(publishedPorts))
+	for _, item := range publishedPorts {
+		published[item.HostPort] = struct{}{}
+	}
+	for _, item := range tcpProxyPorts {
+		if _, ok := published[item.ListenPort]; ok {
+			return business.NewBadRequest("tcpProxyPorts.listenPort 与 publishedPorts.hostPort 冲突")
+		}
+	}
+	return nil
+}
+
+func isReservedProxyPort(port int) bool {
+	return port == SharedFrontendBindPort || port == 5555 || port == 19999
 }
 
 func validateContainerPort(port int) error {
@@ -689,23 +772,33 @@ func (s *Service) ensureRouteAvailable(agentID string, routeHosts []string, rout
 	return nil
 }
 
-func (s *Service) ensurePublishedPortsAvailable(agentID string, ports []model.PublishedPort, selfID uuid.UUID) error {
-	if len(ports) == 0 {
+func (s *Service) ensureHostPortsAvailable(agentID string, publishedPorts []model.PublishedPort, tcpProxyPorts []model.TCPProxyPort, selfID uuid.UUID) error {
+	if len(publishedPorts) == 0 && len(tcpProxyPorts) == 0 {
 		return nil
 	}
 	services, err := s.repo.ListByAgent(agentID)
 	if err != nil {
 		return err
 	}
-	for _, candidate := range ports {
-		for i := range services {
-			if services[i].ID == selfID {
-				continue
+	requested := make(map[int]struct{}, len(publishedPorts)+len(tcpProxyPorts))
+	for _, port := range publishedPorts {
+		requested[port.HostPort] = struct{}{}
+	}
+	for _, port := range tcpProxyPorts {
+		requested[port.ListenPort] = struct{}{}
+	}
+	for i := range services {
+		if services[i].ID == selfID {
+			continue
+		}
+		for _, port := range getJSON(services[i].PublishedPorts) {
+			if _, ok := requested[port.HostPort]; ok {
+				return business.NewBadRequest(fmt.Sprintf("host port 已被服务 %s 占用", services[i].ServiceKey))
 			}
-			for _, port := range getJSON(services[i].PublishedPorts) {
-				if port.HostPort == candidate.HostPort {
-					return business.NewBadRequest(fmt.Sprintf("publishedPorts.hostPort 已被服务 %s 占用", services[i].ServiceKey))
-				}
+		}
+		for _, port := range getJSON(services[i].TCPProxyPorts) {
+			if _, ok := requested[port.ListenPort]; ok {
+				return business.NewBadRequest(fmt.Sprintf("host port 已被服务 %s 占用", services[i].ServiceKey))
 			}
 		}
 	}

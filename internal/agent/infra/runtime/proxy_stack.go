@@ -19,6 +19,7 @@ import (
 	servicecatalogapp "github.com/real-uangi/edge-pilot/internal/servicecatalog/application"
 	"github.com/real-uangi/edge-pilot/internal/shared/config"
 	"github.com/real-uangi/edge-pilot/internal/shared/grpcapi"
+	"github.com/real-uangi/edge-pilot/internal/shared/model"
 
 	"github.com/real-uangi/allingo/common/env"
 	"github.com/real-uangi/allingo/common/log"
@@ -53,6 +54,8 @@ type managedProxyDataPlaneAPI interface {
 	EnsureServerInTransaction(context.Context, string, string, backendServer) error
 	ListBackends(context.Context) ([]string, error)
 	DeleteBackendInTransaction(context.Context, string, string) error
+	ListFrontends(context.Context) ([]string, error)
+	DeleteFrontendInTransaction(context.Context, string, string) error
 }
 
 type ManagedProxyRuntime struct {
@@ -160,6 +163,11 @@ func (m *ManagedProxyRuntime) ApplySnapshot(ctx context.Context, snapshot *grpca
 	m.desired = cloneSnapshot(snapshot)
 	m.desiredHash = snapshotHash(m.desired)
 	m.logger.Infof("received proxy snapshot: agentId=%s services=%d frontend=%s", m.cfg.AgentID, len(snapshot.GetServices()), snapshot.GetFrontendName())
+	if _, err := m.prepareLocked(ctx, false); err != nil {
+		m.ready = false
+		m.lastApplyErrorText = err.Error()
+		return err
+	}
 	if !m.prepared {
 		m.ready = false
 		if m.lastPrepareError == "" {
@@ -449,6 +457,47 @@ func (m *ManagedProxyRuntime) reconcileLocked(ctx context.Context, snapshot *grp
 			}
 		}
 	}
+	tcpProxies := buildTCPProxyConfigs(snapshot)
+	for _, proxy := range tcpProxies {
+		for _, target := range []tcpProxyBackendTarget{
+			{BackendName: proxy.LiveBackendName, ReleaseID: proxy.LiveReleaseID, Slot: proxy.LiveSlot},
+			{BackendName: proxy.CandidateBackendName, ReleaseID: proxy.CandidateReleaseID, Slot: proxy.CandidateSlot},
+		} {
+			if strings.TrimSpace(target.BackendName) == "" || strings.TrimSpace(target.ReleaseID) == "" {
+				continue
+			}
+			backend := tcpProxyBackendSection(target.BackendName, proxy.IdleTimeoutSecond)
+			failureContext.Backends = append(failureContext.Backends, backend)
+			if err := m.dataplane.EnsureBackendInTransaction(ctx, transactionID, backend); err != nil {
+				m.logDataplaneFailure(err, "dataplane ensure tcp backend failed", failureContext)
+				return err
+			}
+			server := backendServer{
+				Name:      "srv",
+				Address:   agentdomain.ManagedContainerNameForTask(proxy.ServiceKey, target.ReleaseID, target.Slot),
+				Port:      proxy.ContainerPort,
+				Check:     "enabled",
+				Resolvers: managedProxyResolversName,
+				InitAddr:  managedProxyInitAddrFallback,
+			}
+			failureContext.Servers = append(failureContext.Servers, dataplaneBackendServer{Backend: backend.Name, Server: server})
+			if err := m.dataplane.EnsureServerInTransaction(ctx, backend.Name, transactionID, server); err != nil {
+				m.logDataplaneFailure(err, "dataplane ensure tcp server failed", failureContext)
+				return err
+			}
+		}
+		unavailableBackend := tcpProxyBackendSection(proxy.UnavailableBackendName, proxy.IdleTimeoutSecond)
+		failureContext.Backends = append(failureContext.Backends, unavailableBackend)
+		if err := m.dataplane.EnsureBackendInTransaction(ctx, transactionID, unavailableBackend); err != nil {
+			m.logDataplaneFailure(err, "dataplane ensure tcp unavailable backend failed", failureContext)
+			return err
+		}
+		frontend := tcpProxyFrontendSection(proxy)
+		if err := m.dataplane.ReplaceFrontendInTransaction(ctx, transactionID, frontend); err != nil {
+			m.logDataplaneFailure(err, "dataplane replace tcp frontend failed", failureContext)
+			return err
+		}
+	}
 	normalizeBackend := backendSection{
 		Name:             normalizeBackendName,
 		Mode:             "http",
@@ -462,6 +511,26 @@ func (m *ManagedProxyRuntime) reconcileLocked(ctx context.Context, snapshot *grp
 	if err := m.dataplane.ReplaceFrontendInTransaction(ctx, transactionID, frontend); err != nil {
 		m.logDataplaneFailure(err, "dataplane replace frontend failed", failureContext)
 		return err
+	}
+	existingFrontends, err := m.dataplane.ListFrontends(ctx)
+	if err != nil {
+		return err
+	}
+	desiredFrontends := map[string]struct{}{snapshot.GetFrontendName(): {}}
+	for _, proxy := range tcpProxies {
+		desiredFrontends[proxy.FrontendName] = struct{}{}
+	}
+	for _, name := range existingFrontends {
+		if !isManagedTCPFrontend(name) {
+			continue
+		}
+		if _, ok := desiredFrontends[name]; ok {
+			continue
+		}
+		if err := m.dataplane.DeleteFrontendInTransaction(ctx, name, transactionID); err != nil {
+			m.logDataplaneFailure(err, "dataplane delete stale tcp frontend failed", failureContext)
+			return err
+		}
 	}
 	existing, err := m.dataplane.ListBackends(ctx)
 	if err != nil {
@@ -480,6 +549,14 @@ func (m *ManagedProxyRuntime) reconcileLocked(ctx context.Context, snapshot *grp
 				continue
 			}
 			desiredBackends[name] = struct{}{}
+		}
+	}
+	for _, proxy := range tcpProxies {
+		desiredBackends[proxy.UnavailableBackendName] = struct{}{}
+		for _, backendName := range []string{proxy.LiveBackendName, proxy.CandidateBackendName} {
+			if strings.TrimSpace(backendName) != "" {
+				desiredBackends[backendName] = struct{}{}
+			}
 		}
 	}
 	failureContext.DesiredBackends = sortedBackendNames(desiredBackends)
@@ -921,9 +998,161 @@ func (m *ManagedProxyRuntime) frontendSection(snapshot *grpcapi.ProxyConfigSnaps
 	}
 }
 
+type tcpProxyConfig struct {
+	ServiceKey              string
+	FrontendName            string
+	UnavailableBackendName  string
+	ListenPort              int
+	ContainerPort           int
+	IdleTimeoutSecond       int
+	LiveReleaseID           string
+	LiveBackendName         string
+	LiveSlot                grpcapi.Slot
+	CandidateReleaseID      string
+	CandidateBackendName    string
+	CandidateSlot           grpcapi.Slot
+	CandidateTrafficPercent int
+}
+
+type tcpProxyBackendTarget struct {
+	BackendName string
+	ReleaseID   string
+	Slot        grpcapi.Slot
+}
+
+func buildTCPProxyConfigs(snapshot *grpcapi.ProxyConfigSnapshot) []tcpProxyConfig {
+	if snapshot == nil {
+		return nil
+	}
+	configs := make([]tcpProxyConfig, 0)
+	for _, service := range snapshot.GetServices() {
+		if service == nil {
+			continue
+		}
+		for _, port := range service.GetTcpProxyPorts() {
+			if port == nil || port.GetListenPort() <= 0 || port.GetContainerPort() <= 0 {
+				continue
+			}
+			idleTimeoutSecond := int(port.GetIdleTimeoutSecond())
+			if idleTimeoutSecond <= 0 {
+				idleTimeoutSecond = model.DefaultTCPProxyIdleTimeoutSec
+			}
+			configs = append(configs, tcpProxyConfig{
+				ServiceKey:              service.GetServiceKey(),
+				FrontendName:            servicecatalogapp.TCPFrontendName(int(port.GetListenPort())),
+				UnavailableBackendName:  servicecatalogapp.TCPUnavailableBackendName(int(port.GetListenPort())),
+				ListenPort:              int(port.GetListenPort()),
+				ContainerPort:           int(port.GetContainerPort()),
+				IdleTimeoutSecond:       idleTimeoutSecond,
+				LiveReleaseID:           strings.TrimSpace(service.GetLiveReleaseId()),
+				LiveBackendName:         strings.TrimSpace(port.GetLiveBackendName()),
+				LiveSlot:                normalizedSlot(service.GetCurrentLiveSlot()),
+				CandidateReleaseID:      strings.TrimSpace(service.GetCandidateReleaseId()),
+				CandidateBackendName:    strings.TrimSpace(port.GetCandidateBackendName()),
+				CandidateSlot:           oppositeSlot(normalizedSlot(service.GetCurrentLiveSlot())),
+				CandidateTrafficPercent: clampTrafficPercent(int(service.GetCandidateTrafficPercent())),
+			})
+		}
+	}
+	sort.Slice(configs, func(i, j int) bool {
+		return configs[i].ListenPort < configs[j].ListenPort
+	})
+	return configs
+}
+
+func tcpProxyBackendSection(name string, idleTimeoutSecond int) backendSection {
+	return backendSection{
+		Name:          name,
+		Mode:          "tcp",
+		From:          managedProxyDefaultsName,
+		Balance:       &backendBalance{Algorithm: "roundrobin"},
+		ServerTimeout: timeoutMilliseconds(idleTimeoutSecond),
+	}
+}
+
+func tcpProxyFrontendSection(proxy tcpProxyConfig) frontendSection {
+	defaultBackend := proxy.UnavailableBackendName
+	if proxy.LiveBackendName != "" {
+		defaultBackend = proxy.LiveBackendName
+	} else if proxy.CandidateBackendName != "" {
+		defaultBackend = proxy.CandidateBackendName
+	}
+	frontend := frontendSection{
+		Name:           proxy.FrontendName,
+		Mode:           "tcp",
+		DefaultBackend: defaultBackend,
+		Binds: map[string]frontendBind{
+			"public": {
+				Name:    "public",
+				Address: "0.0.0.0",
+				Port:    proxy.ListenPort,
+			},
+		},
+		ClientTimeout: timeoutMilliseconds(proxy.IdleTimeoutSecond),
+	}
+	if proxy.LiveBackendName == "" || proxy.CandidateBackendName == "" {
+		return frontend
+	}
+	percent := clampTrafficPercent(proxy.CandidateTrafficPercent)
+	if percent <= 0 {
+		return frontend
+	}
+	if percent >= 100 {
+		frontend.DefaultBackend = proxy.CandidateBackendName
+		return frontend
+	}
+	const splitACL = "tcp_split_candidate"
+	frontend.ACLList = []frontendACL{{
+		Name:      splitACL,
+		Criterion: "rand(100)",
+		Value:     fmt.Sprintf("lt %d", percent),
+		Index:     0,
+	}}
+	frontend.BackendSwitchingRuleList = []frontendSwitchRule{{
+		Name:     proxy.CandidateBackendName,
+		Cond:     "if",
+		CondTest: splitACL,
+		Index:    0,
+	}}
+	return frontend
+}
+
+func timeoutMilliseconds(seconds int) *int64 {
+	if seconds <= 0 {
+		seconds = model.DefaultTCPProxyIdleTimeoutSec
+	}
+	value := int64(seconds) * 1000
+	return &value
+}
+
+func isManagedTCPFrontend(name string) bool {
+	return strings.HasPrefix(strings.TrimSpace(name), "ep_tcp_")
+}
+
 func (m *ManagedProxyRuntime) proxySpec() managedContainerSpec {
 	//兼容远程docker
 	haproxyApiListenAddr := env.GetOrDefault("HAPROXY_API_LISTEN_ADDR", "127.0.0.1")
+	exposed := map[string]map[string]string{
+		portKey(servicecatalogapp.SharedFrontendBindPort): {},
+		portKey(m.cfg.HAProxyRuntimePort):                 {},
+		portKey(m.cfg.DataPlaneAPIPort):                   {},
+	}
+	portBinds := map[string][]dockerPortBinding{
+		portKey(servicecatalogapp.SharedFrontendBindPort): {
+			{HostIP: "0.0.0.0", HostPort: strconv.Itoa(servicecatalogapp.SharedFrontendBindPort)},
+		},
+		portKey(m.cfg.HAProxyRuntimePort): {
+			{HostIP: haproxyApiListenAddr, HostPort: strconv.Itoa(m.cfg.HAProxyRuntimePort)},
+		},
+		portKey(m.cfg.DataPlaneAPIPort): {
+			{HostIP: haproxyApiListenAddr, HostPort: strconv.Itoa(m.cfg.DataPlaneAPIPort)},
+		},
+	}
+	for _, proxy := range buildTCPProxyConfigs(m.desired) {
+		key := portKey(proxy.ListenPort)
+		exposed[key] = map[string]string{}
+		portBinds[key] = []dockerPortBinding{{HostIP: "0.0.0.0", HostPort: strconv.Itoa(proxy.ListenPort)}}
+	}
 	return managedContainerSpec{
 		Name:  m.cfg.ProxyContainerName,
 		Image: m.cfg.HAProxyImage,
@@ -939,22 +1168,8 @@ func (m *ManagedProxyRuntime) proxySpec() managedContainerSpec {
 		Tmpfs: map[string]string{
 			"/run": "exec,mode=755,size=16m",
 		},
-		Exposed: map[string]map[string]string{
-			portKey(servicecatalogapp.SharedFrontendBindPort): {},
-			portKey(m.cfg.HAProxyRuntimePort):                 {},
-			portKey(m.cfg.DataPlaneAPIPort):                   {},
-		},
-		PortBinds: map[string][]dockerPortBinding{
-			portKey(servicecatalogapp.SharedFrontendBindPort): {
-				{HostIP: "0.0.0.0", HostPort: strconv.Itoa(servicecatalogapp.SharedFrontendBindPort)},
-			},
-			portKey(m.cfg.HAProxyRuntimePort): {
-				{HostIP: haproxyApiListenAddr, HostPort: strconv.Itoa(m.cfg.HAProxyRuntimePort)},
-			},
-			portKey(m.cfg.DataPlaneAPIPort): {
-				{HostIP: haproxyApiListenAddr, HostPort: strconv.Itoa(m.cfg.DataPlaneAPIPort)},
-			},
-		},
+		Exposed:   exposed,
+		PortBinds: portBinds,
 		Network:   m.cfg.ProxyNetworkName,
 		IPAddress: m.cfg.ProxyIPAddress,
 		RestartPolicy: dockerRestartPolicy{
@@ -1167,6 +1382,24 @@ func cloneSnapshot(snapshot *grpcapi.ProxyConfigSnapshot) *grpcapi.ProxyConfigSn
 			CandidateReleaseId:      item.GetCandidateReleaseId(),
 			CandidateBackendName:    item.GetCandidateBackendName(),
 			CandidateTrafficPercent: item.GetCandidateTrafficPercent(),
+			TcpProxyPorts:           cloneTCPProxyPorts(item.GetTcpProxyPorts()),
+		})
+	}
+	return out
+}
+
+func cloneTCPProxyPorts(items []*grpcapi.TCPProxyPortConfig) []*grpcapi.TCPProxyPortConfig {
+	out := make([]*grpcapi.TCPProxyPortConfig, 0, len(items))
+	for _, item := range items {
+		if item == nil {
+			continue
+		}
+		out = append(out, &grpcapi.TCPProxyPortConfig{
+			ListenPort:           item.GetListenPort(),
+			ContainerPort:        item.GetContainerPort(),
+			IdleTimeoutSecond:    item.GetIdleTimeoutSecond(),
+			LiveBackendName:      item.GetLiveBackendName(),
+			CandidateBackendName: item.GetCandidateBackendName(),
 		})
 	}
 	return out

@@ -19,6 +19,12 @@ type PublishedPort struct {
 	ContainerPort int `json:"containerPort"`
 }
 
+type TCPProxyPort struct {
+	ListenPort        int `json:"listenPort"`
+	ContainerPort     int `json:"containerPort"`
+	IdleTimeoutSecond int `json:"idleTimeoutSecond"`
+}
+
 type UpsertServiceRequest struct {
 	Name                    string            `json:"name" binding:"required"`
 	ServiceKey              string            `json:"serviceKey" binding:"required,max=24"`
@@ -48,6 +54,7 @@ type UpsertServiceRequest struct {
 	Volumes                 []VolumeMount     `json:"volumes"`
 	NetworkAliases          []string          `json:"networkAliases"`
 	PublishedPorts          []PublishedPort   `json:"publishedPorts"`
+	TCPProxyPorts           []TCPProxyPort    `json:"tcpProxyPorts"`
 	Enabled                 *bool             `json:"enabled"`
 }
 
@@ -82,6 +89,7 @@ type ServiceOutput struct {
 	Volumes                 []VolumeMount     `json:"volumes"`
 	NetworkAliases          []string          `json:"networkAliases"`
 	PublishedPorts          []PublishedPort   `json:"publishedPorts"`
+	TCPProxyPorts           []TCPProxyPort    `json:"tcpProxyPorts"`
 	Enabled                 *bool             `json:"enabled"`
 	CreatedAt               time.Time         `json:"createdAt"`
 	UpdatedAt               time.Time         `json:"updatedAt"`
@@ -119,5 +127,6 @@ type ServiceDeploymentSpec struct {
 	Volumes                 []VolumeMount
 	NetworkAliases          []string
 	PublishedPorts          []PublishedPort
+	TCPProxyPorts           []TCPProxyPort
 	Enabled                 bool
 }

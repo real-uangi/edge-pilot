@@ -7,12 +7,11 @@
 package grpcapi
 
 import (
+	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
+	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 	reflect "reflect"
 	sync "sync"
 	unsafe "unsafe"
-
-	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
-	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 )
 
 const (
@@ -1546,6 +1545,7 @@ type ProxyServiceConfig struct {
 	SchedulerSdkPort        int32                  `protobuf:"varint,15,opt,name=scheduler_sdk_port,json=schedulerSdkPort,proto3" json:"scheduler_sdk_port,omitempty"`
 	SchedulerExecutorGroup  string                 `protobuf:"bytes,16,opt,name=scheduler_executor_group,json=schedulerExecutorGroup,proto3" json:"scheduler_executor_group,omitempty"`
 	RouteHosts              []string               `protobuf:"bytes,17,rep,name=route_hosts,json=routeHosts,proto3" json:"route_hosts,omitempty"`
+	TcpProxyPorts           []*TCPProxyPortConfig  `protobuf:"bytes,18,rep,name=tcp_proxy_ports,json=tcpProxyPorts,proto3" json:"tcp_proxy_ports,omitempty"`
 	unknownFields           protoimpl.UnknownFields
 	sizeCache               protoimpl.SizeCache
 }
@@ -1685,6 +1685,89 @@ func (x *ProxyServiceConfig) GetRouteHosts() []string {
 	return nil
 }
 
+func (x *ProxyServiceConfig) GetTcpProxyPorts() []*TCPProxyPortConfig {
+	if x != nil {
+		return x.TcpProxyPorts
+	}
+	return nil
+}
+
+type TCPProxyPortConfig struct {
+	state                protoimpl.MessageState `protogen:"open.v1"`
+	ListenPort           int32                  `protobuf:"varint,1,opt,name=listen_port,json=listenPort,proto3" json:"listen_port,omitempty"`
+	ContainerPort        int32                  `protobuf:"varint,2,opt,name=container_port,json=containerPort,proto3" json:"container_port,omitempty"`
+	IdleTimeoutSecond    int32                  `protobuf:"varint,3,opt,name=idle_timeout_second,json=idleTimeoutSecond,proto3" json:"idle_timeout_second,omitempty"`
+	LiveBackendName      string                 `protobuf:"bytes,4,opt,name=live_backend_name,json=liveBackendName,proto3" json:"live_backend_name,omitempty"`
+	CandidateBackendName string                 `protobuf:"bytes,5,opt,name=candidate_backend_name,json=candidateBackendName,proto3" json:"candidate_backend_name,omitempty"`
+	unknownFields        protoimpl.UnknownFields
+	sizeCache            protoimpl.SizeCache
+}
+
+func (x *TCPProxyPortConfig) Reset() {
+	*x = TCPProxyPortConfig{}
+	mi := &file_internal_shared_grpcapi_agent_control_proto_msgTypes[11]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *TCPProxyPortConfig) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*TCPProxyPortConfig) ProtoMessage() {}
+
+func (x *TCPProxyPortConfig) ProtoReflect() protoreflect.Message {
+	mi := &file_internal_shared_grpcapi_agent_control_proto_msgTypes[11]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use TCPProxyPortConfig.ProtoReflect.Descriptor instead.
+func (*TCPProxyPortConfig) Descriptor() ([]byte, []int) {
+	return file_internal_shared_grpcapi_agent_control_proto_rawDescGZIP(), []int{11}
+}
+
+func (x *TCPProxyPortConfig) GetListenPort() int32 {
+	if x != nil {
+		return x.ListenPort
+	}
+	return 0
+}
+
+func (x *TCPProxyPortConfig) GetContainerPort() int32 {
+	if x != nil {
+		return x.ContainerPort
+	}
+	return 0
+}
+
+func (x *TCPProxyPortConfig) GetIdleTimeoutSecond() int32 {
+	if x != nil {
+		return x.IdleTimeoutSecond
+	}
+	return 0
+}
+
+func (x *TCPProxyPortConfig) GetLiveBackendName() string {
+	if x != nil {
+		return x.LiveBackendName
+	}
+	return ""
+}
+
+func (x *TCPProxyPortConfig) GetCandidateBackendName() string {
+	if x != nil {
+		return x.CandidateBackendName
+	}
+	return ""
+}
+
 type ProxyConfigSnapshot struct {
 	state          protoimpl.MessageState `protogen:"open.v1"`
 	AgentId        string                 `protobuf:"bytes,1,opt,name=agent_id,json=agentId,proto3" json:"agent_id,omitempty"`
@@ -1698,7 +1781,7 @@ type ProxyConfigSnapshot struct {
 
 func (x *ProxyConfigSnapshot) Reset() {
 	*x = ProxyConfigSnapshot{}
-	mi := &file_internal_shared_grpcapi_agent_control_proto_msgTypes[11]
+	mi := &file_internal_shared_grpcapi_agent_control_proto_msgTypes[12]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1710,7 +1793,7 @@ func (x *ProxyConfigSnapshot) String() string {
 func (*ProxyConfigSnapshot) ProtoMessage() {}
 
 func (x *ProxyConfigSnapshot) ProtoReflect() protoreflect.Message {
-	mi := &file_internal_shared_grpcapi_agent_control_proto_msgTypes[11]
+	mi := &file_internal_shared_grpcapi_agent_control_proto_msgTypes[12]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1723,7 +1806,7 @@ func (x *ProxyConfigSnapshot) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ProxyConfigSnapshot.ProtoReflect.Descriptor instead.
 func (*ProxyConfigSnapshot) Descriptor() ([]byte, []int) {
-	return file_internal_shared_grpcapi_agent_control_proto_rawDescGZIP(), []int{11}
+	return file_internal_shared_grpcapi_agent_control_proto_rawDescGZIP(), []int{12}
 }
 
 func (x *ProxyConfigSnapshot) GetAgentId() string {
@@ -1775,7 +1858,7 @@ type BackendStatPoint struct {
 
 func (x *BackendStatPoint) Reset() {
 	*x = BackendStatPoint{}
-	mi := &file_internal_shared_grpcapi_agent_control_proto_msgTypes[12]
+	mi := &file_internal_shared_grpcapi_agent_control_proto_msgTypes[13]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1787,7 +1870,7 @@ func (x *BackendStatPoint) String() string {
 func (*BackendStatPoint) ProtoMessage() {}
 
 func (x *BackendStatPoint) ProtoReflect() protoreflect.Message {
-	mi := &file_internal_shared_grpcapi_agent_control_proto_msgTypes[12]
+	mi := &file_internal_shared_grpcapi_agent_control_proto_msgTypes[13]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1800,7 +1883,7 @@ func (x *BackendStatPoint) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use BackendStatPoint.ProtoReflect.Descriptor instead.
 func (*BackendStatPoint) Descriptor() ([]byte, []int) {
-	return file_internal_shared_grpcapi_agent_control_proto_rawDescGZIP(), []int{12}
+	return file_internal_shared_grpcapi_agent_control_proto_rawDescGZIP(), []int{13}
 }
 
 func (x *BackendStatPoint) GetServiceId() string {
@@ -1856,7 +1939,7 @@ type StatsReport struct {
 
 func (x *StatsReport) Reset() {
 	*x = StatsReport{}
-	mi := &file_internal_shared_grpcapi_agent_control_proto_msgTypes[13]
+	mi := &file_internal_shared_grpcapi_agent_control_proto_msgTypes[14]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1868,7 +1951,7 @@ func (x *StatsReport) String() string {
 func (*StatsReport) ProtoMessage() {}
 
 func (x *StatsReport) ProtoReflect() protoreflect.Message {
-	mi := &file_internal_shared_grpcapi_agent_control_proto_msgTypes[13]
+	mi := &file_internal_shared_grpcapi_agent_control_proto_msgTypes[14]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1881,7 +1964,7 @@ func (x *StatsReport) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use StatsReport.ProtoReflect.Descriptor instead.
 func (*StatsReport) Descriptor() ([]byte, []int) {
-	return file_internal_shared_grpcapi_agent_control_proto_rawDescGZIP(), []int{13}
+	return file_internal_shared_grpcapi_agent_control_proto_rawDescGZIP(), []int{14}
 }
 
 func (x *StatsReport) GetAgentId() string {
@@ -1918,7 +2001,7 @@ type PerformanceSnapshot struct {
 
 func (x *PerformanceSnapshot) Reset() {
 	*x = PerformanceSnapshot{}
-	mi := &file_internal_shared_grpcapi_agent_control_proto_msgTypes[14]
+	mi := &file_internal_shared_grpcapi_agent_control_proto_msgTypes[15]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1930,7 +2013,7 @@ func (x *PerformanceSnapshot) String() string {
 func (*PerformanceSnapshot) ProtoMessage() {}
 
 func (x *PerformanceSnapshot) ProtoReflect() protoreflect.Message {
-	mi := &file_internal_shared_grpcapi_agent_control_proto_msgTypes[14]
+	mi := &file_internal_shared_grpcapi_agent_control_proto_msgTypes[15]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1943,7 +2026,7 @@ func (x *PerformanceSnapshot) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PerformanceSnapshot.ProtoReflect.Descriptor instead.
 func (*PerformanceSnapshot) Descriptor() ([]byte, []int) {
-	return file_internal_shared_grpcapi_agent_control_proto_rawDescGZIP(), []int{14}
+	return file_internal_shared_grpcapi_agent_control_proto_rawDescGZIP(), []int{15}
 }
 
 func (x *PerformanceSnapshot) GetCpuPercent() float64 {
@@ -1991,7 +2074,7 @@ type HAProxyConfigRequest struct {
 
 func (x *HAProxyConfigRequest) Reset() {
 	*x = HAProxyConfigRequest{}
-	mi := &file_internal_shared_grpcapi_agent_control_proto_msgTypes[15]
+	mi := &file_internal_shared_grpcapi_agent_control_proto_msgTypes[16]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2003,7 +2086,7 @@ func (x *HAProxyConfigRequest) String() string {
 func (*HAProxyConfigRequest) ProtoMessage() {}
 
 func (x *HAProxyConfigRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_internal_shared_grpcapi_agent_control_proto_msgTypes[15]
+	mi := &file_internal_shared_grpcapi_agent_control_proto_msgTypes[16]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2016,7 +2099,7 @@ func (x *HAProxyConfigRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use HAProxyConfigRequest.ProtoReflect.Descriptor instead.
 func (*HAProxyConfigRequest) Descriptor() ([]byte, []int) {
-	return file_internal_shared_grpcapi_agent_control_proto_rawDescGZIP(), []int{15}
+	return file_internal_shared_grpcapi_agent_control_proto_rawDescGZIP(), []int{16}
 }
 
 func (x *HAProxyConfigRequest) GetRequestId() string {
@@ -2045,7 +2128,7 @@ type HAProxyConfigResponse struct {
 
 func (x *HAProxyConfigResponse) Reset() {
 	*x = HAProxyConfigResponse{}
-	mi := &file_internal_shared_grpcapi_agent_control_proto_msgTypes[16]
+	mi := &file_internal_shared_grpcapi_agent_control_proto_msgTypes[17]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2057,7 +2140,7 @@ func (x *HAProxyConfigResponse) String() string {
 func (*HAProxyConfigResponse) ProtoMessage() {}
 
 func (x *HAProxyConfigResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_internal_shared_grpcapi_agent_control_proto_msgTypes[16]
+	mi := &file_internal_shared_grpcapi_agent_control_proto_msgTypes[17]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2070,7 +2153,7 @@ func (x *HAProxyConfigResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use HAProxyConfigResponse.ProtoReflect.Descriptor instead.
 func (*HAProxyConfigResponse) Descriptor() ([]byte, []int) {
-	return file_internal_shared_grpcapi_agent_control_proto_rawDescGZIP(), []int{16}
+	return file_internal_shared_grpcapi_agent_control_proto_rawDescGZIP(), []int{17}
 }
 
 func (x *HAProxyConfigResponse) GetRequestId() string {
@@ -2111,7 +2194,7 @@ type ContainerListRequest struct {
 
 func (x *ContainerListRequest) Reset() {
 	*x = ContainerListRequest{}
-	mi := &file_internal_shared_grpcapi_agent_control_proto_msgTypes[17]
+	mi := &file_internal_shared_grpcapi_agent_control_proto_msgTypes[18]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2123,7 +2206,7 @@ func (x *ContainerListRequest) String() string {
 func (*ContainerListRequest) ProtoMessage() {}
 
 func (x *ContainerListRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_internal_shared_grpcapi_agent_control_proto_msgTypes[17]
+	mi := &file_internal_shared_grpcapi_agent_control_proto_msgTypes[18]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2136,7 +2219,7 @@ func (x *ContainerListRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ContainerListRequest.ProtoReflect.Descriptor instead.
 func (*ContainerListRequest) Descriptor() ([]byte, []int) {
-	return file_internal_shared_grpcapi_agent_control_proto_rawDescGZIP(), []int{17}
+	return file_internal_shared_grpcapi_agent_control_proto_rawDescGZIP(), []int{18}
 }
 
 func (x *ContainerListRequest) GetRequestId() string {
@@ -2170,7 +2253,7 @@ type ContainerSummary struct {
 
 func (x *ContainerSummary) Reset() {
 	*x = ContainerSummary{}
-	mi := &file_internal_shared_grpcapi_agent_control_proto_msgTypes[18]
+	mi := &file_internal_shared_grpcapi_agent_control_proto_msgTypes[19]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2182,7 +2265,7 @@ func (x *ContainerSummary) String() string {
 func (*ContainerSummary) ProtoMessage() {}
 
 func (x *ContainerSummary) ProtoReflect() protoreflect.Message {
-	mi := &file_internal_shared_grpcapi_agent_control_proto_msgTypes[18]
+	mi := &file_internal_shared_grpcapi_agent_control_proto_msgTypes[19]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2195,7 +2278,7 @@ func (x *ContainerSummary) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ContainerSummary.ProtoReflect.Descriptor instead.
 func (*ContainerSummary) Descriptor() ([]byte, []int) {
-	return file_internal_shared_grpcapi_agent_control_proto_rawDescGZIP(), []int{18}
+	return file_internal_shared_grpcapi_agent_control_proto_rawDescGZIP(), []int{19}
 }
 
 func (x *ContainerSummary) GetContainerId() string {
@@ -2273,7 +2356,7 @@ type ContainerListResponse struct {
 
 func (x *ContainerListResponse) Reset() {
 	*x = ContainerListResponse{}
-	mi := &file_internal_shared_grpcapi_agent_control_proto_msgTypes[19]
+	mi := &file_internal_shared_grpcapi_agent_control_proto_msgTypes[20]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2285,7 +2368,7 @@ func (x *ContainerListResponse) String() string {
 func (*ContainerListResponse) ProtoMessage() {}
 
 func (x *ContainerListResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_internal_shared_grpcapi_agent_control_proto_msgTypes[19]
+	mi := &file_internal_shared_grpcapi_agent_control_proto_msgTypes[20]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2298,7 +2381,7 @@ func (x *ContainerListResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ContainerListResponse.ProtoReflect.Descriptor instead.
 func (*ContainerListResponse) Descriptor() ([]byte, []int) {
-	return file_internal_shared_grpcapi_agent_control_proto_rawDescGZIP(), []int{19}
+	return file_internal_shared_grpcapi_agent_control_proto_rawDescGZIP(), []int{20}
 }
 
 func (x *ContainerListResponse) GetRequestId() string {
@@ -2340,7 +2423,7 @@ type ContainerInspectRequest struct {
 
 func (x *ContainerInspectRequest) Reset() {
 	*x = ContainerInspectRequest{}
-	mi := &file_internal_shared_grpcapi_agent_control_proto_msgTypes[20]
+	mi := &file_internal_shared_grpcapi_agent_control_proto_msgTypes[21]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2352,7 +2435,7 @@ func (x *ContainerInspectRequest) String() string {
 func (*ContainerInspectRequest) ProtoMessage() {}
 
 func (x *ContainerInspectRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_internal_shared_grpcapi_agent_control_proto_msgTypes[20]
+	mi := &file_internal_shared_grpcapi_agent_control_proto_msgTypes[21]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2365,7 +2448,7 @@ func (x *ContainerInspectRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ContainerInspectRequest.ProtoReflect.Descriptor instead.
 func (*ContainerInspectRequest) Descriptor() ([]byte, []int) {
-	return file_internal_shared_grpcapi_agent_control_proto_rawDescGZIP(), []int{20}
+	return file_internal_shared_grpcapi_agent_control_proto_rawDescGZIP(), []int{21}
 }
 
 func (x *ContainerInspectRequest) GetRequestId() string {
@@ -2418,7 +2501,7 @@ type ContainerDetails struct {
 
 func (x *ContainerDetails) Reset() {
 	*x = ContainerDetails{}
-	mi := &file_internal_shared_grpcapi_agent_control_proto_msgTypes[21]
+	mi := &file_internal_shared_grpcapi_agent_control_proto_msgTypes[22]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2430,7 +2513,7 @@ func (x *ContainerDetails) String() string {
 func (*ContainerDetails) ProtoMessage() {}
 
 func (x *ContainerDetails) ProtoReflect() protoreflect.Message {
-	mi := &file_internal_shared_grpcapi_agent_control_proto_msgTypes[21]
+	mi := &file_internal_shared_grpcapi_agent_control_proto_msgTypes[22]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2443,7 +2526,7 @@ func (x *ContainerDetails) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ContainerDetails.ProtoReflect.Descriptor instead.
 func (*ContainerDetails) Descriptor() ([]byte, []int) {
-	return file_internal_shared_grpcapi_agent_control_proto_rawDescGZIP(), []int{21}
+	return file_internal_shared_grpcapi_agent_control_proto_rawDescGZIP(), []int{22}
 }
 
 func (x *ContainerDetails) GetContainerId() string {
@@ -2605,7 +2688,7 @@ type ContainerInspectResponse struct {
 
 func (x *ContainerInspectResponse) Reset() {
 	*x = ContainerInspectResponse{}
-	mi := &file_internal_shared_grpcapi_agent_control_proto_msgTypes[22]
+	mi := &file_internal_shared_grpcapi_agent_control_proto_msgTypes[23]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2617,7 +2700,7 @@ func (x *ContainerInspectResponse) String() string {
 func (*ContainerInspectResponse) ProtoMessage() {}
 
 func (x *ContainerInspectResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_internal_shared_grpcapi_agent_control_proto_msgTypes[22]
+	mi := &file_internal_shared_grpcapi_agent_control_proto_msgTypes[23]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2630,7 +2713,7 @@ func (x *ContainerInspectResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ContainerInspectResponse.ProtoReflect.Descriptor instead.
 func (*ContainerInspectResponse) Descriptor() ([]byte, []int) {
-	return file_internal_shared_grpcapi_agent_control_proto_rawDescGZIP(), []int{22}
+	return file_internal_shared_grpcapi_agent_control_proto_rawDescGZIP(), []int{23}
 }
 
 func (x *ContainerInspectResponse) GetRequestId() string {
@@ -2674,7 +2757,7 @@ type ContainerLogStreamRequest struct {
 
 func (x *ContainerLogStreamRequest) Reset() {
 	*x = ContainerLogStreamRequest{}
-	mi := &file_internal_shared_grpcapi_agent_control_proto_msgTypes[23]
+	mi := &file_internal_shared_grpcapi_agent_control_proto_msgTypes[24]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2686,7 +2769,7 @@ func (x *ContainerLogStreamRequest) String() string {
 func (*ContainerLogStreamRequest) ProtoMessage() {}
 
 func (x *ContainerLogStreamRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_internal_shared_grpcapi_agent_control_proto_msgTypes[23]
+	mi := &file_internal_shared_grpcapi_agent_control_proto_msgTypes[24]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2699,7 +2782,7 @@ func (x *ContainerLogStreamRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ContainerLogStreamRequest.ProtoReflect.Descriptor instead.
 func (*ContainerLogStreamRequest) Descriptor() ([]byte, []int) {
-	return file_internal_shared_grpcapi_agent_control_proto_rawDescGZIP(), []int{23}
+	return file_internal_shared_grpcapi_agent_control_proto_rawDescGZIP(), []int{24}
 }
 
 func (x *ContainerLogStreamRequest) GetRequestId() string {
@@ -2751,7 +2834,7 @@ type ContainerLogChunk struct {
 
 func (x *ContainerLogChunk) Reset() {
 	*x = ContainerLogChunk{}
-	mi := &file_internal_shared_grpcapi_agent_control_proto_msgTypes[24]
+	mi := &file_internal_shared_grpcapi_agent_control_proto_msgTypes[25]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2763,7 +2846,7 @@ func (x *ContainerLogChunk) String() string {
 func (*ContainerLogChunk) ProtoMessage() {}
 
 func (x *ContainerLogChunk) ProtoReflect() protoreflect.Message {
-	mi := &file_internal_shared_grpcapi_agent_control_proto_msgTypes[24]
+	mi := &file_internal_shared_grpcapi_agent_control_proto_msgTypes[25]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2776,7 +2859,7 @@ func (x *ContainerLogChunk) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ContainerLogChunk.ProtoReflect.Descriptor instead.
 func (*ContainerLogChunk) Descriptor() ([]byte, []int) {
-	return file_internal_shared_grpcapi_agent_control_proto_rawDescGZIP(), []int{24}
+	return file_internal_shared_grpcapi_agent_control_proto_rawDescGZIP(), []int{25}
 }
 
 func (x *ContainerLogChunk) GetRequestId() string {
@@ -2954,7 +3037,7 @@ const file_internal_shared_grpcapi_agent_control_proto_rawDesc = "" +
 	"\x11cleanup_completed\x18\f \x01(\bR\x10cleanupCompleted\x1a:\n" +
 	"\fMetricsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\x03R\x05value:\x028\x01\"\xaf\x05\n" +
+	"\x05value\x18\x02 \x01(\x03R\x05value:\x028\x01\"\xfe\x05\n" +
 	"\x12ProxyServiceConfig\x12\x1d\n" +
 	"\n" +
 	"service_id\x18\x01 \x01(\tR\tserviceId\x12\x1f\n" +
@@ -2975,7 +3058,15 @@ const file_internal_shared_grpcapi_agent_control_proto_rawDesc = "" +
 	"\x12scheduler_sdk_port\x18\x0f \x01(\x05R\x10schedulerSdkPort\x128\n" +
 	"\x18scheduler_executor_group\x18\x10 \x01(\tR\x16schedulerExecutorGroup\x12\x1f\n" +
 	"\vroute_hosts\x18\x11 \x03(\tR\n" +
-	"routeHosts\"\xde\x01\n" +
+	"routeHosts\x12M\n" +
+	"\x0ftcp_proxy_ports\x18\x12 \x03(\v2%.edgepilot.grpcapi.TCPProxyPortConfigR\rtcpProxyPorts\"\xee\x01\n" +
+	"\x12TCPProxyPortConfig\x12\x1f\n" +
+	"\vlisten_port\x18\x01 \x01(\x05R\n" +
+	"listenPort\x12%\n" +
+	"\x0econtainer_port\x18\x02 \x01(\x05R\rcontainerPort\x12.\n" +
+	"\x13idle_timeout_second\x18\x03 \x01(\x05R\x11idleTimeoutSecond\x12*\n" +
+	"\x11live_backend_name\x18\x04 \x01(\tR\x0fliveBackendName\x124\n" +
+	"\x16candidate_backend_name\x18\x05 \x01(\tR\x14candidateBackendName\"\xde\x01\n" +
 	"\x13ProxyConfigSnapshot\x12\x19\n" +
 	"\bagent_id\x18\x01 \x01(\tR\aagentId\x12#\n" +
 	"\rfrontend_name\x18\x02 \x01(\tR\ffrontendName\x12'\n" +
@@ -3145,7 +3236,7 @@ func file_internal_shared_grpcapi_agent_control_proto_rawDescGZIP() []byte {
 }
 
 var file_internal_shared_grpcapi_agent_control_proto_enumTypes = make([]protoimpl.EnumInfo, 5)
-var file_internal_shared_grpcapi_agent_control_proto_msgTypes = make([]protoimpl.MessageInfo, 30)
+var file_internal_shared_grpcapi_agent_control_proto_msgTypes = make([]protoimpl.MessageInfo, 31)
 var file_internal_shared_grpcapi_agent_control_proto_goTypes = []any{
 	(Slot)(0),                         // 0: edgepilot.grpcapi.Slot
 	(TaskType)(0),                     // 1: edgepilot.grpcapi.TaskType
@@ -3163,75 +3254,77 @@ var file_internal_shared_grpcapi_agent_control_proto_goTypes = []any{
 	(*TaskCommand)(nil),               // 13: edgepilot.grpcapi.TaskCommand
 	(*TaskUpdate)(nil),                // 14: edgepilot.grpcapi.TaskUpdate
 	(*ProxyServiceConfig)(nil),        // 15: edgepilot.grpcapi.ProxyServiceConfig
-	(*ProxyConfigSnapshot)(nil),       // 16: edgepilot.grpcapi.ProxyConfigSnapshot
-	(*BackendStatPoint)(nil),          // 17: edgepilot.grpcapi.BackendStatPoint
-	(*StatsReport)(nil),               // 18: edgepilot.grpcapi.StatsReport
-	(*PerformanceSnapshot)(nil),       // 19: edgepilot.grpcapi.PerformanceSnapshot
-	(*HAProxyConfigRequest)(nil),      // 20: edgepilot.grpcapi.HAProxyConfigRequest
-	(*HAProxyConfigResponse)(nil),     // 21: edgepilot.grpcapi.HAProxyConfigResponse
-	(*ContainerListRequest)(nil),      // 22: edgepilot.grpcapi.ContainerListRequest
-	(*ContainerSummary)(nil),          // 23: edgepilot.grpcapi.ContainerSummary
-	(*ContainerListResponse)(nil),     // 24: edgepilot.grpcapi.ContainerListResponse
-	(*ContainerInspectRequest)(nil),   // 25: edgepilot.grpcapi.ContainerInspectRequest
-	(*ContainerDetails)(nil),          // 26: edgepilot.grpcapi.ContainerDetails
-	(*ContainerInspectResponse)(nil),  // 27: edgepilot.grpcapi.ContainerInspectResponse
-	(*ContainerLogStreamRequest)(nil), // 28: edgepilot.grpcapi.ContainerLogStreamRequest
-	(*ContainerLogChunk)(nil),         // 29: edgepilot.grpcapi.ContainerLogChunk
-	nil,                               // 30: edgepilot.grpcapi.TaskCommand.EnvEntry
-	nil,                               // 31: edgepilot.grpcapi.TaskCommand.HttpHealthHeadersEntry
-	nil,                               // 32: edgepilot.grpcapi.TaskUpdate.MetricsEntry
-	nil,                               // 33: edgepilot.grpcapi.ContainerDetails.LabelsEntry
-	nil,                               // 34: edgepilot.grpcapi.ContainerDetails.EnvEntry
+	(*TCPProxyPortConfig)(nil),        // 16: edgepilot.grpcapi.TCPProxyPortConfig
+	(*ProxyConfigSnapshot)(nil),       // 17: edgepilot.grpcapi.ProxyConfigSnapshot
+	(*BackendStatPoint)(nil),          // 18: edgepilot.grpcapi.BackendStatPoint
+	(*StatsReport)(nil),               // 19: edgepilot.grpcapi.StatsReport
+	(*PerformanceSnapshot)(nil),       // 20: edgepilot.grpcapi.PerformanceSnapshot
+	(*HAProxyConfigRequest)(nil),      // 21: edgepilot.grpcapi.HAProxyConfigRequest
+	(*HAProxyConfigResponse)(nil),     // 22: edgepilot.grpcapi.HAProxyConfigResponse
+	(*ContainerListRequest)(nil),      // 23: edgepilot.grpcapi.ContainerListRequest
+	(*ContainerSummary)(nil),          // 24: edgepilot.grpcapi.ContainerSummary
+	(*ContainerListResponse)(nil),     // 25: edgepilot.grpcapi.ContainerListResponse
+	(*ContainerInspectRequest)(nil),   // 26: edgepilot.grpcapi.ContainerInspectRequest
+	(*ContainerDetails)(nil),          // 27: edgepilot.grpcapi.ContainerDetails
+	(*ContainerInspectResponse)(nil),  // 28: edgepilot.grpcapi.ContainerInspectResponse
+	(*ContainerLogStreamRequest)(nil), // 29: edgepilot.grpcapi.ContainerLogStreamRequest
+	(*ContainerLogChunk)(nil),         // 30: edgepilot.grpcapi.ContainerLogChunk
+	nil,                               // 31: edgepilot.grpcapi.TaskCommand.EnvEntry
+	nil,                               // 32: edgepilot.grpcapi.TaskCommand.HttpHealthHeadersEntry
+	nil,                               // 33: edgepilot.grpcapi.TaskUpdate.MetricsEntry
+	nil,                               // 34: edgepilot.grpcapi.ContainerDetails.LabelsEntry
+	nil,                               // 35: edgepilot.grpcapi.ContainerDetails.EnvEntry
 }
 var file_internal_shared_grpcapi_agent_control_proto_depIdxs = []int32{
 	8,  // 0: edgepilot.grpcapi.AgentMessage.hello:type_name -> edgepilot.grpcapi.HelloMessage
 	9,  // 1: edgepilot.grpcapi.AgentMessage.heartbeat:type_name -> edgepilot.grpcapi.HeartbeatMessage
 	14, // 2: edgepilot.grpcapi.AgentMessage.task_update:type_name -> edgepilot.grpcapi.TaskUpdate
-	18, // 3: edgepilot.grpcapi.AgentMessage.stats:type_name -> edgepilot.grpcapi.StatsReport
-	21, // 4: edgepilot.grpcapi.AgentMessage.haproxy_config_response:type_name -> edgepilot.grpcapi.HAProxyConfigResponse
+	19, // 3: edgepilot.grpcapi.AgentMessage.stats:type_name -> edgepilot.grpcapi.StatsReport
+	22, // 4: edgepilot.grpcapi.AgentMessage.haproxy_config_response:type_name -> edgepilot.grpcapi.HAProxyConfigResponse
 	7,  // 5: edgepilot.grpcapi.AgentMessage.scheduler_envelope:type_name -> edgepilot.grpcapi.SchedulerRelayEnvelope
-	24, // 6: edgepilot.grpcapi.AgentMessage.container_list_response:type_name -> edgepilot.grpcapi.ContainerListResponse
-	27, // 7: edgepilot.grpcapi.AgentMessage.container_inspect_response:type_name -> edgepilot.grpcapi.ContainerInspectResponse
-	29, // 8: edgepilot.grpcapi.AgentMessage.container_log_chunk:type_name -> edgepilot.grpcapi.ContainerLogChunk
+	25, // 6: edgepilot.grpcapi.AgentMessage.container_list_response:type_name -> edgepilot.grpcapi.ContainerListResponse
+	28, // 7: edgepilot.grpcapi.AgentMessage.container_inspect_response:type_name -> edgepilot.grpcapi.ContainerInspectResponse
+	30, // 8: edgepilot.grpcapi.AgentMessage.container_log_chunk:type_name -> edgepilot.grpcapi.ContainerLogChunk
 	10, // 9: edgepilot.grpcapi.ControlMessage.ack:type_name -> edgepilot.grpcapi.AckMessage
 	13, // 10: edgepilot.grpcapi.ControlMessage.task:type_name -> edgepilot.grpcapi.TaskCommand
-	16, // 11: edgepilot.grpcapi.ControlMessage.proxy_config:type_name -> edgepilot.grpcapi.ProxyConfigSnapshot
-	20, // 12: edgepilot.grpcapi.ControlMessage.haproxy_config_request:type_name -> edgepilot.grpcapi.HAProxyConfigRequest
+	17, // 11: edgepilot.grpcapi.ControlMessage.proxy_config:type_name -> edgepilot.grpcapi.ProxyConfigSnapshot
+	21, // 12: edgepilot.grpcapi.ControlMessage.haproxy_config_request:type_name -> edgepilot.grpcapi.HAProxyConfigRequest
 	7,  // 13: edgepilot.grpcapi.ControlMessage.scheduler_envelope:type_name -> edgepilot.grpcapi.SchedulerRelayEnvelope
-	22, // 14: edgepilot.grpcapi.ControlMessage.container_list_request:type_name -> edgepilot.grpcapi.ContainerListRequest
-	25, // 15: edgepilot.grpcapi.ControlMessage.container_inspect_request:type_name -> edgepilot.grpcapi.ContainerInspectRequest
-	28, // 16: edgepilot.grpcapi.ControlMessage.container_log_stream_request:type_name -> edgepilot.grpcapi.ContainerLogStreamRequest
+	23, // 14: edgepilot.grpcapi.ControlMessage.container_list_request:type_name -> edgepilot.grpcapi.ContainerListRequest
+	26, // 15: edgepilot.grpcapi.ControlMessage.container_inspect_request:type_name -> edgepilot.grpcapi.ContainerInspectRequest
+	29, // 16: edgepilot.grpcapi.ControlMessage.container_log_stream_request:type_name -> edgepilot.grpcapi.ContainerLogStreamRequest
 	3,  // 17: edgepilot.grpcapi.SchedulerRelayEnvelope.direction:type_name -> edgepilot.grpcapi.SchedulerRelayDirection
 	4,  // 18: edgepilot.grpcapi.SchedulerRelayEnvelope.payload_type:type_name -> edgepilot.grpcapi.SchedulerRelayPayloadType
 	1,  // 19: edgepilot.grpcapi.TaskCommand.type:type_name -> edgepilot.grpcapi.TaskType
 	0,  // 20: edgepilot.grpcapi.TaskCommand.target_slot:type_name -> edgepilot.grpcapi.Slot
 	0,  // 21: edgepilot.grpcapi.TaskCommand.current_live_slot:type_name -> edgepilot.grpcapi.Slot
-	30, // 22: edgepilot.grpcapi.TaskCommand.env:type_name -> edgepilot.grpcapi.TaskCommand.EnvEntry
+	31, // 22: edgepilot.grpcapi.TaskCommand.env:type_name -> edgepilot.grpcapi.TaskCommand.EnvEntry
 	11, // 23: edgepilot.grpcapi.TaskCommand.volumes:type_name -> edgepilot.grpcapi.VolumeMount
 	12, // 24: edgepilot.grpcapi.TaskCommand.published_ports:type_name -> edgepilot.grpcapi.PublishedPort
-	31, // 25: edgepilot.grpcapi.TaskCommand.http_health_headers:type_name -> edgepilot.grpcapi.TaskCommand.HttpHealthHeadersEntry
+	32, // 25: edgepilot.grpcapi.TaskCommand.http_health_headers:type_name -> edgepilot.grpcapi.TaskCommand.HttpHealthHeadersEntry
 	2,  // 26: edgepilot.grpcapi.TaskUpdate.status:type_name -> edgepilot.grpcapi.TaskStatus
 	0,  // 27: edgepilot.grpcapi.TaskUpdate.slot:type_name -> edgepilot.grpcapi.Slot
-	32, // 28: edgepilot.grpcapi.TaskUpdate.metrics:type_name -> edgepilot.grpcapi.TaskUpdate.MetricsEntry
+	33, // 28: edgepilot.grpcapi.TaskUpdate.metrics:type_name -> edgepilot.grpcapi.TaskUpdate.MetricsEntry
 	0,  // 29: edgepilot.grpcapi.ProxyServiceConfig.current_live_slot:type_name -> edgepilot.grpcapi.Slot
-	15, // 30: edgepilot.grpcapi.ProxyConfigSnapshot.services:type_name -> edgepilot.grpcapi.ProxyServiceConfig
-	17, // 31: edgepilot.grpcapi.StatsReport.services:type_name -> edgepilot.grpcapi.BackendStatPoint
-	19, // 32: edgepilot.grpcapi.StatsReport.self_performance:type_name -> edgepilot.grpcapi.PerformanceSnapshot
-	0,  // 33: edgepilot.grpcapi.ContainerSummary.slot:type_name -> edgepilot.grpcapi.Slot
-	23, // 34: edgepilot.grpcapi.ContainerListResponse.containers:type_name -> edgepilot.grpcapi.ContainerSummary
-	0,  // 35: edgepilot.grpcapi.ContainerDetails.slot:type_name -> edgepilot.grpcapi.Slot
-	33, // 36: edgepilot.grpcapi.ContainerDetails.labels:type_name -> edgepilot.grpcapi.ContainerDetails.LabelsEntry
-	34, // 37: edgepilot.grpcapi.ContainerDetails.env:type_name -> edgepilot.grpcapi.ContainerDetails.EnvEntry
-	11, // 38: edgepilot.grpcapi.ContainerDetails.volumes:type_name -> edgepilot.grpcapi.VolumeMount
-	12, // 39: edgepilot.grpcapi.ContainerDetails.ports:type_name -> edgepilot.grpcapi.PublishedPort
-	26, // 40: edgepilot.grpcapi.ContainerInspectResponse.details:type_name -> edgepilot.grpcapi.ContainerDetails
-	5,  // 41: edgepilot.grpcapi.AgentControl.Connect:input_type -> edgepilot.grpcapi.AgentMessage
-	6,  // 42: edgepilot.grpcapi.AgentControl.Connect:output_type -> edgepilot.grpcapi.ControlMessage
-	42, // [42:43] is the sub-list for method output_type
-	41, // [41:42] is the sub-list for method input_type
-	41, // [41:41] is the sub-list for extension type_name
-	41, // [41:41] is the sub-list for extension extendee
-	0,  // [0:41] is the sub-list for field type_name
+	16, // 30: edgepilot.grpcapi.ProxyServiceConfig.tcp_proxy_ports:type_name -> edgepilot.grpcapi.TCPProxyPortConfig
+	15, // 31: edgepilot.grpcapi.ProxyConfigSnapshot.services:type_name -> edgepilot.grpcapi.ProxyServiceConfig
+	18, // 32: edgepilot.grpcapi.StatsReport.services:type_name -> edgepilot.grpcapi.BackendStatPoint
+	20, // 33: edgepilot.grpcapi.StatsReport.self_performance:type_name -> edgepilot.grpcapi.PerformanceSnapshot
+	0,  // 34: edgepilot.grpcapi.ContainerSummary.slot:type_name -> edgepilot.grpcapi.Slot
+	24, // 35: edgepilot.grpcapi.ContainerListResponse.containers:type_name -> edgepilot.grpcapi.ContainerSummary
+	0,  // 36: edgepilot.grpcapi.ContainerDetails.slot:type_name -> edgepilot.grpcapi.Slot
+	34, // 37: edgepilot.grpcapi.ContainerDetails.labels:type_name -> edgepilot.grpcapi.ContainerDetails.LabelsEntry
+	35, // 38: edgepilot.grpcapi.ContainerDetails.env:type_name -> edgepilot.grpcapi.ContainerDetails.EnvEntry
+	11, // 39: edgepilot.grpcapi.ContainerDetails.volumes:type_name -> edgepilot.grpcapi.VolumeMount
+	12, // 40: edgepilot.grpcapi.ContainerDetails.ports:type_name -> edgepilot.grpcapi.PublishedPort
+	27, // 41: edgepilot.grpcapi.ContainerInspectResponse.details:type_name -> edgepilot.grpcapi.ContainerDetails
+	5,  // 42: edgepilot.grpcapi.AgentControl.Connect:input_type -> edgepilot.grpcapi.AgentMessage
+	6,  // 43: edgepilot.grpcapi.AgentControl.Connect:output_type -> edgepilot.grpcapi.ControlMessage
+	43, // [43:44] is the sub-list for method output_type
+	42, // [42:43] is the sub-list for method input_type
+	42, // [42:42] is the sub-list for extension type_name
+	42, // [42:42] is the sub-list for extension extendee
+	0,  // [0:42] is the sub-list for field type_name
 }
 
 func init() { file_internal_shared_grpcapi_agent_control_proto_init() }
@@ -3266,7 +3359,7 @@ func file_internal_shared_grpcapi_agent_control_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_internal_shared_grpcapi_agent_control_proto_rawDesc), len(file_internal_shared_grpcapi_agent_control_proto_rawDesc)),
 			NumEnums:      5,
-			NumMessages:   30,
+			NumMessages:   31,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

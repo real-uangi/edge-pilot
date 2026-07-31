@@ -43,6 +43,7 @@ func TestReconcileLockedUsesTransactionAndAppliesLiveSlotAfterCommit(t *testing.
 		"ensure-server:be-api_green/srv@tx-1",
 		"ensure-backend:ep_normalize@tx-1",
 		"replace-frontend:ep_http@tx-1",
+		"list-frontends",
 		"list-backends",
 		"commit:tx-1",
 	}
@@ -74,6 +75,7 @@ func TestReconcileLockedDeletesStaleBackendsInsideTransaction(t *testing.T) {
 		"start-transaction:7",
 		"ensure-backend:ep_normalize@tx-9",
 		"replace-frontend:ep_http@tx-9",
+		"list-frontends",
 		"list-backends",
 		"delete-backend:stale-api@tx-9",
 		"commit:tx-9",
@@ -187,6 +189,7 @@ func TestReconcileLockedAbortsTransactionWhenCommitFails(t *testing.T) {
 		"ensure-server:be-api_blue/srv@tx-4",
 		"ensure-backend:ep_normalize@tx-4",
 		"replace-frontend:ep_http@tx-4",
+		"list-frontends",
 		"list-backends",
 		"commit:tx-4",
 		"abort:tx-4",
@@ -416,6 +419,7 @@ func TestReconcileLockedPrecreatesServersWithResolversForEmptyInstances(t *testi
 		"ensure-server:be-api_green/srv@tx-6",
 		"ensure-backend:ep_normalize@tx-6",
 		"replace-frontend:ep_http@tx-6",
+		"list-frontends",
 		"list-backends",
 		"commit:tx-6",
 	}
@@ -449,6 +453,115 @@ func TestFrontendSectionAddsStickyPreviewRoutingRules(t *testing.T) {
 	assertFrontendStaticAssetRules(t, section)
 	if len(section.HTTPAfterResponseRules) != 0 {
 		t.Fatalf("expected 0 after-response rules after normalize move to backend, got %d", len(section.HTTPAfterResponseRules))
+	}
+}
+
+func TestTCPProxyFrontendSectionUsesTCPAndNewConnectionSplit(t *testing.T) {
+	section := tcpProxyFrontendSection(tcpProxyConfig{
+		FrontendName:            "ep_tcp_15432",
+		UnavailableBackendName:  "ep_tcp_unavailable_15432",
+		ListenPort:              15432,
+		IdleTimeoutSecond:       45,
+		LiveBackendName:         "tcp_live",
+		CandidateBackendName:    "tcp_candidate",
+		CandidateTrafficPercent: 25,
+	})
+	if section.Mode != "tcp" || section.DefaultBackend != "tcp_live" {
+		t.Fatalf("unexpected TCP frontend %#v", section)
+	}
+	if section.ClientTimeout == nil || *section.ClientTimeout != 45000 {
+		t.Fatalf("expected 45 second client timeout, got %#v", section.ClientTimeout)
+	}
+	if len(section.HTTPRequestRules) != 0 || len(section.HTTPAfterResponseRules) != 0 {
+		t.Fatalf("TCP frontend must not contain HTTP rules: %#v", section)
+	}
+	if len(section.BackendSwitchingRuleList) != 1 || section.BackendSwitchingRuleList[0].Name != "tcp_candidate" {
+		t.Fatalf("expected candidate split rule, got %#v", section.BackendSwitchingRuleList)
+	}
+}
+
+func TestBuildTCPProxyConfigsCarriesContainerPortAndReleaseTargets(t *testing.T) {
+	snapshot := &grpcapi.ProxyConfigSnapshot{Services: []*grpcapi.ProxyServiceConfig{{
+		ServiceKey:              "tcp-service",
+		CurrentLiveSlot:         grpcapi.Slot_SLOT_BLUE,
+		LiveReleaseId:           "release-live",
+		CandidateReleaseId:      "release-candidate",
+		CandidateTrafficPercent: 30,
+		TcpProxyPorts: []*grpcapi.TCPProxyPortConfig{{
+			ListenPort:           15432,
+			ContainerPort:        5432,
+			IdleTimeoutSecond:    3600,
+			LiveBackendName:      "tcp_live",
+			CandidateBackendName: "tcp_candidate",
+		}},
+	}}}
+	configs := buildTCPProxyConfigs(snapshot)
+	if len(configs) != 1 {
+		t.Fatalf("expected one TCP proxy config, got %#v", configs)
+	}
+	if got := configs[0]; got.ContainerPort != 5432 || got.LiveBackendName != "tcp_live" || got.CandidateBackendName != "tcp_candidate" || got.CandidateTrafficPercent != 30 {
+		t.Fatalf("unexpected TCP proxy config %#v", got)
+	}
+}
+
+func TestReconcileLockedAppliesAndCleansTCPProxyConfiguration(t *testing.T) {
+	callLog := make([]string, 0, 32)
+	dataplane := &fakeManagedProxyDataplane{
+		version:   "42",
+		txID:      "tx-tcp",
+		backends:  []string{"ep_default", "tcp_stale", "ep_tcp_unavailable_15432"},
+		frontends: []string{"ep_http", "ep_tcp_15432", "ep_tcp_19999"},
+		callLog:   &callLog,
+	}
+	proxy := newTestManagedProxyRuntime(dataplane, &fakeManagedProxyRuntime{callLog: &callLog})
+	snapshot := testProxySnapshotWithService(grpcapi.Slot_SLOT_BLUE)
+	snapshot.Services[0].CandidateTrafficPercent = 30
+	snapshot.Services[0].TcpProxyPorts = []*grpcapi.TCPProxyPortConfig{{
+		ListenPort:           15432,
+		ContainerPort:        5432,
+		IdleTimeoutSecond:    120,
+		LiveBackendName:      "tcp_live",
+		CandidateBackendName: "tcp_candidate",
+	}}
+
+	if err := proxy.reconcileLocked(context.Background(), snapshot); err != nil {
+		t.Fatalf("reconcileLocked() error = %v", err)
+	}
+	if !containsCall(callLog, "delete-frontend:ep_tcp_19999@tx-tcp") || !containsCall(callLog, "delete-backend:tcp_stale@tx-tcp") {
+		t.Fatalf("expected stale TCP resources to be removed, got %#v", callLog)
+	}
+	frontend := findFrontendConfig(dataplane.frontendConfigs, "ep_tcp_15432")
+	if frontend == nil || frontend.Mode != "tcp" || len(frontend.HTTPRequestRules) != 0 || len(frontend.BackendSwitchingRuleList) != 1 {
+		t.Fatalf("unexpected TCP frontend %#v", frontend)
+	}
+	backend := findManagedBackendConfig(dataplane.backendConfigs, "tcp_live")
+	if backend == nil || backend.Mode != "tcp" || backend.ServerTimeout == nil || *backend.ServerTimeout != 120000 {
+		t.Fatalf("unexpected TCP backend %#v", backend)
+	}
+	server := findBackendServer(dataplane.serverEntries, "tcp_live")
+	if server == nil || server.Server.Port != 5432 {
+		t.Fatalf("unexpected TCP server %#v", server)
+	}
+}
+
+func TestProxySpecPublishesTCPListenPorts(t *testing.T) {
+	proxy := &ManagedProxyRuntime{
+		cfg: &config.AgentRuntimeConfig{
+			HAProxyRuntimePort: 19999,
+			DataPlaneAPIPort:   5555,
+		},
+		desired: &grpcapi.ProxyConfigSnapshot{Services: []*grpcapi.ProxyServiceConfig{{
+			TcpProxyPorts: []*grpcapi.TCPProxyPortConfig{{ListenPort: 15432, ContainerPort: 5432}},
+		}}},
+	}
+	spec := proxy.proxySpec()
+	key := portKey(15432)
+	if _, ok := spec.Exposed[key]; !ok {
+		t.Fatalf("expected TCP port %s to be exposed: %#v", key, spec.Exposed)
+	}
+	bindings := spec.PortBinds[key]
+	if len(bindings) != 1 || bindings[0].HostPort != "15432" || bindings[0].HostIP != "0.0.0.0" {
+		t.Fatalf("unexpected TCP port binding %#v", bindings)
 	}
 }
 
@@ -1167,6 +1280,7 @@ type fakeManagedProxyDataplane struct {
 	version          string
 	txID             string
 	backends         []string
+	frontends        []string
 	ensureBackendErr error
 	ensureServerErr  error
 	replaceErr       error
@@ -1176,6 +1290,7 @@ type fakeManagedProxyDataplane struct {
 	serverConfigs    []backendServer
 	serverEntries    []dataplaneBackendServer
 	backendConfigs   []backendSection
+	frontendConfigs  []frontendSection
 }
 
 func (f *fakeManagedProxyDataplane) ConfigurationVersion(context.Context) (string, error) {
@@ -1209,6 +1324,7 @@ func (f *fakeManagedProxyDataplane) AbortTransaction(_ context.Context, transact
 
 func (f *fakeManagedProxyDataplane) ReplaceFrontendInTransaction(_ context.Context, transactionID string, section frontendSection) error {
 	*f.callLog = append(*f.callLog, "replace-frontend:"+section.Name+"@"+transactionID)
+	f.frontendConfigs = append(f.frontendConfigs, section)
 	return f.replaceErr
 }
 
@@ -1235,6 +1351,52 @@ func (f *fakeManagedProxyDataplane) ListBackends(context.Context) ([]string, err
 
 func (f *fakeManagedProxyDataplane) DeleteBackendInTransaction(_ context.Context, backendName string, transactionID string) error {
 	*f.callLog = append(*f.callLog, "delete-backend:"+backendName+"@"+transactionID)
+	return nil
+}
+
+func (f *fakeManagedProxyDataplane) ListFrontends(context.Context) ([]string, error) {
+	*f.callLog = append(*f.callLog, "list-frontends")
+	return append([]string(nil), f.frontends...), nil
+}
+
+func (f *fakeManagedProxyDataplane) DeleteFrontendInTransaction(_ context.Context, frontendName string, transactionID string) error {
+	*f.callLog = append(*f.callLog, "delete-frontend:"+frontendName+"@"+transactionID)
+	return nil
+}
+
+func containsCall(calls []string, expected string) bool {
+	for _, call := range calls {
+		if call == expected {
+			return true
+		}
+	}
+	return false
+}
+
+func findFrontendConfig(items []frontendSection, name string) *frontendSection {
+	for i := range items {
+		if items[i].Name == name {
+			return &items[i]
+		}
+	}
+	return nil
+}
+
+func findManagedBackendConfig(items []backendSection, name string) *backendSection {
+	for i := range items {
+		if items[i].Name == name {
+			return &items[i]
+		}
+	}
+	return nil
+}
+
+func findBackendServer(items []dataplaneBackendServer, backendName string) *dataplaneBackendServer {
+	for i := range items {
+		if items[i].Backend == backendName {
+			return &items[i]
+		}
+	}
 	return nil
 }
 
