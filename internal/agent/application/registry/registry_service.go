@@ -1,6 +1,8 @@
 package registry
 
 import (
+	"sort"
+	"strings"
 	"time"
 
 	"github.com/real-uangi/edge-pilot/internal/agent/domain"
@@ -140,6 +142,10 @@ func (s *RegistryService) MarkConnected(agentID string, hostname string, version
 }
 
 func (s *RegistryService) MarkConnectedWithIP(agentID string, hostname string, reportedIP string, version string, capabilities []string) error {
+	return s.MarkConnectedWithIPAndPorts(agentID, hostname, reportedIP, version, capabilities, nil)
+}
+
+func (s *RegistryService) MarkConnectedWithIPAndPorts(agentID string, hostname string, reportedIP string, version string, capabilities []string, preboundTCPPorts []int32) error {
 	node, err := s.repo.Get(agentID)
 	if err != nil {
 		return err
@@ -158,6 +164,7 @@ func (s *RegistryService) MarkConnectedWithIP(agentID string, hostname string, r
 	node.LastConnectedAt = &now
 	node.LastHeartbeatAt = &now
 	node.Capabilities = commondb.NewJSONB(capabilities)
+	node.PreboundTCPPorts = commondb.NewJSONB(normalizePreboundTCPPorts(preboundTCPPorts))
 	node.LastError = ""
 	return s.repo.Save(node)
 }
@@ -246,37 +253,78 @@ func (s *RegistryService) setEnabled(agentID string, enabled bool) (*dto.AgentOu
 
 func toAgentOutput(node *model.AgentNode) dto.AgentOutput {
 	return dto.AgentOutput{
-		ID:              node.ID,
-		Enabled:         node.Enabled,
-		Hostname:        node.Hostname,
-		IP:              node.ReportedIP,
-		Version:         node.Version,
-		Online:          node.Online,
-		LastHeartbeatAt: node.LastHeartbeatAt,
-		LastConnectedAt: node.LastConnectedAt,
-		LastError:       node.LastError,
-		TokenRotatedAt:  node.TokenRotatedAt,
-		CreatedAt:       node.CreatedAt,
-		UpdatedAt:       node.UpdatedAt,
+		ID:                  node.ID,
+		Enabled:             node.Enabled,
+		Hostname:            node.Hostname,
+		IP:                  node.ReportedIP,
+		Version:             node.Version,
+		Online:              node.Online,
+		LastHeartbeatAt:     node.LastHeartbeatAt,
+		LastConnectedAt:     node.LastConnectedAt,
+		LastError:           node.LastError,
+		TokenRotatedAt:      node.TokenRotatedAt,
+		TCPPrebindSupported: hasCapability(node, model.TCPProxyPrebindCapability),
+		PreboundTCPPorts:    preboundTCPPorts(node),
+		CreatedAt:           node.CreatedAt,
+		UpdatedAt:           node.UpdatedAt,
 	}
 }
 
 func toAgentCredentialOutput(node *model.AgentNode, token string) dto.AgentCredentialOutput {
 	return dto.AgentCredentialOutput{
-		ID:              node.ID,
-		Token:           token,
-		Enabled:         node.Enabled,
-		Hostname:        node.Hostname,
-		IP:              node.ReportedIP,
-		Version:         node.Version,
-		Online:          node.Online,
-		LastHeartbeatAt: node.LastHeartbeatAt,
-		LastConnectedAt: node.LastConnectedAt,
-		LastError:       node.LastError,
-		TokenRotatedAt:  node.TokenRotatedAt,
-		CreatedAt:       node.CreatedAt,
-		UpdatedAt:       node.UpdatedAt,
+		ID:                  node.ID,
+		Token:               token,
+		Enabled:             node.Enabled,
+		Hostname:            node.Hostname,
+		IP:                  node.ReportedIP,
+		Version:             node.Version,
+		Online:              node.Online,
+		LastHeartbeatAt:     node.LastHeartbeatAt,
+		LastConnectedAt:     node.LastConnectedAt,
+		LastError:           node.LastError,
+		TokenRotatedAt:      node.TokenRotatedAt,
+		TCPPrebindSupported: hasCapability(node, model.TCPProxyPrebindCapability),
+		PreboundTCPPorts:    preboundTCPPorts(node),
+		CreatedAt:           node.CreatedAt,
+		UpdatedAt:           node.UpdatedAt,
 	}
+}
+
+func normalizePreboundTCPPorts(items []int32) []int {
+	seen := make(map[int]struct{}, len(items))
+	ports := make([]int, 0, len(items))
+	for _, item := range items {
+		port := int(item)
+		if port <= 0 || port > 65535 {
+			continue
+		}
+		if _, ok := seen[port]; ok {
+			continue
+		}
+		seen[port] = struct{}{}
+		ports = append(ports, port)
+	}
+	sort.Ints(ports)
+	return ports
+}
+
+func hasCapability(node *model.AgentNode, capability string) bool {
+	if node == nil || node.Capabilities == nil {
+		return false
+	}
+	for _, item := range node.Capabilities.Get() {
+		if strings.TrimSpace(item) == capability {
+			return true
+		}
+	}
+	return false
+}
+
+func preboundTCPPorts(node *model.AgentNode) []int {
+	if node == nil || node.PreboundTCPPorts == nil {
+		return []int{}
+	}
+	return append([]int(nil), node.PreboundTCPPorts.Get()...)
 }
 
 func boolPointer(v bool) *bool {

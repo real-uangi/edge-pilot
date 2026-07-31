@@ -757,15 +757,16 @@ func (x *SchedulerRelayEnvelope) GetErrorMessage() string {
 }
 
 type HelloMessage struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	AgentId       string                 `protobuf:"bytes,1,opt,name=agent_id,json=agentId,proto3" json:"agent_id,omitempty"`
-	Token         string                 `protobuf:"bytes,2,opt,name=token,proto3" json:"token,omitempty"`
-	Version       string                 `protobuf:"bytes,3,opt,name=version,proto3" json:"version,omitempty"`
-	Hostname      string                 `protobuf:"bytes,4,opt,name=hostname,proto3" json:"hostname,omitempty"`
-	Capabilities  []string               `protobuf:"bytes,5,rep,name=capabilities,proto3" json:"capabilities,omitempty"`
-	ReportedIp    string                 `protobuf:"bytes,6,opt,name=reported_ip,json=reportedIp,proto3" json:"reported_ip,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state            protoimpl.MessageState `protogen:"open.v1"`
+	AgentId          string                 `protobuf:"bytes,1,opt,name=agent_id,json=agentId,proto3" json:"agent_id,omitempty"`
+	Token            string                 `protobuf:"bytes,2,opt,name=token,proto3" json:"token,omitempty"`
+	Version          string                 `protobuf:"bytes,3,opt,name=version,proto3" json:"version,omitempty"`
+	Hostname         string                 `protobuf:"bytes,4,opt,name=hostname,proto3" json:"hostname,omitempty"`
+	Capabilities     []string               `protobuf:"bytes,5,rep,name=capabilities,proto3" json:"capabilities,omitempty"`
+	ReportedIp       string                 `protobuf:"bytes,6,opt,name=reported_ip,json=reportedIp,proto3" json:"reported_ip,omitempty"`
+	PreboundTcpPorts []int32                `protobuf:"varint,7,rep,packed,name=prebound_tcp_ports,json=preboundTcpPorts,proto3" json:"prebound_tcp_ports,omitempty"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
 }
 
 func (x *HelloMessage) Reset() {
@@ -838,6 +839,13 @@ func (x *HelloMessage) GetReportedIp() string {
 		return x.ReportedIp
 	}
 	return ""
+}
+
+func (x *HelloMessage) GetPreboundTcpPorts() []int32 {
+	if x != nil {
+		return x.PreboundTcpPorts
+	}
+	return nil
 }
 
 type HeartbeatMessage struct {
@@ -2941,7 +2949,7 @@ const file_internal_shared_grpcapi_agent_control_proto_rawDesc = "" +
 	"\tdirection\x18\x05 \x01(\x0e2*.edgepilot.grpcapi.SchedulerRelayDirectionR\tdirection\x12O\n" +
 	"\fpayload_type\x18\x06 \x01(\x0e2,.edgepilot.grpcapi.SchedulerRelayPayloadTypeR\vpayloadType\x12#\n" +
 	"\rpayload_bytes\x18\a \x01(\fR\fpayloadBytes\x12#\n" +
-	"\rerror_message\x18\b \x01(\tR\ferrorMessage\"\xba\x01\n" +
+	"\rerror_message\x18\b \x01(\tR\ferrorMessage\"\xe8\x01\n" +
 	"\fHelloMessage\x12\x19\n" +
 	"\bagent_id\x18\x01 \x01(\tR\aagentId\x12\x14\n" +
 	"\x05token\x18\x02 \x01(\tR\x05token\x12\x18\n" +
@@ -2949,7 +2957,8 @@ const file_internal_shared_grpcapi_agent_control_proto_rawDesc = "" +
 	"\bhostname\x18\x04 \x01(\tR\bhostname\x12\"\n" +
 	"\fcapabilities\x18\x05 \x03(\tR\fcapabilities\x12\x1f\n" +
 	"\vreported_ip\x18\x06 \x01(\tR\n" +
-	"reportedIp\"W\n" +
+	"reportedIp\x12,\n" +
+	"\x12prebound_tcp_ports\x18\a \x03(\x05R\x10preboundTcpPorts\"W\n" +
 	"\x10HeartbeatMessage\x12\x19\n" +
 	"\bagent_id\x18\x01 \x01(\tR\aagentId\x12(\n" +
 	"\x10running_task_ids\x18\x02 \x03(\tR\x0erunningTaskIds\"&\n" +

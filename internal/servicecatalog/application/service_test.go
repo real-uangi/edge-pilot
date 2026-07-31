@@ -108,6 +108,79 @@ func TestCreateServiceRejectsTCPProxyPortHostPortConflict(t *testing.T) {
 	}
 }
 
+func TestCreateServiceValidatesAgentTCPPreboundPorts(t *testing.T) {
+	const agentID = "11111111-1111-1111-1111-111111111111"
+	newService := func() *Service {
+		return NewServiceWithPublisher(newFakeServiceCatalogRepo(), nil, &fakeAgentLookup{agents: map[string]*dto.AgentOutput{
+			agentID: {
+				ID:                  agentID,
+				Enabled:             boolPointer(true),
+				TCPPrebindSupported: true,
+				PreboundTCPPorts:    []int{20000},
+			},
+		}})
+	}
+	base := dto.UpsertServiceRequest{
+		AgentID:       agentID,
+		ImageRepo:     "repo/service",
+		ContainerPort: 8080,
+	}
+
+	if _, err := newService().Create(dto.UpsertServiceRequest{
+		Name:          "available",
+		ServiceKey:    "available",
+		AgentID:       base.AgentID,
+		ImageRepo:     base.ImageRepo,
+		ContainerPort: base.ContainerPort,
+		RouteHost:     "available.example.com",
+		TCPProxyPorts: []dto.TCPProxyPort{{ListenPort: 20000, ContainerPort: 5432}},
+	}); err != nil {
+		t.Fatalf("expected available prebound TCP port to be accepted, got %v", err)
+	}
+
+	if _, err := newService().Create(dto.UpsertServiceRequest{
+		Name:          "unavailable",
+		ServiceKey:    "unavailable",
+		AgentID:       base.AgentID,
+		ImageRepo:     base.ImageRepo,
+		ContainerPort: base.ContainerPort,
+		RouteHost:     "unavailable.example.com",
+		TCPProxyPorts: []dto.TCPProxyPort{{ListenPort: 20001, ContainerPort: 5432}},
+	}); err == nil {
+		t.Fatal("expected unavailable nominal pool port to be rejected")
+	}
+
+	if _, err := newService().Create(dto.UpsertServiceRequest{
+		Name:           "published",
+		ServiceKey:     "published",
+		AgentID:        base.AgentID,
+		ImageRepo:      base.ImageRepo,
+		ContainerPort:  base.ContainerPort,
+		RouteHost:      "published.example.com",
+		PublishedPorts: []dto.PublishedPort{{HostPort: 20000, ContainerPort: 20000}},
+	}); err == nil {
+		t.Fatal("expected direct published port to conflict with actual prebound port")
+	}
+}
+
+func TestCreateServiceKeepsLegacyAgentTCPPortBehavior(t *testing.T) {
+	const agentID = "11111111-1111-1111-1111-111111111111"
+	svc := NewServiceWithPublisher(newFakeServiceCatalogRepo(), nil, &fakeAgentLookup{agents: map[string]*dto.AgentOutput{
+		agentID: {ID: agentID, Enabled: boolPointer(true)},
+	}})
+	if _, err := svc.Create(dto.UpsertServiceRequest{
+		Name:          "legacy",
+		ServiceKey:    "legacy",
+		AgentID:       agentID,
+		ImageRepo:     "repo/service",
+		ContainerPort: 8080,
+		RouteHost:     "legacy.example.com",
+		TCPProxyPorts: []dto.TCPProxyPort{{ListenPort: 20001, ContainerPort: 5432}},
+	}); err != nil {
+		t.Fatalf("expected legacy agent to retain dynamic binding behavior, got %v", err)
+	}
+}
+
 func TestBuildStickyBetaPath(t *testing.T) {
 	for _, item := range []struct {
 		prefix string

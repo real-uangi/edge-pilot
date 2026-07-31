@@ -89,6 +89,7 @@ message HelloMessage {
   string hostname = 4;
   repeated string capabilities = 5;
   string reported_ip = 6;
+  repeated int32 prebound_tcp_ports = 7;
 }
 
 message HeartbeatMessage {

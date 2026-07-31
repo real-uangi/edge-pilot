@@ -97,6 +97,48 @@ func TestRegistryServiceMarkConnectedPersistsReportedIP(t *testing.T) {
 	}
 }
 
+func TestRegistryServiceMarkConnectedPersistsTCPPrebindState(t *testing.T) {
+	repo := &fakeRegistryRepo{nodes: map[string]*model.AgentNode{}}
+	svc := NewRegistryService(config.LoadAgentAuthConfig(), repo)
+	created, err := svc.CreateAgent()
+	if err != nil {
+		t.Fatalf("CreateAgent() error = %v", err)
+	}
+
+	if err := svc.MarkConnectedWithIPAndPorts(
+		created.ID,
+		"host-a",
+		"10.0.0.8",
+		"v1.2.3",
+		[]string{"docker", model.TCPProxyPrebindCapability},
+		[]int32{20002, 20000, 20002, -1},
+	); err != nil {
+		t.Fatalf("MarkConnectedWithIPAndPorts() error = %v", err)
+	}
+
+	agent, err := svc.GetAgent(created.ID)
+	if err != nil {
+		t.Fatalf("GetAgent() error = %v", err)
+	}
+	if !agent.TCPPrebindSupported {
+		t.Fatal("expected tcp prebind capability to be reported")
+	}
+	if len(agent.PreboundTCPPorts) != 2 || agent.PreboundTCPPorts[0] != 20000 || agent.PreboundTCPPorts[1] != 20002 {
+		t.Fatalf("unexpected prebound TCP ports: %#v", agent.PreboundTCPPorts)
+	}
+
+	if err := svc.MarkConnectedWithIPAndPorts(created.ID, "host-a", "", "v1.2.4", []string{"docker"}, nil); err != nil {
+		t.Fatalf("legacy reconnect error = %v", err)
+	}
+	legacy, err := svc.GetAgent(created.ID)
+	if err != nil {
+		t.Fatalf("GetAgent() after reconnect error = %v", err)
+	}
+	if legacy.TCPPrebindSupported || len(legacy.PreboundTCPPorts) != 0 {
+		t.Fatalf("expected reconnect to overwrite tcp prebind state, got %#v", legacy)
+	}
+}
+
 func TestRegistryServiceMarkConnectedKeepsExistingIPWhenReportedIPIsEmpty(t *testing.T) {
 	repo := &fakeRegistryRepo{nodes: map[string]*model.AgentNode{}}
 	svc := NewRegistryService(config.LoadAgentAuthConfig(), repo)

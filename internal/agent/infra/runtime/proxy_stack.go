@@ -73,6 +73,8 @@ type ManagedProxyRuntime struct {
 	ready              bool
 	attachedToNetwork  bool
 	selfContainerID    string
+	prebindInitialized bool
+	preboundTCPPorts   []int
 	lastPrepareError   string
 	lastApplyErrorText string
 }
@@ -160,7 +162,13 @@ func (m *ManagedProxyRuntime) runSelfHeal(ctx context.Context) {
 func (m *ManagedProxyRuntime) ApplySnapshot(ctx context.Context, snapshot *grpcapi.ProxyConfigSnapshot) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	m.desired = cloneSnapshot(snapshot)
+	desired := cloneSnapshot(snapshot)
+	if err := m.validatePreboundTCPPortsLocked(desired); err != nil {
+		m.ready = false
+		m.lastApplyErrorText = err.Error()
+		return err
+	}
+	m.desired = desired
 	m.desiredHash = snapshotHash(m.desired)
 	m.logger.Infof("received proxy snapshot: agentId=%s services=%d frontend=%s", m.cfg.AgentID, len(snapshot.GetServices()), snapshot.GetFrontendName())
 	if _, err := m.prepareLocked(ctx, false); err != nil {
@@ -184,6 +192,12 @@ func (m *ManagedProxyRuntime) ApplySnapshot(ctx context.Context, snapshot *grpca
 	m.appliedHash = m.desiredHash
 	m.lastApplyErrorText = ""
 	return nil
+}
+
+func (m *ManagedProxyRuntime) PreboundTCPPorts() []int {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return append([]int(nil), m.preboundTCPPorts...)
 }
 
 func (m *ManagedProxyRuntime) EnsureReady(ctx context.Context) error {
@@ -291,6 +305,27 @@ func (m *ManagedProxyRuntime) prepareLocked(ctx context.Context, startup bool) (
 	proxyInspect, err := m.docker.inspectManagedContainer(ctx, m.cfg.ProxyContainerName)
 	if err != nil {
 		return false, err
+	}
+	if !m.prebindInitialized {
+		preboundTCPPorts, probeErr := m.docker.probeAvailableTCPHostPorts(
+			ctx,
+			m.cfg.ProxyHelperImage,
+			tcpProxyPrebindPorts(),
+			boundTCPHostPorts(proxyInspect),
+		)
+		if probeErr != nil {
+			m.prepared = false
+			m.lastPrepareError = probeErr.Error()
+			return false, probeErr
+		}
+		m.preboundTCPPorts = preboundTCPPorts
+		m.prebindInitialized = true
+		m.logger.Infof(
+			"tcp prebind pool selected: available=%d total=%d ports=%v",
+			len(preboundTCPPorts),
+			model.TCPProxyPrebindEndPort-model.TCPProxyPrebindStartPort+1,
+			preboundTCPPorts,
+		)
 	}
 	if proxyInspect == nil {
 		if err := m.docker.recreateVolume(ctx, m.cfg.HAProxyConfigVolume); err != nil {
@@ -1148,7 +1183,15 @@ func (m *ManagedProxyRuntime) proxySpec() managedContainerSpec {
 			{HostIP: haproxyApiListenAddr, HostPort: strconv.Itoa(m.cfg.DataPlaneAPIPort)},
 		},
 	}
+	for _, port := range m.preboundTCPPorts {
+		key := portKey(port)
+		exposed[key] = map[string]string{}
+		portBinds[key] = []dockerPortBinding{{HostIP: "0.0.0.0", HostPort: strconv.Itoa(port)}}
+	}
 	for _, proxy := range buildTCPProxyConfigs(m.desired) {
+		if isTCPProxyPrebindPort(proxy.ListenPort) {
+			continue
+		}
 		key := portKey(proxy.ListenPort)
 		exposed[key] = map[string]string{}
 		portBinds[key] = []dockerPortBinding{{HostIP: "0.0.0.0", HostPort: strconv.Itoa(proxy.ListenPort)}}
@@ -1177,6 +1220,37 @@ func (m *ManagedProxyRuntime) proxySpec() managedContainerSpec {
 			MaximumRetryCount: 3,
 		},
 	}
+}
+
+func (m *ManagedProxyRuntime) validatePreboundTCPPortsLocked(snapshot *grpcapi.ProxyConfigSnapshot) error {
+	if snapshot == nil {
+		return nil
+	}
+	available := make(map[int]struct{}, len(m.preboundTCPPorts))
+	for _, port := range m.preboundTCPPorts {
+		available[port] = struct{}{}
+	}
+	for _, proxy := range buildTCPProxyConfigs(snapshot) {
+		if !isTCPProxyPrebindPort(proxy.ListenPort) {
+			continue
+		}
+		if _, ok := available[proxy.ListenPort]; !ok {
+			return fmt.Errorf("tcp prebind port %d is unavailable on this agent", proxy.ListenPort)
+		}
+	}
+	return nil
+}
+
+func tcpProxyPrebindPorts() []int {
+	ports := make([]int, 0, model.TCPProxyPrebindEndPort-model.TCPProxyPrebindStartPort+1)
+	for port := model.TCPProxyPrebindStartPort; port <= model.TCPProxyPrebindEndPort; port++ {
+		ports = append(ports, port)
+	}
+	return ports
+}
+
+func isTCPProxyPrebindPort(port int) bool {
+	return port >= model.TCPProxyPrebindStartPort && port <= model.TCPProxyPrebindEndPort
 }
 
 func (m *ManagedProxyRuntime) ensureSelfConnectedLocked(ctx context.Context) error {

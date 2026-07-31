@@ -149,6 +149,79 @@ func TestEnsureManagedContainerReturnsErrorWhenRecreatedContainerStillInvalid(t 
 	}
 }
 
+func TestProbeAvailableTCPHostPortsSkipsOccupiedPort(t *testing.T) {
+	var (
+		mu             sync.Mutex
+		startAttempts  int
+		currentID      string
+		createRequests []dockerCreateContainerRequest
+	)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		defer mu.Unlock()
+		switch {
+		case r.Method == http.MethodPost && r.URL.Path == "/containers/create":
+			var req dockerCreateContainerRequest
+			if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+				t.Fatalf("decode probe create request: %v", err)
+			}
+			createRequests = append(createRequests, req)
+			currentID = fmt.Sprintf("probe-%d", len(createRequests))
+			_ = json.NewEncoder(w).Encode(dockerCreateResponse{ID: currentID})
+		case r.Method == http.MethodPost && strings.HasSuffix(r.URL.Path, "/start"):
+			startAttempts++
+			if startAttempts == 1 {
+				w.WriteHeader(http.StatusInternalServerError)
+				_, _ = w.Write([]byte(`{"message":"Bind for 0.0.0.0:20001 failed: port is already allocated"}`))
+				return
+			}
+			w.WriteHeader(http.StatusNoContent)
+		case r.Method == http.MethodDelete && strings.HasPrefix(r.URL.Path, "/containers/"):
+			w.WriteHeader(http.StatusNoContent)
+		default:
+			t.Fatalf("unexpected docker api call: %s %s", r.Method, r.URL.Path)
+		}
+	}))
+	defer server.Close()
+
+	client := &DockerClient{
+		httpClient: server.Client(),
+		endpoint: &dockerEndpoint{
+			raw:     server.URL,
+			scheme:  "http",
+			baseURL: server.URL,
+		},
+		logger: log.NewStdLogger("agent.docker.test"),
+	}
+	available, err := client.probeAvailableTCPHostPorts(
+		context.Background(),
+		"haproxy:test",
+		[]int{20000, 20001, 20002},
+		map[int]struct{}{20000: {}},
+	)
+	if err != nil {
+		t.Fatalf("probeAvailableTCPHostPorts() error = %v", err)
+	}
+	if fmt.Sprint(available) != "[20000 20002]" {
+		t.Fatalf("unexpected available ports: %v", available)
+	}
+	if len(createRequests) != 2 {
+		t.Fatalf("expected two probe attempts, got %d", len(createRequests))
+	}
+	if _, ok := createRequests[0].HostConfig.PortBindings[portKey(20001)]; !ok {
+		t.Fatalf("expected first probe to contain occupied port: %#v", createRequests[0].HostConfig.PortBindings)
+	}
+	if _, ok := createRequests[1].HostConfig.PortBindings[portKey(20001)]; ok {
+		t.Fatalf("expected retry to omit occupied port: %#v", createRequests[1].HostConfig.PortBindings)
+	}
+}
+
+func TestDockerHostPortConflictRejectsUnrecognizedErrors(t *testing.T) {
+	if port, ok := dockerHostPortConflict(fmt.Errorf("permission denied")); ok || port != 0 {
+		t.Fatalf("expected unrecognized error to be rejected, got port=%d ok=%v", port, ok)
+	}
+}
+
 type fakeManagedContainerDaemon struct {
 	t                *testing.T
 	spec             managedContainerSpec

@@ -127,6 +127,8 @@ docker run -d \
 - `PROXY_SELF_HEAL_INTERVAL_SECONDS`：默认 `10`
 - `MANAGED_CONTAINER_SCAN_INTERVAL_SECONDS`：托管容器全局检测与内存索引刷新间隔，默认 `5`
 
+Agent 启动时会让 HAProxy 尝试预占宿主机 `20000-20099/TCP`。已被其他进程或容器占用的端口会跳过，并在节点详情页展示实际可用集合；池内端口用于 TCP 代理时无需重建 HAProxy，池外端口仍会触发容器重建。首次升级到支持预占池的版本会重建一次 HAProxy 容器。
+
 ### 关键授权说明
 
 `edge-pilot-agent` 镜像虽然以非 root 用户运行，但它必须访问宿主机的 `/var/run/docker.sock`。仅挂载 socket 还不够，还需要把 socket 对应的宿主机组 GID 追加到容器进程的 supplementary groups。

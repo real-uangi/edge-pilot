@@ -776,6 +776,31 @@ func (s *Service) ensureHostPortsAvailable(agentID string, publishedPorts []mode
 	if len(publishedPorts) == 0 && len(tcpProxyPorts) == 0 {
 		return nil
 	}
+	if s.agents != nil {
+		agent, err := s.agents.GetAgent(agentID)
+		if err != nil {
+			return err
+		}
+		if agent != nil && agent.TCPPrebindSupported {
+			prebound := make(map[int]struct{}, len(agent.PreboundTCPPorts))
+			for _, port := range agent.PreboundTCPPorts {
+				prebound[port] = struct{}{}
+			}
+			for _, port := range publishedPorts {
+				if _, ok := prebound[port.HostPort]; ok {
+					return business.NewBadRequest("publishedPorts.hostPort 与 Agent TCP 预占端口冲突")
+				}
+			}
+			for _, port := range tcpProxyPorts {
+				if port.ListenPort < model.TCPProxyPrebindStartPort || port.ListenPort > model.TCPProxyPrebindEndPort {
+					continue
+				}
+				if _, ok := prebound[port.ListenPort]; !ok {
+					return business.NewBadRequest(fmt.Sprintf("tcpProxyPorts.listenPort %d 未被该 Agent 成功预占", port.ListenPort))
+				}
+			}
+		}
+	}
 	services, err := s.repo.ListByAgent(agentID)
 	if err != nil {
 		return err

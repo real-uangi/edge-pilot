@@ -11,7 +11,9 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -22,7 +24,10 @@ const (
 	proxyStackAgentLabel        = "ep.agent_id"
 	proxyStackSpecLabelKey      = "ep.stack.spec_hash"
 	proxyStackBootstrapLabelKey = "ep.stack.bootstrap_hash"
+	proxyStackPortProbeLabelKey = "ep.stack.port_probe"
 )
+
+var dockerHostPortConflictPattern = regexp.MustCompile(`(?:0\.0\.0\.0|\[::\]|::):([0-9]{1,5})`)
 
 type managedContainerSpec struct {
 	Name          string
@@ -52,11 +57,160 @@ type dockerContainerInspect struct {
 		Status  string `json:"Status"`
 		Running bool   `json:"Running"`
 	} `json:"State"`
+	HostConfig struct {
+		PortBindings map[string][]dockerPortBinding `json:"PortBindings"`
+	} `json:"HostConfig"`
 	NetworkSettings struct {
 		Networks map[string]struct {
 			IPAddress string `json:"IPAddress"`
 		} `json:"Networks"`
 	} `json:"NetworkSettings"`
+}
+
+func (c *DockerClient) probeAvailableTCPHostPorts(ctx context.Context, image string, ports []int, alreadyBound map[int]struct{}) ([]int, error) {
+	available := make([]int, 0, len(ports))
+	remaining := make([]int, 0, len(ports))
+	for _, port := range ports {
+		if _, ok := alreadyBound[port]; ok {
+			available = append(available, port)
+			continue
+		}
+		remaining = append(remaining, port)
+	}
+	for len(remaining) > 0 {
+		containerID, err := c.startTCPPortProbeContainer(ctx, image, remaining)
+		if containerID != "" {
+			if cleanupErr := c.RemoveContainer(ctx, containerID); cleanupErr != nil {
+				return nil, fmt.Errorf("remove tcp port probe container: %w", cleanupErr)
+			}
+		}
+		if err == nil {
+			available = append(available, remaining...)
+			sort.Ints(available)
+			return available, nil
+		}
+		conflictedPort, ok := dockerHostPortConflict(err)
+		if !ok || !containsInt(remaining, conflictedPort) {
+			return nil, fmt.Errorf("probe tcp host ports: %w", err)
+		}
+		c.logger.Infof("tcp prebind port is occupied and will be skipped: port=%d", conflictedPort)
+		remaining = removeInt(remaining, conflictedPort)
+	}
+	sort.Ints(available)
+	return available, nil
+}
+
+func (c *DockerClient) startTCPPortProbeContainer(ctx context.Context, image string, ports []int) (string, error) {
+	name := "edge-pilot-port-probe-" + strconvNow()
+	exposed := make(map[string]map[string]string, len(ports))
+	portBinds := make(map[string][]dockerPortBinding, len(ports))
+	for _, port := range ports {
+		key := portKey(port)
+		exposed[key] = map[string]string{}
+		portBinds[key] = []dockerPortBinding{{HostIP: "0.0.0.0", HostPort: strconv.Itoa(port)}}
+	}
+	body, err := json.Marshal(dockerCreateContainerRequest{
+		Image:        image,
+		Cmd:          []string{"sleep 30"},
+		Entrypoint:   []string{"/bin/sh", "-c"},
+		Labels:       map[string]string{proxyStackPortProbeLabelKey: "true"},
+		ExposedPorts: exposed,
+		HostConfig: dockerHostConfig{
+			PortBindings: portBinds,
+		},
+	})
+	if err != nil {
+		return "", err
+	}
+	createReq, err := c.endpoint.newRequest(ctx, http.MethodPost, "/containers/create?name="+url.QueryEscape(name), bytes.NewReader(body))
+	if err != nil {
+		return "", err
+	}
+	createReq.Header.Set("Content-Type", "application/json")
+	createResp, err := c.httpClient.Do(createReq)
+	if err != nil {
+		return "", err
+	}
+	defer createResp.Body.Close()
+	if createResp.StatusCode >= 300 {
+		respBody, _ := io.ReadAll(createResp.Body)
+		return "", fmt.Errorf("docker create tcp port probe failed: %s %s", createResp.Status, strings.TrimSpace(string(respBody)))
+	}
+	var createOut dockerCreateResponse
+	if err := json.NewDecoder(createResp.Body).Decode(&createOut); err != nil {
+		return "", err
+	}
+	startReq, err := c.endpoint.newRequest(ctx, http.MethodPost, "/containers/"+createOut.ID+"/start", nil)
+	if err != nil {
+		return createOut.ID, err
+	}
+	startResp, err := c.httpClient.Do(startReq)
+	if err != nil {
+		return createOut.ID, err
+	}
+	defer startResp.Body.Close()
+	if startResp.StatusCode >= 300 {
+		respBody, _ := io.ReadAll(startResp.Body)
+		return createOut.ID, fmt.Errorf("docker start tcp port probe failed: %s %s", startResp.Status, strings.TrimSpace(string(respBody)))
+	}
+	return createOut.ID, nil
+}
+
+func dockerHostPortConflict(err error) (int, bool) {
+	if err == nil {
+		return 0, false
+	}
+	message := strings.ToLower(err.Error())
+	if !strings.Contains(message, "port is already allocated") && !strings.Contains(message, "address already in use") {
+		return 0, false
+	}
+	match := dockerHostPortConflictPattern.FindStringSubmatch(message)
+	if len(match) != 2 {
+		return 0, false
+	}
+	port, parseErr := strconv.Atoi(match[1])
+	if parseErr != nil || port <= 0 || port > 65535 {
+		return 0, false
+	}
+	return port, true
+}
+
+func containsInt(items []int, target int) bool {
+	for _, item := range items {
+		if item == target {
+			return true
+		}
+	}
+	return false
+}
+
+func removeInt(items []int, target int) []int {
+	out := make([]int, 0, len(items))
+	for _, item := range items {
+		if item != target {
+			out = append(out, item)
+		}
+	}
+	return out
+}
+
+func boundTCPHostPorts(inspect *dockerContainerInspect) map[int]struct{} {
+	out := map[int]struct{}{}
+	if inspect == nil {
+		return out
+	}
+	for key, bindings := range inspect.HostConfig.PortBindings {
+		if !strings.HasSuffix(key, "/tcp") {
+			continue
+		}
+		for _, binding := range bindings {
+			port, err := strconv.Atoi(binding.HostPort)
+			if err == nil && port > 0 && port <= 65535 {
+				out[port] = struct{}{}
+			}
+		}
+	}
+	return out
 }
 
 type dockerNetworkInspect struct {

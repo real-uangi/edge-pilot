@@ -565,6 +565,59 @@ func TestProxySpecPublishesTCPListenPorts(t *testing.T) {
 	}
 }
 
+func TestProxySpecKeepsPreboundPortsStableForPoolMappings(t *testing.T) {
+	newRuntime := func(listenPort int) *ManagedProxyRuntime {
+		return &ManagedProxyRuntime{
+			cfg: &config.AgentRuntimeConfig{
+				HAProxyRuntimePort: 19999,
+				DataPlaneAPIPort:   5555,
+			},
+			preboundTCPPorts: []int{20000, 20001},
+			desired: &grpcapi.ProxyConfigSnapshot{Services: []*grpcapi.ProxyServiceConfig{{
+				TcpProxyPorts: []*grpcapi.TCPProxyPortConfig{{ListenPort: int32(listenPort), ContainerPort: 5432}},
+			}}},
+		}
+	}
+	first := newRuntime(20000).proxySpec()
+	second := newRuntime(20001).proxySpec()
+	for _, port := range []int{20000, 20001} {
+		key := portKey(port)
+		if _, ok := first.Exposed[key]; !ok {
+			t.Fatalf("expected prebound port %s to be exposed", key)
+		}
+	}
+	if specHash(first) != specHash(second) {
+		t.Fatal("expected changing mappings inside the prebound pool to keep the container spec stable")
+	}
+}
+
+func TestProxySpecAddsOutOfPoolTCPPortToContainerSpec(t *testing.T) {
+	proxy := &ManagedProxyRuntime{
+		cfg: &config.AgentRuntimeConfig{
+			HAProxyRuntimePort: 19999,
+			DataPlaneAPIPort:   5555,
+		},
+		preboundTCPPorts: []int{20000},
+		desired: &grpcapi.ProxyConfigSnapshot{Services: []*grpcapi.ProxyServiceConfig{{
+			TcpProxyPorts: []*grpcapi.TCPProxyPortConfig{{ListenPort: 21000, ContainerPort: 5432}},
+		}}},
+	}
+	spec := proxy.proxySpec()
+	if _, ok := spec.PortBinds[portKey(21000)]; !ok {
+		t.Fatal("expected out-of-pool TCP port to be added to the proxy container spec")
+	}
+}
+
+func TestValidatePreboundTCPPortsRejectsUnavailablePoolPort(t *testing.T) {
+	proxy := &ManagedProxyRuntime{preboundTCPPorts: []int{20000}}
+	err := proxy.validatePreboundTCPPortsLocked(&grpcapi.ProxyConfigSnapshot{Services: []*grpcapi.ProxyServiceConfig{{
+		TcpProxyPorts: []*grpcapi.TCPProxyPortConfig{{ListenPort: 20001, ContainerPort: 5432}},
+	}}})
+	if err == nil {
+		t.Fatal("expected unavailable pool port to be rejected")
+	}
+}
+
 func TestFrontendSectionKeepsCandidateCookieRuleForStickyWhenSplitInactive(t *testing.T) {
 	proxy := newTestManagedProxyRuntime(&fakeManagedProxyDataplane{}, &fakeManagedProxyRuntime{})
 

@@ -30,6 +30,7 @@ export function AgentDetailPage() {
   const servicesQuery = useQuery({
     queryKey: ["services"],
     queryFn: servicesApi.list,
+    refetchInterval: 10000,
   });
 
   const refreshQueries = async () => {
@@ -150,7 +151,7 @@ export function AgentDetailPage() {
           onResetToken={() => resetMutation.mutate()}
           onDelete={() => void handleDelete()}
           onBack={() => navigate("/agents")}
-          onRefresh={() => agentQuery.refetch()}
+          onRefresh={() => void Promise.all([agentQuery.refetch(), servicesQuery.refetch()])}
         />
       </section>
 
@@ -171,7 +172,12 @@ export function AgentDetailPage() {
         </section>
       ) : null}
 
-      <AgentInfo agent={agent} />
+      <AgentInfo
+        agent={agent}
+        services={servicesQuery.data ?? []}
+        servicesPending={servicesQuery.isPending}
+        servicesError={servicesQuery.isError}
+      />
 
       <HAProxyConfig agentId={agent.id} agentOnline={agent.online} />
     </div>

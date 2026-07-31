@@ -9,6 +9,8 @@ export interface AgentRecord {
   lastConnectedAt: string | null;
   lastError: string;
   tokenRotatedAt: string | null;
+  tcpPrebindSupported: boolean;
+  preboundTcpPorts: number[];
   createdAt: string;
   updatedAt: string;
 }

@@ -415,6 +415,97 @@
   font-family: var(--ep-font-mono);
 }
 
+.tcpPrebindSection {
+  display: grid;
+  gap: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--ep-outline-ghost);
+}
+
+.tcpPrebindHeader {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.tcpPrebindTitle {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+.tcpPrebindMeta,
+.tcpPrebindEmpty,
+.tcpPrebindError {
+  margin: 3px 0 0;
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--ep-text-dim);
+}
+
+.tcpPrebindError {
+  color: var(--ep-danger);
+}
+
+.tcpPrebindStale {
+  color: var(--ep-text-dim);
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.tcpPrebindGroups {
+  display: grid;
+  grid-template-columns: minmax(0, 3fr) minmax(220px, 2fr);
+  gap: 16px;
+}
+
+.tcpPrebindGroup {
+  display: grid;
+  align-content: start;
+  gap: 7px;
+  min-width: 0;
+}
+
+.tcpPrebindLabel {
+  color: var(--ep-text-muted);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.tcpPortList {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.tcpPortToken,
+.tcpPortAssignment {
+  border: 1px solid var(--ep-outline-ghost);
+  border-radius: var(--ep-radius-sm);
+  background: var(--ep-surface-mid);
+  color: var(--ep-text);
+  font-family: var(--ep-font-mono);
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+.tcpPortToken {
+  padding: 4px 7px;
+}
+
+.tcpPortAssignment {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 7px;
+}
+
+.tcpPortAssignment > span {
+  color: var(--ep-text-muted);
+  font-family: var(--ep-font-body);
+}
+
 .statusPill {
   display: inline-flex;
   align-items: center;
@@ -596,6 +687,10 @@
 
   .title {
     font-size: clamp(24px, 6vw, 34px);
+  }
+
+  .tcpPrebindGroups {
+    grid-template-columns: 1fr;
   }
 }
 

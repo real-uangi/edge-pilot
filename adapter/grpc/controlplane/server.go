@@ -241,7 +241,7 @@ func (s *Server) Connect(stream grpcapi.AgentControl_ConnectServer) (err error) 
 	if err := s.agents.Authenticate(hello.GetAgentId(), hello.GetToken()); err != nil {
 		return status.Error(codes.Unauthenticated, "invalid agent credentials")
 	}
-	if err := s.agents.MarkConnectedWithIP(hello.GetAgentId(), hello.GetHostname(), hello.GetReportedIp(), hello.GetVersion(), hello.GetCapabilities()); err != nil {
+	if err := s.agents.MarkConnectedWithIPAndPorts(hello.GetAgentId(), hello.GetHostname(), hello.GetReportedIp(), hello.GetVersion(), hello.GetCapabilities(), hello.GetPreboundTcpPorts()); err != nil {
 		return err
 	}
 	session := s.hub.register(hello.GetAgentId())

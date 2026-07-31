@@ -15,6 +15,7 @@ import (
 	agentdomain "github.com/real-uangi/edge-pilot/internal/agent/domain"
 	"github.com/real-uangi/edge-pilot/internal/shared/config"
 	"github.com/real-uangi/edge-pilot/internal/shared/grpcapi"
+	"github.com/real-uangi/edge-pilot/internal/shared/model"
 	"github.com/real-uangi/edge-pilot/internal/shared/perf"
 
 	"github.com/real-uangi/allingo/common/log"
@@ -119,15 +120,24 @@ func (c *Client) connectOnce(ctx context.Context) error {
 		}
 	}()
 
+	capabilities := []string{"docker", "haproxy_runtime", "haproxy_dataplane", "http_probe"}
+	var preboundTCPPorts []int32
+	if reporter, ok := c.proxy.(interface{ PreboundTCPPorts() []int }); ok {
+		capabilities = append(capabilities, model.TCPProxyPrebindCapability)
+		for _, port := range reporter.PreboundTCPPorts() {
+			preboundTCPPorts = append(preboundTCPPorts, int32(port))
+		}
+	}
 	outbound <- &grpcapi.AgentMessage{
 		Payload: &grpcapi.AgentMessage_Hello{
 			Hello: &grpcapi.HelloMessage{
-				AgentId:      c.cfg.AgentID,
-				Token:        c.cfg.AgentToken,
-				Version:      c.cfg.AgentVersion,
-				Hostname:     c.cfg.Hostname,
-				Capabilities: []string{"docker", "haproxy_runtime", "haproxy_dataplane", "http_probe"},
-				ReportedIp:   c.cfg.ReportedIP,
+				AgentId:          c.cfg.AgentID,
+				Token:            c.cfg.AgentToken,
+				Version:          c.cfg.AgentVersion,
+				Hostname:         c.cfg.Hostname,
+				Capabilities:     capabilities,
+				ReportedIp:       c.cfg.ReportedIP,
+				PreboundTcpPorts: preboundTCPPorts,
 			},
 		},
 	}
