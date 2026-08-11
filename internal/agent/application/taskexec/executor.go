@@ -322,6 +322,7 @@ func (e *Executor) waitForHealth(ctx context.Context, task *grpcapi.TaskCommand,
 		}
 	}
 
+	httpProbeRequired := strings.TrimSpace(task.GetHttpHealthPath()) != ""
 	var lastErr error
 	consecutiveSuccess := 0
 	retryReported := false
@@ -335,7 +336,7 @@ func (e *Executor) waitForHealth(ctx context.Context, task *grpcapi.TaskCommand,
 		} else if status != nil && status.Terminal() {
 			return fmt.Errorf("container entered terminal state: %s", summarizeContainerStatus(status))
 		} else {
-			if strings.TrimSpace(runtime.ListenAddress) == "" {
+			if httpProbeRequired && strings.TrimSpace(runtime.ListenAddress) == "" {
 				listenAddress, resolveErr := e.docker.ResolveListenAddress(ctx, runtime.ContainerID, int(task.GetContainerPort()))
 				if resolveErr != nil {
 					lastErr = resolveErr
@@ -343,7 +344,7 @@ func (e *Executor) waitForHealth(ctx context.Context, task *grpcapi.TaskCommand,
 					runtime.ListenAddress = listenAddress
 				}
 			}
-			if strings.TrimSpace(runtime.ListenAddress) != "" {
+			if !httpProbeRequired || strings.TrimSpace(runtime.ListenAddress) != "" {
 				if healthErr := e.verifyHealth(ctx, task, status, runtime.ListenAddress); healthErr == nil {
 					consecutiveSuccess++
 					if consecutiveSuccess >= successThreshold {
@@ -387,7 +388,10 @@ func (e *Executor) verifyHealth(ctx context.Context, task *grpcapi.TaskCommand, 
 			return fmt.Errorf("docker health not ready: %s", health)
 		}
 	}
-	path := defaultString(task.GetHttpHealthPath(), "/health")
+	path := strings.TrimSpace(task.GetHttpHealthPath())
+	if path == "" {
+		return nil
+	}
 	expectedCode := defaultCode(task.GetHttpExpectedCode())
 	timeoutSeconds := defaultProbeTimeout(task.GetHttpProbeTimeoutSecond())
 	if err := e.httpProbe(
@@ -568,7 +572,7 @@ func (e *Executor) ReconcileManagedContainersOnStartup(ctx context.Context, agen
 }
 
 func normalizeHealthConfig(task *grpcapi.TaskCommand) {
-	if task.GetHttpHealthPath() == "" {
+	if task.GetHttpHealthPath() == "" && !task.GetDockerHealthCheck() {
 		task.HttpHealthPath = "/health"
 	}
 	if task.GetHttpExpectedCode() == 0 {
@@ -589,13 +593,6 @@ func normalizeHealthConfig(task *grpcapi.TaskCommand) {
 	if task.GetHttpSuccessThreshold() <= 0 {
 		task.HttpSuccessThreshold = int32(modelDefaultSuccessThreshold())
 	}
-}
-
-func defaultString(value string, fallback string) string {
-	if strings.TrimSpace(value) == "" {
-		return fallback
-	}
-	return value
 }
 
 func shouldRemoveOnStartupScan(item *agentdomain.ManagedContainer) bool {

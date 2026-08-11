@@ -163,6 +163,97 @@ func TestExecuteDeployRetriesTransientHealthFailures(t *testing.T) {
 	}
 }
 
+func TestExecuteDeployDockerHealthOnlySkipsHTTPProbe(t *testing.T) {
+	docker := &fakeDockerRuntime{
+		statusByID: map[string]*ContainerStatus{
+			"new-container": {State: "running", Running: true, Health: "healthy"},
+		},
+	}
+	executor := NewExecutor(&config.AgentRuntimeConfig{AgentID: "agent-a"}, docker, &fakeProxyRuntime{}, nil)
+	httpProbeCalled := false
+	executor.httpProbe = func(string, string, map[string]string, int, int) error {
+		httpProbeCalled = true
+		return nil
+	}
+
+	err := executor.Execute(context.Background(), &grpcapi.TaskCommand{
+		TaskId:                  "task-docker-only",
+		ReleaseId:               "release-docker-only",
+		ServiceKey:              "svc-a",
+		AgentId:                 "agent-a",
+		Type:                    grpcapi.TaskType_TASK_TYPE_DEPLOY_GREEN,
+		TargetSlot:              grpcapi.Slot_SLOT_GREEN,
+		ServerName:              "srv-green",
+		ContainerPort:           8080,
+		DockerHealthCheck:       true,
+		HttpHealthPath:          "",
+		HttpExpectedCode:        200,
+		HttpTimeoutSecond:       5,
+		StartupGraceSecond:      1,
+		HttpProbeTimeoutSecond:  1,
+		HttpProbeIntervalSecond: 1,
+		HttpSuccessThreshold:    1,
+	}, func(update *grpcapi.TaskUpdate) error { return nil })
+	if err != nil {
+		t.Fatalf("Execute() error = %v", err)
+	}
+	if httpProbeCalled {
+		t.Fatalf("expected no http probe when docker health check enabled without http path")
+	}
+}
+
+func TestExecuteDeployDockerHealthOnlyFailsOnUnhealthy(t *testing.T) {
+	docker := &fakeDockerRuntime{
+		statusByID: map[string]*ContainerStatus{
+			"new-container": {State: "running", Running: true, Health: "unhealthy"},
+		},
+	}
+	executor := NewExecutor(&config.AgentRuntimeConfig{AgentID: "agent-a"}, docker, &fakeProxyRuntime{}, nil)
+	executor.httpProbe = func(string, string, map[string]string, int, int) error {
+		t.Fatalf("expected no http probe when docker health check enabled without http path")
+		return nil
+	}
+
+	err := executor.Execute(context.Background(), &grpcapi.TaskCommand{
+		TaskId:                  "task-docker-unhealthy",
+		ReleaseId:               "release-docker-unhealthy",
+		ServiceKey:              "svc-a",
+		AgentId:                 "agent-a",
+		Type:                    grpcapi.TaskType_TASK_TYPE_DEPLOY_GREEN,
+		TargetSlot:              grpcapi.Slot_SLOT_GREEN,
+		ServerName:              "srv-green",
+		ContainerPort:           8080,
+		DockerHealthCheck:       true,
+		HttpHealthPath:          "",
+		HttpExpectedCode:        200,
+		HttpTimeoutSecond:       2,
+		StartupGraceSecond:      1,
+		HttpProbeTimeoutSecond:  1,
+		HttpProbeIntervalSecond: 1,
+		HttpSuccessThreshold:    1,
+	}, func(update *grpcapi.TaskUpdate) error { return nil })
+	if err == nil {
+		t.Fatalf("expected deploy failure on unhealthy docker status")
+	}
+	if !strings.Contains(err.Error(), "docker health not ready") {
+		t.Fatalf("expected docker health error, got %v", err)
+	}
+}
+
+func TestNormalizeHealthConfigHTTPPathDefault(t *testing.T) {
+	withDocker := &grpcapi.TaskCommand{DockerHealthCheck: true}
+	normalizeHealthConfig(withDocker)
+	if withDocker.GetHttpHealthPath() != "" {
+		t.Fatalf("expected empty http health path to stay empty when docker health check enabled, got %q", withDocker.GetHttpHealthPath())
+	}
+
+	withoutDocker := &grpcapi.TaskCommand{}
+	normalizeHealthConfig(withoutDocker)
+	if withoutDocker.GetHttpHealthPath() != "/health" {
+		t.Fatalf("expected default http health path /health, got %q", withoutDocker.GetHttpHealthPath())
+	}
+}
+
 func TestExecuteTrafficSwitchCleansImages(t *testing.T) {
 	docker := &fakeDockerRuntime{
 		managedItems: []*ManagedContainer{
