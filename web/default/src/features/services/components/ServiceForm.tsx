@@ -113,6 +113,7 @@ export function ServiceForm({
           <label className={styles.field}>
             <span className={styles.label}>HTTP 探活路径</span>
             <input className={styles.input} {...form.register("httpHealthPath")} />
+            <span className={styles.hint}>留空则不进行 HTTP 探活</span>
           </label>
           <label className={`${styles.field} ${styles.fieldWide}`}>
             <span className={styles.label}>HTTP 探活 Header</span>

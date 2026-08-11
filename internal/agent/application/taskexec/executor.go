@@ -572,9 +572,6 @@ func (e *Executor) ReconcileManagedContainersOnStartup(ctx context.Context, agen
 }
 
 func normalizeHealthConfig(task *grpcapi.TaskCommand) {
-	if task.GetHttpHealthPath() == "" && !task.GetDockerHealthCheck() {
-		task.HttpHealthPath = "/health"
-	}
 	if task.GetHttpExpectedCode() == 0 {
 		task.HttpExpectedCode = http.StatusOK
 	}
