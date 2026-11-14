@@ -22,6 +22,15 @@ type fakeReleaseActions struct {
 	lastOperator string
 	lastPercent  int
 	startErr     error
+	manualInput  dto.CreateManualReleaseRequest
+	manualCalls  int
+}
+
+func (f *fakeReleaseActions) CreateManual(input dto.CreateManualReleaseRequest, operator string) (*dto.ReleaseOutput, error) {
+	f.manualInput = input
+	f.manualCalls++
+	f.lastOperator = operator
+	return &dto.ReleaseOutput{ID: uuid.New(), ServiceID: input.ServiceID, ImageTag: input.ImageTag, TriggeredBy: operator}, nil
 }
 
 func (f *fakeReleaseActions) List() ([]dto.ReleaseOutput, error) {

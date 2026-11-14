@@ -68,6 +68,17 @@ export interface UpsertServiceInput {
   enabled: boolean;
 }
 
+export interface ServiceImageTagsInput {
+  serviceId: string;
+  cursor?: string;
+}
+
+export interface ServiceImageTagsPage {
+  imageRepo: string;
+  tags: string[];
+  nextCursor: string;
+}
+
 export interface RuntimeInstance {
   id: string;
   serviceId: string;

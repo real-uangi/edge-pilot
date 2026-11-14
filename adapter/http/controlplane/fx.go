@@ -20,6 +20,7 @@ var Module = fx.Module(
 		routes.SetAdminInstanceRoutes,
 		routes.SetAdminRegistryCredentialRoutes,
 		routes.SetAdminServiceRoutes,
+		routes.SetAdminServiceImageTagRoutes,
 		routes.SetAdminReleaseRoutes,
 		routes.SetSchedulerRoutes,
 		routes.SetObservabilityRoutes,

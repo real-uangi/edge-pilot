@@ -10,6 +10,7 @@ import { toServicePayload } from "../../../shared/lib/forms";
 import { ServiceForm } from "./ServiceForm";
 import { ServiceSummary } from "./ServiceSummary";
 import { ServiceObservability } from "./ServiceObservability";
+import { ServiceReleaseCard } from "./ServiceReleaseCard";
 import styles from "../../../styles/admin.module.css";
 
 export function ServiceEditorPage() {
@@ -36,6 +37,7 @@ export function ServiceEditorPage() {
       return isEdit ? servicesApi.update(serviceId!, payload) : servicesApi.create(payload);
     },
     onSuccess: async (service) => {
+      queryClient.setQueryData(["service", service.id], service);
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ["services"] }),
         queryClient.invalidateQueries({ queryKey: ["overview"] }),
@@ -115,6 +117,14 @@ export function ServiceEditorPage() {
           />
         ) : null}
       </section>
+
+      {isEdit && serviceQuery.data ? (
+        <ServiceReleaseCard
+          key={`${serviceQuery.data.id}:${serviceQuery.data.imageRepo}`}
+          service={serviceQuery.data}
+          disabled={saveMutation.isPending || deleteMutation.isPending}
+        />
+      ) : null}
 
       <ServiceForm
         service={serviceQuery.data}

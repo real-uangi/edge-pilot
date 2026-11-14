@@ -15,7 +15,7 @@ Edge Pilot 当前聚焦 HTTP 服务蓝绿发布。它不是通用容器编排平
 
 - **Control Plane**：提供管理后台、HTTP API、CI 回调入口、发布编排、任务持久化、审计与观测。
 - **Agent**：连接 control-plane，访问宿主机 Docker，托管本机 `HAProxy + Data Plane API` 代理栈，并执行部署、探活、切流和清理任务。
-- **蓝绿发布**：CI 只创建排队发布请求，管理员在管理后台确认启动、验证候选版本、切流或回滚。
+- **蓝绿发布**：管理员可以选择仓库 Tag 主动创建排队发布请求，也可以接收 CI 回调，随后确认启动、验证候选版本、切流或回滚。
 - **私有镜像凭据**：control-plane 按 registry host 管理凭据，发布时自动匹配并下发给目标 agent。
 - **调度执行器**：外部 Go 执行器可通过 SDK 接入调度中心，支持 direct 与 agent relay 两种连接模式。
 
@@ -77,7 +77,39 @@ agent 只管理自己创建的 Edge Pilot 受管容器，不会接管或删除�
 
 如果镜像是私有仓库镜像，请先在“镜像仓库凭据”中配置对应 registry host 的用户名和密码或 token。
 
-### 5. 从 CI 创建发布请求
+### 5. 创建发布请求
+
+#### 在管理后台主动创建
+
+进入已保存服务的详情页，在发布卡片中获取镜像 Tag，选择指定 Tag 或 `latest`，点击“创建发布单”。创建成功后进入发布详情，由管理员手动开始部署。
+
+- 镜像仓库使用服务已保存的 `imageRepo`，不包含 Tag 或 digest；修改仓库后需要先保存服务配置。
+- Tag 查询支持 Docker Hub、GHCR、Harbor 等标准 HTTPS Registry V2 仓库，复用按 registry host 配置的凭据。
+- Tag 按字典顺序分页返回，筛选只针对已加载的 Tag；可通过“加载更多”获取后续结果。
+- `latest` 指名为 `latest` 的 Tag，可直接选择，不代表按推送时间查找最新版本。Tag 是否存在及可拉取，在开始部署时确认。
+- 人工每次提交都会创建新的排队发布单，同一 Tag 可以重复发布。CI 的既有去重规则不变。
+
+管理员会话下也可调用以下接口：
+
+```http
+POST /api/admin/services/image-tags
+Content-Type: application/json
+
+{"serviceId":"<service UUID>","cursor":""}
+```
+
+统一响应中的 `data` 为 `{imageRepo, tags, nextCursor}`。后续页将 `nextCursor` 作为下一次请求的 `cursor`，空字符串表示没有后续页。
+
+```http
+POST /api/admin/releases
+Content-Type: application/json
+
+{"serviceId":"<service UUID>","imageTag":"latest","releaseNotes":"手动发布"}
+```
+
+创建接口返回现有发布单结构，仅创建 `queued` 记录，不启动部署；仓库、节点和触发人由后端根据服务配置及管理员会话确定。
+
+#### 从 CI 创建
 
 镜像构建并推送完成后，CI 调用：
 
@@ -93,12 +125,14 @@ CI 请求格式、鉴权 header、响应字段和去重语义见 [Control-Plane 
 
 典型发布流程：
 
-1. CI 创建排队发布请求。
+1. 管理员选择 Tag 或由 CI 创建排队发布请求。
 2. 管理员启动发布。
 3. agent 拉起目标槽位容器并执行探活。
 4. 发布进入可切流状态后，管理员访问候选版本验证。
 5. 验证通过后确认切流。
 6. 系统保留当前 live 与 rollback 槽位，清理更旧的受管容器。
+
+发布单保存镜像 Tag，不固定 digest。Agent 每次部署尝试都会向仓库重新拉取该 Tag 的当前内容，本地已有同名镜像也不会跳过；因此排队等待或失败重试期间 Tag 被覆盖，实际部署内容可能变化。拉取失败会终止部署，不会使用本地旧镜像替代，也不会提前清理目标槽旧容器。运行中的容器不因 Tag 更新而改变，回滚仍切回既有实例。
 
 业务前端可读取 Edge Pilot 注入的发布响应头，并通过 `__ep/beta` / `__ep/normalize` 控制会话进入候选版本或归位到 live 版本。接入方式见 [发布响应头与归位接口接入说明](docs/edge-pilot-release-headers.md)。
 

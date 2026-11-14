@@ -225,6 +225,27 @@
   grid-column: 1 / -1;
 }
 
+.releaseForm {
+  display: grid;
+  gap: 12px;
+}
+
+.releaseTitle {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.releaseRepository {
+  font-family: var(--ep-font-mono);
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+
+.releaseNotes {
+  min-height: 64px;
+}
+
 .label {
   font-size: 12px;
   font-weight: 600;

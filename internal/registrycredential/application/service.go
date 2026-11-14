@@ -4,7 +4,6 @@ import (
 	"strings"
 
 	"github.com/real-uangi/edge-pilot/internal/registrycredential/domain"
-	releasedomain "github.com/real-uangi/edge-pilot/internal/release/domain"
 	"github.com/real-uangi/edge-pilot/internal/shared/dto"
 	"github.com/real-uangi/edge-pilot/internal/shared/model"
 
@@ -135,7 +134,7 @@ func (s *Service) List() ([]dto.RegistryCredentialOutput, error) {
 	return output, nil
 }
 
-func (s *Service) ResolveForImageRepo(imageRepo string) (*releasedomain.ResolvedRegistryCredential, error) {
+func (s *Service) ResolveForImageRepo(imageRepo string) (*dto.ResolvedRegistryCredential, error) {
 	host := ResolveRegistryHost(imageRepo)
 	current, err := s.repo.GetByRegistryHost(host)
 	if err != nil {
@@ -148,7 +147,7 @@ func (s *Service) ResolveForImageRepo(imageRepo string) (*releasedomain.Resolved
 	if err != nil {
 		return nil, err
 	}
-	return &releasedomain.ResolvedRegistryCredential{
+	return &dto.ResolvedRegistryCredential{
 		Host:     current.RegistryHost,
 		Username: current.Username,
 		Secret:   secret,

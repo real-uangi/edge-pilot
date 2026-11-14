@@ -1,7 +1,13 @@
 import { request } from "../../shared/lib/api-client";
-import type { ReleaseRecord, ReleaseDetail } from "./types";
+import type { CreateReleaseInput, ReleaseRecord, ReleaseDetail } from "./types";
 
 export const releasesApi = {
+  create(input: CreateReleaseInput) {
+    return request<ReleaseRecord>("/api/admin/releases", {
+      method: "POST",
+      body: JSON.stringify(input),
+    });
+  },
   list() {
     return request<ReleaseRecord[]>("/api/admin/releases");
   },

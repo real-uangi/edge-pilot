@@ -225,7 +225,7 @@ func (e *Executor) ensureDeployContainer(ctx context.Context, task *grpcapi.Task
 		return nil, deployDecisionStartNew, err
 	}
 	if existing == nil {
-		if removed, err := e.cleanupStaleContainersOnSlot(ctx, task.GetAgentId(), task.GetServiceKey(), task.GetTargetSlot()); err != nil {
+		if removed, err := e.cleanupStaleContainersOnSlot(ctx, task.GetAgentId(), task.GetServiceKey(), task.GetTargetSlot(), task.GetImageRepo()+":"+task.GetImageTag()); err != nil {
 			e.logger.Errorf(err, "stale container cleanup on slot failed: agentId=%s serviceKey=%s slot=%s", task.GetAgentId(), task.GetServiceKey(), task.GetTargetSlot().String())
 		} else if removed > 0 {
 			e.logger.Infof("cleaned up %d stale containers on slot before deploying release: agentId=%s serviceKey=%s slot=%s", removed, task.GetAgentId(), task.GetServiceKey(), task.GetTargetSlot().String())
@@ -497,7 +497,7 @@ func (e *Executor) removeContainerImage(ctx context.Context, containerID, image 
 	}
 }
 
-func (e *Executor) cleanupStaleContainersOnSlot(ctx context.Context, agentID, serviceKey string, slot grpcapi.Slot) (int, error) {
+func (e *Executor) cleanupStaleContainersOnSlot(ctx context.Context, agentID, serviceKey string, slot grpcapi.Slot, deployingImage string) (int, error) {
 	var items []*agentdomain.ManagedContainer
 	if e.index != nil {
 		items = e.index.FindByServiceKeyAndSlot(serviceKey, slot)
@@ -520,13 +520,31 @@ func (e *Executor) cleanupStaleContainersOnSlot(ctx context.Context, agentID, se
 			errs = append(errs, err)
 			continue
 		}
-		e.removeContainerImage(ctx, item.ContainerID, item.Image)
+		// A mutable tag may now refer to the image just pulled for this deployment.
+		if normalizeImageReference(item.Image) != normalizeImageReference(deployingImage) {
+			e.removeContainerImage(ctx, item.ContainerID, item.Image)
+		}
 		removed++
 	}
 	if len(errs) > 0 {
 		return removed, errors.Join(errs...)
 	}
 	return removed, nil
+}
+
+func normalizeImageReference(ref string) string {
+	host, name := "docker.io", ref
+	first, rest, hasSlash := strings.Cut(ref, "/")
+	if hasSlash && (strings.ContainsAny(first, ".:") || strings.EqualFold(first, "localhost")) {
+		host, name = strings.ToLower(first), rest
+	}
+	if host == "index.docker.io" || host == "registry-1.docker.io" {
+		host = "docker.io"
+	}
+	if host == "docker.io" && !strings.Contains(name, "/") {
+		name = "library/" + name
+	}
+	return host + "/" + name
 }
 
 func shouldPreserveManagedContainerForSwitch(item *agentdomain.ManagedContainer, task *grpcapi.TaskCommand) bool {

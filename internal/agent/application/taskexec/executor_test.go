@@ -698,13 +698,19 @@ type fakeDockerRuntime struct {
 	deployedTasks       []*grpcapi.TaskCommand
 	removedIDs          []string
 	removedImages       []string
+	pulledImages        []string
+	ensureImageErr      error
+	events              []string
 }
 
 func (f *fakeDockerRuntime) EnsureImage(ctx context.Context, imageRef string, task *grpcapi.TaskCommand) error {
-	return nil
+	f.pulledImages = append(f.pulledImages, imageRef)
+	f.events = append(f.events, "pull:"+imageRef)
+	return f.ensureImageErr
 }
 
 func (f *fakeDockerRuntime) DeployContainer(ctx context.Context, task *grpcapi.TaskCommand) (*ContainerRuntime, error) {
+	f.events = append(f.events, "deploy")
 	f.deployedTasks = append(f.deployedTasks, task)
 	return &ContainerRuntime{ContainerID: "new-container", ListenAddress: "172.29.0.22:8080", Image: task.GetImageRepo() + ":" + task.GetImageTag()}, nil
 }
@@ -759,6 +765,7 @@ func (f *fakeDockerRuntime) StreamContainerLogs(ctx context.Context, containerID
 }
 
 func (f *fakeDockerRuntime) RemoveContainer(ctx context.Context, containerID string) error {
+	f.events = append(f.events, "remove-container:"+containerID)
 	f.removedIDs = append(f.removedIDs, containerID)
 	if err, ok := f.removeErrByID[containerID]; ok {
 		return err
@@ -767,6 +774,7 @@ func (f *fakeDockerRuntime) RemoveContainer(ctx context.Context, containerID str
 }
 
 func (f *fakeDockerRuntime) RemoveImage(ctx context.Context, imageRef string) error {
+	f.events = append(f.events, "remove-image:"+imageRef)
 	f.removedImages = append(f.removedImages, imageRef)
 	if err, ok := f.removeImageErrByRef[imageRef]; ok {
 		return err

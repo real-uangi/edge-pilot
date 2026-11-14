@@ -11,6 +11,7 @@ import (
 	servicecatalogdomain "github.com/real-uangi/edge-pilot/internal/servicecatalog/domain"
 	"github.com/real-uangi/edge-pilot/internal/shared/dto"
 	"github.com/real-uangi/edge-pilot/internal/shared/grpcapi"
+	"github.com/real-uangi/edge-pilot/internal/shared/image"
 	"github.com/real-uangi/edge-pilot/internal/shared/model"
 	"github.com/real-uangi/edge-pilot/internal/shared/secret"
 
@@ -110,27 +111,48 @@ func (s *Service) CreateFromCI(req dto.CreateReleaseFromCIRequest) (*dto.Release
 		}
 		return &output, nil
 	}
-	release := &model.Release{
-		ID:               uuid.New(),
-		ServiceID:        spec.ID,
-		AgentID:          spec.AgentID,
-		ImageRepo:        firstNonEmpty(req.ImageRepo, spec.ImageRepo),
-		ImageTag:         req.ImageTag,
-		CommitSHA:        req.CommitSHA,
-		TriggeredBy:      req.TriggeredBy,
-		TraceID:          req.TraceID,
-		ReleaseNotes:     req.ReleaseNotes,
-		Status:           model.ReleaseStatusQueued,
-		TrafficPercent:   0,
-		TargetSlot:       nextSlot(spec.CurrentLiveSlot),
-		PreviousLiveSlot: spec.CurrentLiveSlot,
-		SwitchConfirmed:  boolPointer(false),
+	return s.createQueuedRelease(&model.Release{
+		ImageRepo:    firstNonEmpty(req.ImageRepo, spec.ImageRepo),
+		ImageTag:     req.ImageTag,
+		CommitSHA:    req.CommitSHA,
+		TriggeredBy:  req.TriggeredBy,
+		TraceID:      req.TraceID,
+		ReleaseNotes: req.ReleaseNotes,
+	}, spec)
+}
+
+func (s *Service) CreateManual(req dto.CreateManualReleaseRequest, operator string) (*dto.ReleaseOutput, error) {
+	if !image.ValidTag(req.ImageTag) {
+		return nil, business.NewBadRequest("imageTag 格式非法")
 	}
+	spec, err := s.services.GetSpecByID(req.ServiceID)
+	if err != nil {
+		return nil, err
+	}
+	if !spec.Enabled {
+		return nil, business.NewBadRequest("service 已禁用")
+	}
+	return s.createQueuedRelease(&model.Release{
+		ImageRepo:    spec.ImageRepo,
+		ImageTag:     req.ImageTag,
+		TriggeredBy:  operator,
+		ReleaseNotes: req.ReleaseNotes,
+	}, spec)
+}
+
+func (s *Service) createQueuedRelease(release *model.Release, spec *dto.ServiceDeploymentSpec) (*dto.ReleaseOutput, error) {
+	release.ID = uuid.New()
+	release.ServiceID = spec.ID
+	release.AgentID = spec.AgentID
+	release.Status = model.ReleaseStatusQueued
+	release.TargetSlot = nextSlot(spec.CurrentLiveSlot)
+	release.PreviousLiveSlot = spec.CurrentLiveSlot
+	release.SwitchConfirmed = boolPointer(false)
 
 	if err := s.repo.CreateRelease(release); err != nil {
 		return nil, err
 	}
-	if err := s.repo.CreateAudit(newAudit("release", release.ID.String(), "release_requested", req.TraceID, "release queued")); err != nil {
+	if err := s.repo.CreateAudit(newAudit("release", release.ID.String(), "release_requested", release.TraceID, "release queued")); err != nil {
 		return nil, err
 	}
 	output, err := s.enrichReleaseOutput(release)

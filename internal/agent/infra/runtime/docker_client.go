@@ -199,12 +199,14 @@ func slotToString(slot grpcapi.Slot) string {
 }
 
 func (c *DockerClient) EnsureImage(ctx context.Context, imageRef string, task *grpcapi.TaskCommand) error {
-	exists, err := c.imageExists(ctx, imageRef)
-	if err != nil {
-		return err
-	}
-	if exists {
-		return nil
+	if task.GetType() != grpcapi.TaskType_TASK_TYPE_DEPLOY_GREEN {
+		exists, err := c.imageExists(ctx, imageRef)
+		if err != nil {
+			return err
+		}
+		if exists {
+			return nil
+		}
 	}
 
 	c.logger.Infof("pulling docker image: image=%s", imageRef)
@@ -242,7 +244,7 @@ func (c *DockerClient) EnsureImage(ctx context.Context, imageRef string, task *g
 		return fmt.Errorf("docker pull image failed: %w", err)
 	}
 
-	exists, err = c.imageExists(ctx, imageRef)
+	exists, err := c.imageExists(ctx, imageRef)
 	if err != nil {
 		return err
 	}

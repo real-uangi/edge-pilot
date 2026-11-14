@@ -1,3 +1,9 @@
+export interface CreateReleaseInput {
+  serviceId: string;
+  imageTag: string;
+  releaseNotes?: string;
+}
+
 export interface ReleaseRecord {
   id: string;
   serviceId: string;

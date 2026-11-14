@@ -1,5 +1,5 @@
 import { request } from "../../shared/lib/api-client";
-import type { ServiceRecord, UpsertServiceInput, ObservabilityRecord } from "./types";
+import type { ServiceRecord, UpsertServiceInput, ObservabilityRecord, ServiceImageTagsInput, ServiceImageTagsPage } from "./types";
 
 export const servicesApi = {
   list() {
@@ -7,6 +7,13 @@ export const servicesApi = {
   },
   get(id: string) {
     return request<ServiceRecord>(`/api/admin/services/${id}`);
+  },
+  listImageTags(input: ServiceImageTagsInput, signal?: AbortSignal) {
+    return request<ServiceImageTagsPage>("/api/admin/services/image-tags", {
+      method: "POST",
+      body: JSON.stringify(input),
+      signal,
+    });
   },
   create(input: UpsertServiceInput) {
     return request<ServiceRecord>("/api/admin/services", {

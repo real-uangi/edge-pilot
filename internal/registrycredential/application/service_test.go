@@ -17,6 +17,12 @@ func TestResolveRegistryHost(t *testing.T) {
 		"harbor.example.com/team/app": "harbor.example.com",
 		"localhost:5000/app":          "localhost:5000",
 		"nginx":                       "docker.io",
+		"my.image":                    "docker.io",
+		"registry.example.com":        "docker.io",
+		"localhost":                   "docker.io",
+		"docker.io/library/nginx":     "docker.io",
+		"index.docker.io/nginx":       "index.docker.io",
+		"registry-1.docker.io/nginx":  "registry-1.docker.io",
 		"library/nginx":               "docker.io",
 	}
 	for imageRepo, expected := range testCases {

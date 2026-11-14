@@ -193,6 +193,7 @@ token 明文只会在创建和重置时返回一次。
 - 不需要额外 Linux capabilities
 - 若需要平台内私有镜像登录能力，需要额外配置 `REGISTRY_SECRET_MASTER_KEY`
 - 若服务配置里会填写环境变量，需要额外配置 `SERVICE_SECRET_MASTER_KEY`
+- 主动查询 Tag 时需要通过 HTTPS 访问镜像仓库及其 Bearer 认证端点；control-plane 镜像包含系统 CA 证书包，不支持 HTTP 仓库或跳过 TLS 证书校验
 
 ### agent
 
@@ -201,6 +202,9 @@ token 明文只会在创建和重置时返回一次。
 - 需要通过 `--group-add <docker.sock gid>` 追加 socket 对应组
 - 不建议把 agent 容器切回 root；默认非 root 模型已经能满足访问 Docker 的需求
 - agent 本身不保存镜像仓库凭据；私有镜像发布时由 control-plane 按 registry host 匹配并通过内部 gRPC 下发拉取凭据
+- 宿主机 Docker daemon 需要能访问镜像仓库；业务发布每次重新拉取所选 Tag，代理栈及 helper 镜像仍复用本地缓存
+
+主动发布需要 control-plane 能查询仓库 Tag，同时目标 agent 的 Docker daemon 能拉取镜像，两侧网络访问需分别满足。更新 control-plane 提供主动发布入口后，还需更新 agent，才能生效新的业务镜像刷新与同名镜像清理保护行为；无需数据库迁移或 gRPC 协议变更。
 
 ## 排错建议
 

@@ -18,6 +18,12 @@ type CreateReleaseFromCIRequest struct {
 	ReleaseNotes string `json:"releaseNotes"`
 }
 
+type CreateManualReleaseRequest struct {
+	ServiceID    uuid.UUID `json:"serviceId" binding:"required"`
+	ImageTag     string    `json:"imageTag" binding:"required"`
+	ReleaseNotes string    `json:"releaseNotes"`
+}
+
 type ReleaseOutput struct {
 	ID                       uuid.UUID           `json:"id"`
 	ServiceID                uuid.UUID           `json:"serviceId"`

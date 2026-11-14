@@ -14,6 +14,8 @@ var ControlPlaneModule = fx.Module(
 	"servicecatalog",
 	fx.Provide(
 		infra.NewRepository,
+		infra.NewImageTagLister,
+		application.NewImageTagService,
 		func(reg *registry.RegistryService) domain.AgentLookup { return reg },
 		func(repo domain.Repository) agentdomain.ServiceBindingChecker {
 			return infra.NewAgentServiceBindingChecker(repo)

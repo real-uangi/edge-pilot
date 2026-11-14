@@ -16,6 +16,7 @@ import (
 )
 
 type releaseAdminActions interface {
+	CreateManual(dto.CreateManualReleaseRequest, string) (*dto.ReleaseOutput, error)
 	List() ([]dto.ReleaseOutput, error)
 	Get(id uuid.UUID) (*dto.ReleaseOutput, error)
 	ListTaskSnapshots(releaseID uuid.UUID) ([]dto.TaskSnapshot, error)
@@ -36,6 +37,11 @@ func SetAdminReleaseRoutes(engine *gin.Engine, releases *releaseapp.Service, aut
 }
 
 func registerAdminReleaseRoutes(admin *gin.RouterGroup, releases releaseAdminActions) {
+	admin.POST("/releases", func(c *gin.Context) {
+		api.JsonFunc(func(input dto.CreateManualReleaseRequest) (*dto.ReleaseOutput, error) {
+			return releases.CreateManual(input, adaptermiddleware.CurrentAdminUsername(c))
+		})(c)
+	})
 	admin.GET("/releases", api.NoArgsFunc(func() ([]dto.ReleaseOutput, error) {
 		return releases.List()
 	}))
