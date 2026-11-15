@@ -1,6 +1,7 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useLocation, useNavigate } from "react-router-dom";
+import { Eye, EyeOff, Waypoints } from "lucide-react";
 import { getErrorMessage } from "../../../shared/lib/api-client";
 import { authApi } from "../api";
 import styles from "./LoginPage.module.css";
@@ -11,6 +12,11 @@ export function LoginPage() {
   const queryClient = useQueryClient();
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
+  const [passwordVisible, setPasswordVisible] = useState(false);
+
+  useEffect(() => {
+    document.title = "登录 · Edge Pilot";
+  }, []);
 
   const loginMutation = useMutation({
     mutationFn: authApi.login,
@@ -21,40 +27,85 @@ export function LoginPage() {
   });
 
   return (
-    <div className={styles.page}>
-      <section className={styles.panel}>
-        <div className={styles.copy}>
-          <span className={styles.eyebrow}>Edge Pilot</span>
-          <h1 className={styles.title}>Edge Pilot Control Plane 登录</h1>
-          <p className={styles.subtitle}>使用管理员账号进入集群控制平面。</p>
+    <main className={styles.page}>
+      <section className={styles.panel} aria-labelledby="login-title">
+        <div className={styles.brand}>
+          <span className={styles.brandMark} aria-hidden="true">
+            <Waypoints size={23} strokeWidth={1.8} />
+          </span>
+          <span>Edge Pilot</span>
         </div>
+        <h1 id="login-title" className={styles.title}>
+          登录控制台
+        </h1>
         <form
           className={styles.form}
+          aria-busy={loginMutation.isPending}
           onSubmit={(event) => {
             event.preventDefault();
-            loginMutation.mutate({ username, password });
+            if (!loginMutation.isPending)
+              loginMutation.mutate({ username, password });
           }}
         >
           <label className={styles.field}>
             <span>用户名</span>
-            <input value={username} onChange={(event) => setUsername(event.target.value)} />
+            <input
+              name="username"
+              autoComplete="username"
+              autoCapitalize="none"
+              spellCheck={false}
+              required
+              value={username}
+              onChange={(event) => setUsername(event.target.value)}
+              aria-describedby={
+                loginMutation.isError ? "login-error" : undefined
+              }
+            />
           </label>
           <label className={styles.field}>
             <span>密码</span>
-            <input
-              type="password"
-              value={password}
-              onChange={(event) => setPassword(event.target.value)}
-            />
+            <span className={styles.passwordField}>
+              <input
+                name="password"
+                type={passwordVisible ? "text" : "password"}
+                autoComplete="current-password"
+                required
+                value={password}
+                onChange={(event) => setPassword(event.target.value)}
+                aria-describedby={
+                  loginMutation.isError ? "login-error" : undefined
+                }
+              />
+              <button
+                type="button"
+                className={styles.passwordToggle}
+                aria-label={passwordVisible ? "隐藏密码" : "显示密码"}
+                aria-pressed={passwordVisible}
+                onClick={() => setPasswordVisible((visible) => !visible)}
+              >
+                {passwordVisible ? (
+                  <EyeOff size={17} aria-hidden="true" />
+                ) : (
+                  <Eye size={17} aria-hidden="true" />
+                )}
+              </button>
+            </span>
           </label>
           {loginMutation.isError ? (
-            <div className={styles.error}>{getErrorMessage(loginMutation.error)}</div>
+            <div className={styles.error} id="login-error" role="alert">
+              {getErrorMessage(loginMutation.error)}
+            </div>
           ) : null}
-          <button className={styles.submit} disabled={loginMutation.isPending} type="submit">
-            {loginMutation.isPending ? "登录中" : "登录"}
+          <button
+            className={styles.submit}
+            disabled={loginMutation.isPending}
+            type="submit"
+          >
+            {loginMutation.isPending ? "正在登录" : "登录"}
           </button>
         </form>
       </section>
-    </div>
+      <span className={styles.footer}>Edge Pilot Control Plane</span>
+    </main>
   );
 }

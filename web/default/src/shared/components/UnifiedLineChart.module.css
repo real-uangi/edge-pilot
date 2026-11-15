@@ -1,46 +1,52 @@
 .card {
-  border-radius: var(--ep-radius-md);
-  background: var(--ep-surface-mid);
-  border: 1px solid var(--ep-outline-ghost);
-  padding: 10px;
+  min-width: 0;
   display: grid;
-  gap: 8px;
+  gap: 14px;
+  padding: 18px;
+  border: 1px solid var(--ep-outline-ghost);
+  border-radius: var(--ep-radius-md);
+  background: var(--ep-surface);
 }
 
 .header {
   display: flex;
   align-items: baseline;
   justify-content: space-between;
-  gap: 8px;
+  gap: 12px;
+  flex-wrap: wrap;
+  min-width: 0;
 }
 
 .title {
-  color: var(--ep-text-muted);
-  font-size: 12px;
-  font-weight: 600;
+  color: var(--ep-text);
+  font-size: 13px;
+  font-weight: 550;
 }
 
 .legend {
-  display: inline-flex;
+  display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 8px;
-  color: var(--ep-text-dim);
-  font-size: 11px;
+  gap: 8px 12px;
+  color: var(--ep-text-muted);
+  font-size: 12px;
 }
 
 .legendItem {
   display: inline-flex;
   align-items: center;
-  gap: 5px;
+  gap: 6px;
 }
 
 .legendSwatch {
-  width: 8px;
-  height: 8px;
-  border-radius: 999px;
+  width: 14px;
+  height: 3px;
+  border-radius: 2px;
+  flex: 0 0 auto;
 }
 
 .wrap {
+  min-width: 0;
   height: 260px;
 }
 
@@ -48,62 +54,70 @@
   min-height: 120px;
   display: grid;
   place-items: center;
+  padding: 20px;
   color: var(--ep-text-dim);
-  font-size: 12px;
+  font-size: 13px;
   border-radius: var(--ep-radius-sm);
   background: var(--ep-surface-lowest);
-  border: 1px solid var(--ep-outline-ghost);
 }
 
 .tooltipCard {
-  min-width: 150px;
+  min-width: 160px;
   display: grid;
-  gap: 6px;
-  padding: 8px 10px;
+  gap: 8px;
+  padding: 12px;
+  border: 1px solid var(--ep-outline);
   border-radius: var(--ep-radius-sm);
-  border: 1px solid var(--ep-outline-ghost);
-  background: linear-gradient(180deg, var(--ep-surface-high), var(--ep-surface-mid));
-  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.28);
+  background: var(--ep-surface);
+  box-shadow: var(--ep-shadow-soft);
 }
 
 .tooltipHead {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  font-size: 11px;
+  gap: 7px;
+  font-size: 12px;
   color: var(--ep-text-muted);
-  line-height: 1.2;
+  line-height: 1.4;
 }
 
 .tooltipDot {
-  width: 8px;
-  height: 8px;
-  border-radius: 999px;
-  box-shadow: 0 0 0 1px rgba(16, 19, 26, 0.65);
+  width: 7px;
+  height: 7px;
+  border-radius: 2px;
+  flex: 0 0 auto;
 }
 
 .tooltipMeta {
   color: var(--ep-text-dim);
-  font-size: 11px;
-  line-height: 1.2;
+  font-size: 12px;
+  line-height: 1.4;
 }
 
 .tooltipValue {
   color: var(--ep-text);
-  font-family: var(--ep-font-heading);
-  font-size: 15px;
-  font-weight: 700;
-  line-height: 1.1;
+  font-family: var(--ep-font-mono);
+  font-size: 13px;
+  font-weight: 550;
+  line-height: 1.4;
+  font-variant-numeric: tabular-nums;
 }
 
 .tooltipRows {
   display: grid;
-  gap: 6px;
+  gap: 7px;
 }
 
 .tooltipRow {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
+  gap: 16px;
+}
+
+@media (max-width: 767px) {
+  .card {
+    padding: 14px 10px;
+    gap: 12px;
+  }
 }

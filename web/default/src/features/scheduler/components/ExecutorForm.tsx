@@ -1,55 +1,71 @@
-import { useMemo } from "react";
+import { useId, useMemo } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { getErrorMessage } from "../../../shared/lib/api-client";
 import { schedulerApi } from "../api";
+import type {
+  SchedulerExecutorRecord,
+  UpsertSchedulerExecutorInput,
+} from "../types";
 import { ActionButton } from "../../../shared/components/ActionButton";
+import { InlineNotice } from "../../../shared/components/StateBlocks";
 import styles from "../../../styles/admin.module.css";
 import { z } from "zod";
 
 const executorSchema = z.object({
-  executorId: z.string().min(1, "执行器 ID 必填").max(128, "最长 128 字符"),
-  group: z.string().min(1, "组名必填").max(128, "最长 128 字符"),
+  executorId: z
+    .string()
+    .trim()
+    .min(1, "请输入执行器 ID")
+    .max(128, "最长 128 字符"),
+  group: z.string().trim().min(1, "请输入组名").max(128, "最长 128 字符"),
   enabled: z.boolean().default(true),
   metadataText: z
     .string()
-    .refine(
-      (val) => {
-        try {
-          const parsed = JSON.parse(val);
-          return typeof parsed === "object" && !Array.isArray(parsed);
-        } catch {
-          return false;
-        }
-      },
-      { message: "Metadata 必须是有效的 JSON 对象" }
-    )
+    .refine((value) => {
+      try {
+        const parsed = JSON.parse(value);
+        return (
+          parsed !== null &&
+          typeof parsed === "object" &&
+          !Array.isArray(parsed) &&
+          Object.values(parsed).every((item) => typeof item === "string")
+        );
+      } catch {
+        return false;
+      }
+    }, "请输入值为字符串的 JSON 对象")
     .default("{}"),
 });
+type ExecutorFormData = z.output<typeof executorSchema>;
 
-type ExecutorFormData = z.infer<typeof executorSchema>;
-
-export function ExecutorForm() {
+export function ExecutorForm({
+  onCreated,
+  onCancel,
+}: {
+  onCreated: (output: SchedulerExecutorRecord) => void;
+  onCancel: () => void;
+}) {
+  const fieldId = useId();
   const queryClient = useQueryClient();
-
   const executorsQuery = useQuery({
     queryKey: ["scheduler", "executors"],
     queryFn: schedulerApi.listExecutors,
   });
-
-  const groups = useMemo(() => {
-    const set = new Set(executorsQuery.data?.map((e) => e.group) ?? []);
-    return Array.from(set).sort();
-  }, [executorsQuery.data]);
-
+  const groups = useMemo(
+    () =>
+      Array.from(
+        new Set(executorsQuery.data?.map((executor) => executor.group) ?? []),
+      ).sort(),
+    [executorsQuery.data],
+  );
   const {
     register,
     handleSubmit,
-    reset,
     formState: { errors },
-  } = useForm<ExecutorFormData>({
-    resolver: zodResolver(executorSchema) as any,
+  } = useForm<z.input<typeof executorSchema>, unknown, ExecutorFormData>({
+    resolver: zodResolver(executorSchema),
     defaultValues: {
       executorId: "",
       group: "default",
@@ -57,75 +73,115 @@ export function ExecutorForm() {
       metadataText: "{}",
     },
   });
-
   const createMutation = useMutation({
-    mutationFn: schedulerApi.createExecutor,
-    onSuccess: async () => {
-      reset();
-      await queryClient.invalidateQueries({ queryKey: ["scheduler", "executors"] });
+    mutationKey: ["scheduler", "create-executor"],
+    mutationFn: async (input: UpsertSchedulerExecutorInput) => {
+      const output = await schedulerApi.createExecutor(input);
+      await queryClient.invalidateQueries({
+        queryKey: ["scheduler", "executors"],
+      });
+      onCreated(output);
     },
   });
-
-  const onSubmit = (data: ExecutorFormData) => {
-    const metadata = JSON.parse(data.metadataText) as Record<string, string>;
+  const onSubmit = (data: ExecutorFormData) =>
     createMutation.mutate({
       executorId: data.executorId,
       group: data.group,
       enabled: data.enabled,
-      metadata,
+      metadata: JSON.parse(data.metadataText) as Record<string, string>,
     });
-  };
 
   return (
-    <section className={styles.sectionCard}>
-      <div className={styles.sectionHeader}>
-        <div>
-          <h2 className={styles.sectionTitle}>新建执行器</h2>
-        </div>
+    <form
+      className={styles.formStack}
+      onSubmit={handleSubmit(onSubmit)}
+      noValidate
+    >
+      <div className={styles.fieldGrid}>
+        <label className={styles.field}>
+          <span className={styles.label}>
+            执行器 ID <span aria-hidden="true">*</span>
+          </span>
+          <input
+            className={styles.input}
+            {...register("executorId")}
+            autoComplete="off"
+            aria-required="true"
+            aria-invalid={Boolean(errors.executorId)}
+            aria-describedby={
+              errors.executorId ? `${fieldId}-id-error` : undefined
+            }
+          />
+          {errors.executorId ? (
+            <span className={styles.fieldError} id={`${fieldId}-id-error`}>
+              {errors.executorId.message}
+            </span>
+          ) : null}
+        </label>
+        <label className={styles.field}>
+          <span className={styles.label}>
+            组 <span aria-hidden="true">*</span>
+          </span>
+          <input
+            className={styles.input}
+            {...register("group")}
+            list={`${fieldId}-groups`}
+            aria-required="true"
+            aria-invalid={Boolean(errors.group)}
+            aria-describedby={
+              errors.group ? `${fieldId}-group-error` : undefined
+            }
+          />
+          <datalist id={`${fieldId}-groups`}>
+            {groups.map((group) => (
+              <option key={group} value={group} />
+            ))}
+          </datalist>
+          {errors.group ? (
+            <span className={styles.fieldError} id={`${fieldId}-group-error`}>
+              {errors.group.message}
+            </span>
+          ) : null}
+        </label>
+        <label className={`${styles.field} ${styles.fieldWide}`}>
+          <span className={styles.label}>元数据（JSON）</span>
+          <textarea
+            className={styles.textarea}
+            rows={4}
+            {...register("metadataText")}
+            spellCheck={false}
+            aria-invalid={Boolean(errors.metadataText)}
+            aria-describedby={
+              errors.metadataText ? `${fieldId}-metadata-error` : undefined
+            }
+          />
+          {errors.metadataText ? (
+            <span
+              className={styles.fieldError}
+              id={`${fieldId}-metadata-error`}
+            >
+              {errors.metadataText.message}
+            </span>
+          ) : null}
+        </label>
+      </div>
+      {createMutation.isError ? (
+        <InlineNotice message={getErrorMessage(createMutation.error)} />
+      ) : null}
+      <div className={styles.formActions}>
+        <ActionButton
+          label="取消"
+          disabled={createMutation.isPending}
+          onClick={onCancel}
+        />
         <ActionButton
           label="创建执行器"
           variant="primary"
+          type="submit"
           pending={createMutation.isPending}
-          onClick={handleSubmit(onSubmit)}
+          pendingLabel="创建中"
         />
       </div>
-      <div className={styles.fieldGrid}>
-        <label className={styles.field}>
-          <span className={styles.label}>执行器 ID</span>
-          <input className={styles.input} {...register("executorId")} />
-          {errors.executorId && (
-            <span className={styles.inlineError}>{errors.executorId.message}</span>
-          )}
-          <span className={styles.hint}>唯一标识，如 executor-01</span>
-        </label>
-
-        <label className={styles.field}>
-          <span className={styles.label}>组</span>
-          <input className={styles.input} {...register("group")} list="executorGroups" />
-          <datalist id="executorGroups">
-            {groups.map((g) => (
-              <option key={g} value={g} />
-            ))}
-          </datalist>
-          {errors.group && <span className={styles.inlineError}>{errors.group.message}</span>}
-          <span className={styles.hint}>执行器所属分组，如 default</span>
-        </label>
-
-        <label className={`${styles.field} ${styles.fieldWide}`}>
-          <span className={styles.label}>元数据（JSON）</span>
-          <textarea className={styles.textarea} rows={2} {...register("metadataText")} />
-          {errors.metadataText && (
-            <span className={styles.inlineError}>{errors.metadataText.message}</span>
-          )}
-          <span className={styles.hint}>
-            执行器附加标签，用于日志追踪，如 {'{"region": "cn-north-1"}'}
-          </span>
-        </label>
-      </div>
-
-      {createMutation.error && (
-        <div className={styles.inlineError}>{getErrorMessage(createMutation.error)}</div>
-      )}
-    </section>
+    </form>
   );
 }

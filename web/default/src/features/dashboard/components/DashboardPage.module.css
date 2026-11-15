@@ -1,0 +1,144 @@
+.metric {
+  display: grid;
+  gap: 18px;
+  padding: 20px;
+  border: 1px solid var(--ep-outline-ghost);
+  border-radius: 10px;
+  background: var(--ep-surface);
+  min-width: 0;
+}
+.metric:hover {
+  border-color: var(--ep-outline);
+  background: var(--ep-surface-low);
+}
+.metricTop,
+.metricBottom {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  color: var(--ep-text-muted);
+  font-size: 13px;
+}
+.metricTop svg {
+  color: var(--ep-text-dim);
+}
+.metricValue {
+  font-size: 36px;
+  line-height: 1;
+  letter-spacing: -0.045em;
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+}
+.metricBottom {
+  font-size: 12px;
+}
+.workGrid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.6fr) minmax(280px, 1fr);
+  gap: 20px;
+  align-items: start;
+}
+.releaseList,
+.nodeList {
+  display: grid;
+}
+.releaseRow {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 16px 0;
+  border-top: 1px solid var(--ep-outline-ghost);
+}
+.releaseRow:hover .rowArrow {
+  color: var(--ep-text);
+  transform: translate(2px, -2px);
+}
+.releaseMain {
+  min-width: 0;
+  display: grid;
+  gap: 6px;
+  flex: 1;
+}
+.releaseMain strong {
+  font-size: 14px;
+  overflow-wrap: anywhere;
+}
+.releaseMain > span {
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+.releaseEnd {
+  display: grid;
+  justify-items: end;
+  gap: 8px;
+  flex-shrink: 0;
+}
+.rowArrow {
+  color: var(--ep-text-dim);
+  flex-shrink: 0;
+  transition: transform 160ms var(--ep-ease-standard);
+}
+.node {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 15px 0;
+  border-top: 1px solid var(--ep-outline-ghost);
+}
+.nodeIdentity {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+.nodeIdentity > div {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+}
+.nodeIdentity strong {
+  font-size: 14px;
+  overflow-wrap: anywhere;
+}
+.nodeIdentity span {
+  font-size: 12px;
+  color: var(--ep-text-muted);
+}
+.nodeIcon {
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
+  background: var(--ep-surface-mid);
+  flex-shrink: 0;
+}
+@media (max-width: 1023px) {
+  .workGrid {
+    grid-template-columns: 1fr;
+  }
+}
+@media (max-width: 767px) {
+  .metric {
+    padding: 16px;
+    gap: 16px;
+  }
+  .metricValue {
+    font-size: 30px;
+  }
+  .releaseRow {
+    gap: 10px;
+    flex-wrap: wrap;
+  }
+  .releaseMain {
+    min-width: 120px;
+  }
+  .releaseEnd {
+    max-width: 140px;
+  }
+  .rowArrow {
+    display: none;
+  }
+}

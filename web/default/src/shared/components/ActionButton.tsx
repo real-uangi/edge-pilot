@@ -10,34 +10,40 @@ const variantClassMap: Record<ActionVariant, string> = {
   ghost: styles.ghostButton,
 };
 
-interface ActionButtonProps extends Omit<ButtonHTMLAttributes<HTMLButtonElement>, "children"> {
+interface ActionButtonProps extends Omit<
+  ButtonHTMLAttributes<HTMLButtonElement>,
+  "children"
+> {
   label: string;
   pending?: boolean;
   pendingLabel?: string;
   variant?: ActionVariant;
 }
 
-export const ActionButton = forwardRef<HTMLButtonElement, ActionButtonProps>(function ActionButton(
-  {
-    label,
-    pending = false,
-    pendingLabel,
-    variant = "secondary",
-    disabled,
-    type = "button",
-    ...rest
+export const ActionButton = forwardRef<HTMLButtonElement, ActionButtonProps>(
+  function ActionButton(
+    {
+      label,
+      pending = false,
+      pendingLabel,
+      variant = "secondary",
+      disabled,
+      type = "button",
+      ...rest
+    },
+    ref,
+  ) {
+    return (
+      <button
+        className={variantClassMap[variant]}
+        aria-busy={pending || undefined}
+        disabled={disabled || pending}
+        ref={ref}
+        type={type}
+        {...rest}
+      >
+        {pending ? (pendingLabel ?? `${label}中`) : label}
+      </button>
+    );
   },
-  ref,
-) {
-  return (
-    <button
-      className={variantClassMap[variant]}
-      disabled={disabled || pending}
-      ref={ref}
-      type={type}
-      {...rest}
-    >
-      {pending ? pendingLabel ?? `${label}中` : label}
-    </button>
-  );
-});
+);

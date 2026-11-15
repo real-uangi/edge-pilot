@@ -1,8 +1,11 @@
 import { ActionButton } from "../../../shared/components/ActionButton";
 import type { ReleaseRecord } from "../types";
+import styles from "../../../styles/admin.module.css";
 
 interface ReleaseActionsProps {
   release: ReleaseRecord;
+  busy: boolean;
+  refreshPending: boolean;
   startPending: boolean;
   skipPending: boolean;
   confirmPending: boolean;
@@ -19,6 +22,8 @@ interface ReleaseActionsProps {
 
 export function ReleaseActions({
   release,
+  busy,
+  refreshPending,
   startPending,
   skipPending,
   confirmPending,
@@ -32,57 +37,70 @@ export function ReleaseActions({
   onBack,
   onRefresh,
 }: ReleaseActionsProps) {
-  const canAdjustTraffic = release.status === 4;
-
   return (
-    <div className="buttonRow">
-      <ActionButton label="返回" onClick={onBack} />
-      <ActionButton label="刷新" onClick={onRefresh} />
+    <div className={styles.buttonRow}>
+      <ActionButton label="返回发布" onClick={onBack} variant="ghost" />
       <ActionButton
-        label="验证目标版本"
-        disabled={!release.verificationUrl || release.status < 4}
-        onClick={() => {
-          if (!release.verificationUrl) {
-            return;
-          }
-          window.open(release.verificationUrl, "_blank", "noopener,noreferrer");
-        }}
-      />
-      <ActionButton
-        label="开始"
-        pending={startPending}
-        variant="primary"
-        disabled={release.status !== 1 && release.status !== 9}
-        onClick={onStart}
-      />
-      <ActionButton
-        label="跳过"
-        pending={skipPending}
+        label="刷新"
+        pending={refreshPending}
+        onClick={onRefresh}
         variant="ghost"
-        disabled={release.status !== 1}
-        onClick={onSkip}
       />
-      <ActionButton
-        label="确认切流"
-        pending={confirmPending}
-        variant="primary"
-        disabled={release.status !== 4}
-        onClick={onConfirm}
-      />
-      <ActionButton
-        label="回滚"
-        pending={rollbackPending}
-        variant="danger"
-        disabled={!canAdjustTraffic}
-        onClick={onRollback}
-      />
-      <ActionButton
-        label="重试"
-        pending={retryPending}
-        variant="ghost"
-        disabled={release.status !== 7}
-        onClick={onRetry}
-      />
+      {release.verificationUrl && release.status >= 4 ? (
+        <a
+          className={styles.secondaryButton}
+          href={release.verificationUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+        >
+          验证目标版本 ↗
+        </a>
+      ) : null}
+      {release.status === 1 || release.status === 9 ? (
+        <ActionButton
+          label="开始部署"
+          pending={startPending}
+          variant="primary"
+          disabled={busy}
+          onClick={onStart}
+        />
+      ) : null}
+      {release.status === 1 ? (
+        <ActionButton
+          label="跳过"
+          pending={skipPending}
+          variant="ghost"
+          disabled={busy}
+          onClick={onSkip}
+        />
+      ) : null}
+      {release.status === 4 ? (
+        <>
+          <ActionButton
+            label="确认切流"
+            pending={confirmPending}
+            variant="primary"
+            disabled={busy}
+            onClick={onConfirm}
+          />
+          <ActionButton
+            label="回滚"
+            pending={rollbackPending}
+            variant="danger"
+            disabled={busy}
+            onClick={onRollback}
+          />
+        </>
+      ) : null}
+      {release.status === 7 ? (
+        <ActionButton
+          label="重试部署"
+          pending={retryPending}
+          variant="primary"
+          disabled={busy}
+          onClick={onRetry}
+        />
+      ) : null}
     </div>
   );
 }

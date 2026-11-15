@@ -1,5 +1,8 @@
 import { z } from "zod";
-import type { ServiceRecord, UpsertServiceInput } from "../../features/services/types";
+import type {
+  ServiceRecord,
+  UpsertServiceInput,
+} from "../../features/services/types";
 
 const lineList = (value: string) =>
   value
@@ -12,7 +15,7 @@ function parseEnv(text: string): Record<string, string> {
   for (const line of lineList(text)) {
     const index = line.indexOf("=");
     if (index <= 0) {
-      throw new Error(`Invalid env line: ${line}`);
+      throw new Error(`环境变量格式应为 KEY=value：${line}`);
     }
     result[line.slice(0, index).trim()] = line.slice(index + 1).trim();
   }
@@ -24,23 +27,25 @@ function parseHeaders(text: string): Record<string, string> {
   for (const line of lineList(text)) {
     const index = line.indexOf(":");
     if (index <= 0) {
-      throw new Error(`Invalid header line: ${line}`);
+      throw new Error(`Header 格式应为 Header-Name: value：${line}`);
     }
     const key = line.slice(0, index).trim();
     const value = line.slice(index + 1).trim();
     if (!key || !value) {
-      throw new Error(`Invalid header line: ${line}`);
+      throw new Error(`Header 名称和值不能为空：${line}`);
     }
     result[key] = value;
   }
   return result;
 }
 
-function parseVolumes(text: string): Array<{ source: string; target: string; readOnly: boolean }> {
+function parseVolumes(
+  text: string,
+): Array<{ source: string; target: string; readOnly: boolean }> {
   return lineList(text).map((line) => {
     const parts = line.split(":").map((item) => item.trim());
     if (parts.length < 2 || parts.length > 3) {
-      throw new Error(`Invalid volume line: ${line}`);
+      throw new Error(`挂载卷格式应为 /src:/dst[:ro]：${line}`);
     }
     return {
       source: parts[0],
@@ -50,11 +55,13 @@ function parseVolumes(text: string): Array<{ source: string; target: string; rea
   });
 }
 
-function parsePublishedPorts(text: string): Array<{ hostPort: number; containerPort: number }> {
- return lineList(text).map((line) => {
+function parsePublishedPorts(
+  text: string,
+): Array<{ hostPort: number; containerPort: number }> {
+  return lineList(text).map((line) => {
     const parts = line.split(":").map((item) => item.trim());
     if (parts.length !== 2) {
-      throw new Error(`Invalid published port line: ${line}`);
+      throw new Error(`暴露端口格式应为 host:container：${line}`);
     }
     return {
       hostPort: Number(parts[0]),
@@ -63,16 +70,23 @@ function parsePublishedPorts(text: string): Array<{ hostPort: number; containerP
   });
 }
 
-function parseTCPProxyPorts(text: string): Array<{ listenPort: number; containerPort: number; idleTimeoutSecond: number }> {
+function parseTCPProxyPorts(
+  text: string,
+): Array<{
+  listenPort: number;
+  containerPort: number;
+  idleTimeoutSecond: number;
+}> {
   return lineList(text).map((line) => {
     const parts = line.split(":").map((item) => item.trim());
     if (parts.length !== 2 && parts.length !== 3) {
-      throw new Error(`Invalid TCP proxy port line: ${line}`);
+      throw new Error(`TCP 代理格式应为 公网端口:容器端口[:空闲秒]：${line}`);
     }
     return {
       listenPort: Number(parts[0]),
       containerPort: Number(parts[1]),
-      idleTimeoutSecond: parts.length === 3 && parts[2] ? Number(parts[2]) : 3600,
+      idleTimeoutSecond:
+        parts.length === 3 && parts[2] ? Number(parts[2]) : 3600,
     };
   });
 }
@@ -85,43 +99,96 @@ function parseRouteHosts(text: string): string[] {
   return lineList(text);
 }
 
-export const serviceFormSchema = z.object({
-  name: z.string().min(1, "必填"),
-  serviceKey: z.string().min(1, "必填"),
-  agentId: z.string().uuid("必须是 UUID"),
-  imageRepo: z.string().min(1, "必填"),
-  containerPort: z.coerce.number().int().positive(),
-  cpuLimitCores: z.coerce.number().min(0),
-  memoryLimitMB: z.coerce.number().int().min(0),
-  dockerHealthCheck: z.boolean(),
-  httpHealthPath: z.string().trim(),
-  httpExpectedCode: z.coerce.number().int().positive(),
-  httpTimeoutSecond: z.coerce.number().int().positive(),
-  startupGraceSecond: z.coerce.number().int().min(0),
-  httpProbeTimeoutSecond: z.coerce.number().int().positive(),
-  httpProbeIntervalSecond: z.coerce.number().int().positive(),
-  httpSuccessThreshold: z.coerce.number().int().positive(),
-  schedulerSdkPort: z.coerce.number().int().min(0).max(65535),
-  schedulerSdkAddr: z.string().trim(),
-  schedulerExecutorGroup: z.string().trim(),
-  routeHost: z.string().min(1, "必填"),
-  routeHostsText: z.string(),
-  routePathPrefix: z.string().trim(),
-  enabled: z.boolean(),
-  httpHealthHeadersText: z.string(),
-  envText: z.string(),
-  commandText: z.string(),
-  entrypointText: z.string(),
-  volumesText: z.string(),
-  networkAliasesText: z.string(),
-  publishedPortsText: z.string(),
-  tcpProxyPortsText: z.string(),
-});
+export const serviceFormSchema = z
+  .object({
+    name: z.string().min(1, "必填"),
+    serviceKey: z.string().min(1, "必填"),
+    agentId: z.string().uuid("必须是 UUID"),
+    imageRepo: z.string().min(1, "必填"),
+    containerPort: z.coerce
+      .number({ error: "请输入有效数字" })
+      .int("请输入整数")
+      .positive("请输入大于 0 的整数"),
+    cpuLimitCores: z.coerce
+      .number({ error: "请输入有效数字" })
+      .min(0, "不能小于 0"),
+    memoryLimitMB: z.coerce
+      .number({ error: "请输入有效数字" })
+      .int("请输入整数")
+      .min(0, "不能小于 0"),
+    dockerHealthCheck: z.boolean(),
+    httpHealthPath: z.string().trim(),
+    httpExpectedCode: z.coerce
+      .number({ error: "请输入有效数字" })
+      .int("请输入整数")
+      .positive("请输入大于 0 的整数"),
+    httpTimeoutSecond: z.coerce
+      .number({ error: "请输入有效数字" })
+      .int("请输入整数")
+      .positive("请输入大于 0 的整数"),
+    startupGraceSecond: z.coerce
+      .number({ error: "请输入有效数字" })
+      .int("请输入整数")
+      .min(0, "不能小于 0"),
+    httpProbeTimeoutSecond: z.coerce
+      .number({ error: "请输入有效数字" })
+      .int("请输入整数")
+      .positive("请输入大于 0 的整数"),
+    httpProbeIntervalSecond: z.coerce
+      .number({ error: "请输入有效数字" })
+      .int("请输入整数")
+      .positive("请输入大于 0 的整数"),
+    httpSuccessThreshold: z.coerce
+      .number({ error: "请输入有效数字" })
+      .int("请输入整数")
+      .positive("请输入大于 0 的整数"),
+    schedulerSdkPort: z.coerce
+      .number({ error: "请输入有效数字" })
+      .int("请输入整数")
+      .min(0, "不能小于 0")
+      .max(65535, "端口不能大于 65535"),
+    schedulerSdkAddr: z.string().trim(),
+    schedulerExecutorGroup: z.string().trim(),
+    routeHost: z.string().min(1, "必填"),
+    routeHostsText: z.string(),
+    routePathPrefix: z.string().trim(),
+    enabled: z.boolean(),
+    httpHealthHeadersText: z.string(),
+    envText: z.string(),
+    commandText: z.string(),
+    entrypointText: z.string(),
+    volumesText: z.string(),
+    networkAliasesText: z.string(),
+    publishedPortsText: z.string(),
+    tcpProxyPortsText: z.string(),
+  })
+  .superRefine((values, context) => {
+    const textParsers = [
+      ["httpHealthHeadersText", parseHeaders],
+      ["envText", parseEnv],
+      ["volumesText", parseVolumes],
+      ["publishedPortsText", parsePublishedPorts],
+      ["tcpProxyPortsText", parseTCPProxyPorts],
+    ] as const;
+    for (const [field, parse] of textParsers) {
+      try {
+        parse(values[field]);
+      } catch (error) {
+        context.addIssue({
+          code: "custom",
+          path: [field],
+          message: (error as Error).message,
+        });
+      }
+    }
+  });
 
 export type ServiceFormInput = z.input<typeof serviceFormSchema>;
 export type ServiceFormValues = z.output<typeof serviceFormSchema>;
 
-export function toServicePayload(values: ServiceFormValues): UpsertServiceInput {
+export function toServicePayload(
+  values: ServiceFormValues,
+): UpsertServiceInput {
   return {
     name: values.name.trim(),
     serviceKey: values.serviceKey.trim(),
@@ -141,7 +208,10 @@ export function toServicePayload(values: ServiceFormValues): UpsertServiceInput 
     httpSuccessThreshold: values.httpSuccessThreshold,
     schedulerSdkPort: values.schedulerSdkPort,
     schedulerSdkAddr: values.schedulerSdkAddr.trim(),
-    schedulerExecutorGroup: values.schedulerSdkPort > 0 && !values.schedulerExecutorGroup.trim() ? "default" : values.schedulerExecutorGroup.trim(),
+    schedulerExecutorGroup:
+      values.schedulerSdkPort > 0 && !values.schedulerExecutorGroup.trim()
+        ? "default"
+        : values.schedulerExecutorGroup.trim(),
     routeHost: values.routeHost.trim(),
     routeHosts: parseRouteHosts(values.routeHostsText),
     routePathPrefix: values.routePathPrefix.trim(),
@@ -156,7 +226,9 @@ export function toServicePayload(values: ServiceFormValues): UpsertServiceInput 
   };
 }
 
-export function toServiceFormDefaults(service?: ServiceRecord): ServiceFormInput {
+export function toServiceFormDefaults(
+  service?: ServiceRecord,
+): ServiceFormInput {
   return {
     name: service?.name ?? "",
     serviceKey: service?.serviceKey ?? "",
@@ -177,7 +249,12 @@ export function toServiceFormDefaults(service?: ServiceRecord): ServiceFormInput
     schedulerSdkAddr: service?.schedulerSdkAddr ?? "",
     schedulerExecutorGroup: service?.schedulerExecutorGroup ?? "default",
     routeHost: service?.routeHost ?? "",
-    routeHostsText: (service?.routeHosts?.length ? service.routeHosts : service?.routeHost ? [service.routeHost] : []).join("\n"),
+    routeHostsText: (service?.routeHosts?.length
+      ? service.routeHosts
+      : service?.routeHost
+        ? [service.routeHost]
+        : []
+    ).join("\n"),
     routePathPrefix: service?.routePathPrefix ?? "/",
     enabled: service?.enabled ?? true,
     httpHealthHeadersText: Object.entries(service?.httpHealthHeaders ?? {})
@@ -190,14 +267,19 @@ export function toServiceFormDefaults(service?: ServiceRecord): ServiceFormInput
     commandText: (service?.command ?? []).join("\n"),
     entrypointText: (service?.entrypoint ?? []).join("\n"),
     volumesText: (service?.volumes ?? [])
-      .map((item) => `${item.source}:${item.target}${item.readOnly ? ":ro" : ""}`)
+      .map(
+        (item) => `${item.source}:${item.target}${item.readOnly ? ":ro" : ""}`,
+      )
       .join("\n"),
     networkAliasesText: (service?.networkAliases ?? []).join("\n"),
     publishedPortsText: (service?.publishedPorts ?? [])
       .map((item) => `${item.hostPort}:${item.containerPort}`)
       .join("\n"),
     tcpProxyPortsText: (service?.tcpProxyPorts ?? [])
-      .map((item) => `${item.listenPort}:${item.containerPort}:${item.idleTimeoutSecond}`)
+      .map(
+        (item) =>
+          `${item.listenPort}:${item.containerPort}:${item.idleTimeoutSecond}`,
+      )
       .join("\n"),
   };
 }

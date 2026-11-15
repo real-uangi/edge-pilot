@@ -1,91 +1,69 @@
-import { useEffect, useMemo, useState, type PropsWithChildren } from "react";
+import { useEffect, useRef, useState, type PropsWithChildren } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { NavLink, useLocation } from "react-router-dom";
+import { Link, NavLink, useLocation } from "react-router-dom";
 import {
-  LayoutDashboard,
-  Server,
-  HardDrive,
-  Rocket,
-  Clock,
   Activity,
-  ChevronDown,
+  ArrowUpRight,
+  Boxes,
+  CalendarClock,
   ChevronRight,
+  History,
+  KeyRound,
+  LayoutDashboard,
+  ListChecks,
+  LogOut,
+  Menu,
+  Rocket,
+  Server,
+  Waypoints,
+  type LucideIcon,
 } from "lucide-react";
 import { dashboardApi } from "../../features/dashboard/api";
+import {
+  formatDateTime,
+  releaseStatusLabel,
+  releaseStatusTone,
+  shortId,
+} from "../lib/format";
+import { ActionButton } from "./ActionButton";
+import { Modal } from "./Modal";
+import { ErrorState, InlineNotice, LoadingState } from "./StateBlocks";
+import { StatusPill } from "./StatusPill";
 import styles from "./AppShell.module.css";
 
-type NavItem = { to: string; label: string; end?: boolean };
+type NavItem = { to: string; label: string; icon: LucideIcon; end?: boolean };
 
-type NavGroup =
-  | {
-      key: string;
-      label: string;
-      icon: React.ComponentType<{ size?: number; className?: string }>;
-      type: "link";
-      to: string;
-      end?: boolean;
-    }
-  | {
-      key: string;
-      label: string;
-      icon: React.ComponentType<{ size?: number; className?: string }>;
-      type: "group";
-      items: NavItem[];
-    };
-
-const navGroups: NavGroup[] = [
+const navGroups: Array<{ label: string; items: NavItem[] }> = [
   {
-    key: "overview",
-    label: "总览",
-    icon: LayoutDashboard,
-    type: "link",
-    to: "/",
-    end: true,
+    label: "工作台",
+    items: [{ to: "/", label: "总览", icon: LayoutDashboard, end: true }],
   },
   {
-    key: "service",
-    label: "服务管理",
-    icon: Server,
-    type: "group",
+    label: "应用与发布",
     items: [
-      { to: "/services", label: "服务" },
-      { to: "/registry-credentials", label: "镜像仓库" },
+      { to: "/services", label: "服务", icon: Boxes },
+      { to: "/releases", label: "发布记录", icon: Rocket },
+      { to: "/instances", label: "受管实例", icon: Waypoints },
     ],
   },
   {
-    key: "infra",
     label: "基础设施",
-    icon: HardDrive,
-    type: "group",
     items: [
-      { to: "/agents", label: "节点" },
-      { to: "/instances", label: "受管实例" },
+      { to: "/agents", label: "节点", icon: Server },
+      { to: "/registry-credentials", label: "镜像仓库", icon: KeyRound },
     ],
   },
   {
-    key: "release",
-    label: "发布管理",
-    icon: Rocket,
-    type: "group",
-    items: [{ to: "/releases", label: "发布" }],
-  },
-  {
-    key: "scheduler",
     label: "任务调度",
-    icon: Clock,
-    type: "group",
     items: [
-      { to: "/scheduler", label: "定时任务" },
-      { to: "/scheduler/history", label: "执行历史" },
-      { to: "/scheduler/executors", label: "执行器" },
+      { to: "/scheduler", label: "定时任务", icon: CalendarClock, end: true },
+      { to: "/scheduler/history", label: "执行历史", icon: History },
+      { to: "/scheduler/executors", label: "执行器", icon: ListChecks },
     ],
   },
   {
-    key: "monitor",
-    label: "系统监控",
-    icon: Activity,
-    type: "group",
-    items: [{ to: "/system-performance", label: "系统性能" }],
+    label: "系统",
+    items: [{ to: "/system-performance", label: "系统性能", icon: Activity }],
   },
 ];
 
@@ -95,328 +73,333 @@ interface AppShellProps extends PropsWithChildren {
   onLogout: () => void;
 }
 
-const rightRailCollapsedStorageKey = "ep:right-rail-collapsed";
-
-export function AppShell({ username, loggingOut, onLogout, children }: AppShellProps) {
-  const [leftRailOpen, setLeftRailOpen] = useState(false);
-  const [rightRailOpen, setRightRailOpen] = useState(false);
-  const [rightRailCollapsed, setRightRailCollapsed] = useState(() => {
-    if (typeof window === "undefined") {
-      return false;
-    }
-    try {
-      return window.localStorage.getItem(rightRailCollapsedStorageKey) === "1";
-    } catch {
-      return false;
-    }
-  });
-
+export function AppShell({
+  username,
+  loggingOut,
+  onLogout,
+  children,
+}: AppShellProps) {
+  const [navigationOpen, setNavigationOpen] = useState(false);
+  const [healthOpen, setHealthOpen] = useState(false);
+  const mainRef = useRef<HTMLElement>(null);
   const location = useLocation();
+  const activeItem = navGroups
+    .flatMap((group) => group.items)
+    .find((item) =>
+      item.end
+        ? location.pathname === item.to
+        : location.pathname === item.to ||
+          location.pathname.startsWith(`${item.to}/`),
+    );
+  const isDetail = activeItem && location.pathname !== activeItem.to;
+  const pageTitle =
+    location.pathname === "/services/new"
+      ? "新建服务"
+      : isDetail
+        ? `${activeItem.label === "发布记录" ? "发布" : activeItem.label}详情`
+        : (activeItem?.label ?? "页面未找到");
 
   useEffect(() => {
-    try {
-      window.localStorage.setItem(rightRailCollapsedStorageKey, rightRailCollapsed ? "1" : "0");
-    } catch {
-      // no-op
-    }
-  }, [rightRailCollapsed]);
+    setNavigationOpen(false);
+    setHealthOpen(false);
+    document.title = `${pageTitle} · Edge Pilot`;
+    const frame = requestAnimationFrame(() =>
+      mainRef.current?.focus({ preventScroll: true }),
+    );
+    return () => cancelAnimationFrame(frame);
+  }, [location.pathname, pageTitle]);
+
+  useEffect(() => {
+    const desktop = window.matchMedia("(min-width: 1200px)");
+    const closeDesktopNavigation = () => {
+      if (desktop.matches) setNavigationOpen(false);
+    };
+    desktop.addEventListener("change", closeDesktopNavigation);
+    return () => desktop.removeEventListener("change", closeDesktopNavigation);
+  }, []);
 
   const overviewQuery = useQuery({
     queryKey: ["overview"],
     queryFn: dashboardApi.overview,
-    refetchInterval: 10000,
+    enabled: healthOpen,
+    refetchInterval: healthOpen ? 10000 : false,
   });
+  const overview = overviewQuery.data;
 
-  const summary = useMemo(() => {
-    const data = overviewQuery.data;
-    if (!data) {
-      return null;
-    }
-    const onlineAgents = data.agents.filter((item) => item.online).length;
-    const failedReleases = data.recentReleases.filter((item) => item.status === 7).length;
-    const activeReleases = data.recentReleases.filter((item) => item.isActive).length;
-    const disabledServices = data.services.filter((item) => item.enabled === false).length;
-
-    return {
-      onlineAgents,
-      totalAgents: data.agents.length,
-      activeInstances: data.activeInstances,
-      activeReleases,
-      failedReleases,
-      disabledServices,
-      recentReleases: data.recentReleases.slice(0, 5),
-    };
-  }, [overviewQuery.data]);
-
-  const closeDrawers = () => {
-    setLeftRailOpen(false);
-    setRightRailOpen(false);
-  };
-
-  const isGroupActive = (group: NavGroup) => {
-    if (group.type === "link") {
-      if (group.end) {
-        return location.pathname === group.to;
-      }
-      return location.pathname === group.to || location.pathname.startsWith(group.to + "/");
-    }
-    return group.items.some((item) => {
-      if (item.end) {
-        return location.pathname === item.to;
-      }
-      return location.pathname === item.to || location.pathname.startsWith(item.to + "/");
-    });
-  };
-
-  const [expandedGroups, setExpandedGroups] = useState<Set<string>>(() => {
-    const initial = new Set<string>();
-    navGroups.forEach((group) => {
-      if (isGroupActive(group)) {
-        initial.add(group.key);
-      }
-    });
-    return initial;
-  });
-
-  useEffect(() => {
-    setExpandedGroups((prev) => {
-      const next = new Set(prev);
-      navGroups.forEach((group) => {
-        if (isGroupActive(group)) {
-          next.add(group.key);
-        }
-      });
-      return next;
-    });
-  }, [location.pathname]);
-
-  const toggleGroup = (key: string) => {
-    setExpandedGroups((prev) => {
-      const next = new Set(prev);
-      if (next.has(key)) {
-        next.delete(key);
-      } else {
-        next.add(key);
-      }
-      return next;
-    });
-  };
-
-  return (
-    <div className={`${styles.shell} ${rightRailCollapsed ? styles.shellRightRailCollapsed : ""}`}>
-      <header className={styles.mobileHeader}>
-        <div className={styles.mobileBrand}>Edge Pilot Control Plane</div>
-        <div className={styles.mobileActions}>
-          <button
-            className={styles.mobileToggle}
-            onClick={() => {
-              setRightRailOpen(false);
-              setLeftRailOpen((current) => !current);
-            }}
-            type="button"
-          >
-            菜单
-          </button>
-          <button
-            className={styles.mobileToggle}
-            onClick={() => {
-              setLeftRailOpen(false);
-              setRightRailOpen((current) => !current);
-            }}
-            type="button"
-          >
-            健康
-          </button>
-        </div>
-      </header>
-
-      <div className={styles.layout}>
-        <aside className={`${styles.leftRail} ${leftRailOpen ? styles.leftRailOpen : ""}`}>
-          <div className={styles.railBrand}>
-            <span className={styles.brand}>Edge Pilot</span>
-            <span className={styles.meta}>Control Plane</span>
-          </div>
-
-          <nav className={styles.nav}>
-            {navGroups.map((group) => {
-              const Icon = group.icon;
-              const groupActive = isGroupActive(group);
-              const isExpanded = expandedGroups.has(group.key);
-
+  const navigation = (
+    <>
+      <nav className={styles.nav} aria-label="主导航">
+        {navGroups.map((group) => (
+          <div key={group.label} className={styles.navGroup}>
+            <span className={styles.groupLabel}>{group.label}</span>
+            {group.items.map((item) => {
+              const Icon = item.icon;
               return (
-                <div key={group.key} className={styles.navGroup}>
-                  {group.type === "link" ? (
-                    <NavLink
-                      end={group.end}
-                      to={group.to}
-                      className={({ isActive }) =>
-                        `${styles.navGroupHeader} ${isActive ? styles.navGroupHeaderActive : ""}`
-                      }
-                      onClick={closeDrawers}
-                    >
-                      <Icon size={16} className={styles.navGroupIcon} />
-                      <span className={styles.navGroupLabel}>{group.label}</span>
-                    </NavLink>
-                  ) : (
-                    <>
-                      <button
-                        type="button"
-                        className={`${styles.navGroupHeader} ${groupActive ? styles.navGroupHeaderActive : ""}`}
-                        onClick={() => toggleGroup(group.key)}
-                      >
-                        <Icon size={16} className={styles.navGroupIcon} />
-                        <span className={styles.navGroupLabel}>{group.label}</span>
-                        {isExpanded ? (
-                          <ChevronDown size={14} className={styles.navGroupChevron} />
-                        ) : (
-                          <ChevronRight size={14} className={styles.navGroupChevron} />
-                        )}
-                      </button>
-                      <div
-                        className={`${styles.navGroupItems} ${
-                          isExpanded ? styles.navGroupItemsExpanded : styles.navGroupItemsCollapsed
-                        }`}
-                      >
-                        {group.items.map((item) => (
-                          <NavLink
-                            key={item.to}
-                            end={item.end}
-                            to={item.to}
-                            className={({ isActive }) =>
-                              isActive ? styles.navSubActive : styles.navSubLink
-                            }
-                            onClick={closeDrawers}
-                          >
-                            {item.label}
-                          </NavLink>
-                        ))}
-                      </div>
-                    </>
-                  )}
-                </div>
+                <NavLink
+                  key={item.to}
+                  to={item.to}
+                  end={item.end}
+                  className={({ isActive }) =>
+                    `${styles.navLink} ${isActive ? styles.navActive : ""}`
+                  }
+                  onClick={() => setNavigationOpen(false)}
+                >
+                  <Icon size={17} strokeWidth={1.7} aria-hidden="true" />
+                  <span>{item.label}</span>
+                </NavLink>
               );
             })}
-          </nav>
-
-          <div className={styles.sessionCard}>
-            <span className={styles.meta}>当前账号</span>
-            <span className={styles.user}>{username}</span>
-            <button className={styles.logout} disabled={loggingOut} onClick={onLogout} type="button">
-              {loggingOut ? "退出中" : "退出登录"}
-            </button>
           </div>
-        </aside>
+        ))}
+      </nav>
+      <div className={styles.session}>
+        <span className={styles.avatar} aria-hidden="true">
+          {username.slice(0, 1).toUpperCase()}
+        </span>
+        <div className={styles.sessionInfo}>
+          <span className={styles.username}>{username}</span>
+          <span className={styles.sessionLabel}>管理员</span>
+        </div>
+        <button
+          type="button"
+          className={styles.iconButton}
+          disabled={loggingOut}
+          onClick={onLogout}
+          aria-label={loggingOut ? "正在退出登录" : "退出登录"}
+          title="退出登录"
+        >
+          <LogOut size={17} aria-hidden="true" />
+        </button>
+      </div>
+    </>
+  );
 
-        <main className={styles.stage}>
+  return (
+    <div className={styles.shell}>
+      <a href="#main-content" className={styles.skipLink}>
+        跳到主内容
+      </a>
+      <aside className={styles.sidebar}>
+        <Link to="/" className={styles.brand} aria-label="Edge Pilot 总览">
+          <span className={styles.brandMark} aria-hidden="true">
+            <Waypoints size={20} strokeWidth={1.8} />
+          </span>
+          <span>Edge Pilot</span>
+        </Link>
+        {navigation}
+      </aside>
+      <div className={styles.workspace}>
+        <header className={styles.topbar}>
+          <div className={styles.context}>
+            <button
+              type="button"
+              className={`${styles.iconButton} ${styles.menuButton}`}
+              aria-label="打开导航菜单"
+              aria-haspopup="dialog"
+              aria-expanded={navigationOpen}
+              onClick={() => {
+                setHealthOpen(false);
+                setNavigationOpen(true);
+              }}
+            >
+              <Menu size={20} aria-hidden="true" />
+            </button>
+            <nav className={styles.breadcrumb} aria-label="当前位置">
+              <span className={styles.breadcrumbRoot}>工作台</span>
+              <ChevronRight
+                size={14}
+                aria-hidden="true"
+                className={styles.breadcrumbDivider}
+              />
+              {isDetail ? (
+                <>
+                  <Link to={activeItem.to}>{activeItem.label}</Link>
+                  <ChevronRight
+                    size={14}
+                    aria-hidden="true"
+                    className={styles.breadcrumbDivider}
+                  />
+                </>
+              ) : null}
+              <span className={styles.breadcrumbCurrent} aria-current="page">
+                {pageTitle}
+              </span>
+            </nav>
+          </div>
+          <button
+            type="button"
+            className={styles.healthButton}
+            aria-haspopup="dialog"
+            aria-expanded={healthOpen}
+            onClick={() => {
+              setNavigationOpen(false);
+              setHealthOpen(true);
+            }}
+          >
+            <Activity size={16} strokeWidth={1.7} aria-hidden="true" />
+            <span>系统状态</span>
+          </button>
+        </header>
+        <main
+          id="main-content"
+          ref={mainRef}
+          tabIndex={-1}
+          className={styles.stage}
+          aria-label={pageTitle}
+        >
           <div className={styles.stageInner}>{children}</div>
         </main>
-
-        <aside
-          className={`${styles.rightRail} ${rightRailOpen ? styles.rightRailOpen : ""} ${
-            rightRailCollapsed ? styles.rightRailCollapsed : ""
-          }`}
-          onClick={rightRailCollapsed ? () => setRightRailCollapsed(false) : undefined}
-          onKeyDown={
-            rightRailCollapsed
-              ? (event) => {
-                  if (event.key === "Enter" || event.key === " ") {
-                    event.preventDefault();
-                    setRightRailCollapsed(false);
-                  }
-                }
-              : undefined
-          }
-          role={rightRailCollapsed ? "button" : undefined}
-          tabIndex={rightRailCollapsed ? 0 : undefined}
-          aria-label={rightRailCollapsed ? "展开系统健康" : undefined}
+      </div>
+      {navigationOpen ? (
+        <Modal
+          title="Edge Pilot"
+          variant="drawer"
+          side="left"
+          onClose={() => setNavigationOpen(false)}
         >
-          {!rightRailCollapsed ? (
-            <button
-              className={styles.rightRailEdgeToggle}
-              onClick={() => setRightRailCollapsed(true)}
-              type="button"
-              aria-label="收起系统健康"
-              title="收起系统健康"
-            >
-              收起
-            </button>
-          ) : null}
-
-          <div className={styles.rightRailExpanded}>
-            <div className={styles.rightHeader}>
-              <span className={styles.meta}>Global Health</span>
-              <h2 className={styles.rightTitle}>系统健康</h2>
-            </div>
-
-            {overviewQuery.isPending ? (
-              <div className={styles.healthMeta}>正在读取运行指标...</div>
-            ) : overviewQuery.isError ? (
-              <div className={styles.healthMeta}>健康数据暂时不可用</div>
-            ) : summary ? (
+          <div className={styles.drawerNavigation}>{navigation}</div>
+        </Modal>
+      ) : null}
+      {healthOpen ? (
+        <Modal
+          title="系统状态"
+          variant="drawer"
+          onClose={() => setHealthOpen(false)}
+        >
+          <div className={styles.healthContent}>
+            {!overview && overviewQuery.isPending ? (
+              <LoadingState title="正在读取系统状态" />
+            ) : null}
+            {!overview && overviewQuery.isError ? (
+              <ErrorState
+                title="系统状态读取失败"
+                message="请重试获取最新数据。"
+                onRetry={() => {
+                  void overviewQuery.refetch();
+                }}
+              />
+            ) : null}
+            {overview ? (
               <>
+                <div className={styles.healthRefresh}>
+                  <span>
+                    {overviewQuery.isFetching
+                      ? "正在刷新"
+                      : `更新于 ${formatDateTime(new Date(overviewQuery.dataUpdatedAt).toISOString())}`}
+                  </span>
+                  <ActionButton
+                    label="刷新"
+                    pending={overviewQuery.isFetching}
+                    onClick={() => {
+                      void overviewQuery.refetch();
+                    }}
+                    variant="ghost"
+                  />
+                </div>
+                {overviewQuery.isError ? (
+                  <InlineNotice message="刷新失败，当前显示上次成功读取的数据。" />
+                ) : null}
                 <div className={styles.healthGrid}>
-                  <article className={styles.healthCard}>
-                    <span className={styles.healthLabel}>在线节点</span>
-                    <span className={styles.healthValue}>
-                      {summary.onlineAgents}/{summary.totalAgents}
-                    </span>
-                    <span className={styles.healthMeta}>10 秒刷新</span>
-                  </article>
-                  <article className={styles.healthCard}>
-                    <span className={styles.healthLabel}>活动发布</span>
-                    <span className={styles.healthValue}>{summary.activeReleases}</span>
-                    <span className={styles.healthMeta}>失败 {summary.failedReleases}</span>
-                  </article>
-                  <article className={styles.healthCard}>
-                    <span className={styles.healthLabel}>运行实例</span>
-                    <span className={styles.healthValue}>{summary.activeInstances}</span>
-                    <span className={styles.healthMeta}>受控实例</span>
-                  </article>
-                  <article className={styles.healthCard}>
-                    <span className={styles.healthLabel}>停用服务</span>
-                    <span className={styles.healthValue}>{summary.disabledServices}</span>
-                    <span className={styles.healthMeta}>关注配置漂移</span>
-                  </article>
+                  <Link
+                    to="/agents"
+                    onClick={() => setHealthOpen(false)}
+                    className={styles.healthCard}
+                  >
+                    <span>在线节点</span>
+                    <strong>
+                      {overview.agents.filter((agent) => agent.online).length}
+                      <small> / {overview.agents.length}</small>
+                    </strong>
+                  </Link>
+                  <Link
+                    to="/instances"
+                    onClick={() => setHealthOpen(false)}
+                    className={styles.healthCard}
+                  >
+                    <span>运行实例</span>
+                    <strong>{overview.activeInstances}</strong>
+                  </Link>
+                  <Link
+                    to="/releases"
+                    onClick={() => setHealthOpen(false)}
+                    className={styles.healthCard}
+                  >
+                    <span>近期活动发布</span>
+                    <strong>
+                      {
+                        overview.recentReleases.filter(
+                          (release) => release.isActive,
+                        ).length
+                      }
+                    </strong>
+                  </Link>
+                  <Link
+                    to="/releases"
+                    onClick={() => setHealthOpen(false)}
+                    className={styles.healthCard}
+                  >
+                    <span>近期失败发布</span>
+                    <strong
+                      className={
+                        overview.recentReleases.some(
+                          (release) => release.status === 7,
+                        )
+                          ? styles.failureValue
+                          : undefined
+                      }
+                    >
+                      {
+                        overview.recentReleases.filter(
+                          (release) => release.status === 7,
+                        ).length
+                      }
+                    </strong>
+                  </Link>
                 </div>
-
-                <div className={styles.healthList}>
-                  <span className={styles.meta}>最近发布</span>
-                  {!summary.recentReleases.length ? (
-                    <div className={styles.healthMeta}>暂无发布记录</div>
+                <section
+                  className={styles.recentSection}
+                  aria-labelledby="health-releases-title"
+                >
+                  <h3 id="health-releases-title">最近发布</h3>
+                  {overview.recentReleases.length === 0 ? (
+                    <p className={styles.healthEmpty}>暂无发布记录</p>
                   ) : (
-                    summary.recentReleases.map((release) => (
-                      <div className={styles.healthItem} key={release.id}>
-                        <div>
-                          <div className={styles.healthItemTitle}>#{release.id.slice(0, 8)}</div>
-                          <div className={styles.healthItemMeta}>{release.imageRepo + ":" + release.imageTag}</div>
-                        </div>
-                        <span
-                          className={`${styles.statusLine} ${
-                            release.status === 7
-                              ? styles.statusDown
-                              : release.isActive
-                                ? styles.statusWarn
-                                : styles.statusUp
-                          }`}
+                    <div className={styles.healthList}>
+                      {overview.recentReleases.slice(0, 5).map((release) => (
+                        <Link
+                          to={`/releases/${release.id}`}
+                          onClick={() => setHealthOpen(false)}
+                          className={styles.healthItem}
+                          key={release.id}
                         >
-                          {release.status === 7 ? "失败" : release.isActive ? "进行中" : "稳定"}
-                        </span>
-                      </div>
-                    ))
+                          <div className={styles.healthItemInfo}>
+                            <span className={styles.healthItemTitle}>
+                              {release.imageTag}{" "}
+                              <span className={styles.healthId}>
+                                #{shortId(release.id)}
+                              </span>
+                            </span>
+                            <span className={styles.healthRepository}>
+                              {release.imageRepo}
+                            </span>
+                            <StatusPill
+                              label={releaseStatusLabel(release.status)}
+                              tone={releaseStatusTone(
+                                release.status,
+                                release.isActive,
+                              )}
+                            />
+                          </div>
+                          <ArrowUpRight size={16} aria-hidden="true" />
+                        </Link>
+                      ))}
+                    </div>
                   )}
-                </div>
+                </section>
               </>
             ) : null}
           </div>
-
-          <div className={styles.rightRailCompact}>
-            <div className={styles.rightRailCompactTitle}>系统健康</div>
-          </div>
-        </aside>
-      </div>
-
-      {leftRailOpen || rightRailOpen ? (
-        <button aria-label="关闭抽屉" className={styles.railBackdrop} onClick={closeDrawers} type="button" />
+        </Modal>
       ) : null}
     </div>
   );

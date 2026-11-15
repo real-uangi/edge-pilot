@@ -1,10 +1,17 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate, useParams } from "react-router-dom";
 import { getErrorMessage } from "../../../shared/lib/api-client";
 import { AgentLabel } from "../../../shared/components/AgentLabel";
 import { useDialog } from "../../../shared/components/DialogProvider";
-import { EmptyState, ErrorState, InlineNotice, LoadingState } from "../../../shared/components/StateBlocks";
+import { CredentialResult } from "../../../shared/components/CredentialResult";
+import {
+  EmptyState,
+  ErrorState,
+  InlineNotice,
+  LoadingState,
+  QueryRefreshNotice,
+} from "../../../shared/components/StateBlocks";
 import { agentsApi } from "../api";
 import { servicesApi } from "../../services/api";
 import type { AgentCredentialRecord } from "../types";
@@ -18,8 +25,18 @@ export function AgentDetailPage() {
   const { id } = useParams();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
-  const [issuedCredential, setIssuedCredential] = useState<AgentCredentialRecord | null>(null);
+  const [issuedCredential, setIssuedCredential] =
+    useState<AgentCredentialRecord | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
+  const currentAgentId = useRef(id);
+  useEffect(() => {
+    currentAgentId.current = id;
+    setIssuedCredential(null);
+    setActionError(null);
+    return () => {
+      currentAgentId.current = undefined;
+    };
+  }, [id]);
 
   const agentQuery = useQuery({
     queryKey: ["agent", id],
@@ -33,9 +50,9 @@ export function AgentDetailPage() {
     refetchInterval: 10000,
   });
 
-  const refreshQueries = async () => {
+  const refreshQueries = async (targetId: string) => {
     await Promise.all([
-      queryClient.invalidateQueries({ queryKey: ["agent", id] }),
+      queryClient.invalidateQueries({ queryKey: ["agent", targetId] }),
       queryClient.invalidateQueries({ queryKey: ["agents"] }),
       queryClient.invalidateQueries({ queryKey: ["overview"] }),
       queryClient.invalidateQueries({ queryKey: ["services"] }),
@@ -43,49 +60,67 @@ export function AgentDetailPage() {
   };
 
   const enableMutation = useMutation({
-    mutationFn: () => agentsApi.enable(id!),
-    onSuccess: async () => {
-      setActionError(null);
-      await refreshQueries();
+    mutationFn: (targetId: string) => agentsApi.enable(targetId),
+    onSuccess: async (_, targetId) => {
+      if (currentAgentId.current === targetId) setActionError(null);
+      await refreshQueries(targetId);
     },
-    onError: (error) => setActionError(getErrorMessage(error)),
+    onError: (error, targetId) => {
+      if (currentAgentId.current === targetId)
+        setActionError(getErrorMessage(error));
+    },
   });
   const disableMutation = useMutation({
-    mutationFn: () => agentsApi.disable(id!),
-    onSuccess: async () => {
-      setActionError(null);
-      await refreshQueries();
+    mutationFn: (targetId: string) => agentsApi.disable(targetId),
+    onSuccess: async (_, targetId) => {
+      if (currentAgentId.current === targetId) setActionError(null);
+      await refreshQueries(targetId);
     },
-    onError: (error) => setActionError(getErrorMessage(error)),
+    onError: (error, targetId) => {
+      if (currentAgentId.current === targetId)
+        setActionError(getErrorMessage(error));
+    },
   });
   const resetMutation = useMutation({
-    mutationFn: () => agentsApi.resetToken(id!),
-    onSuccess: async (output) => {
-      setIssuedCredential(output);
-      setActionError(null);
-      await refreshQueries();
+    mutationFn: async (targetId: string) => {
+      const output = await agentsApi.resetToken(targetId);
+      if (currentAgentId.current === targetId) setIssuedCredential(output);
     },
-    onError: (error) => setActionError(getErrorMessage(error)),
+    onSuccess: async (_, targetId) => {
+      if (currentAgentId.current === targetId) setActionError(null);
+      await refreshQueries(targetId);
+    },
+    onError: (error, targetId) => {
+      if (currentAgentId.current === targetId)
+        setActionError(getErrorMessage(error));
+    },
   });
   const deleteMutation = useMutation({
-    mutationFn: () => agentsApi.delete(id!),
-    onSuccess: async () => {
-      setActionError(null);
-      await refreshQueries();
-      navigate("/agents", { replace: true });
+    mutationFn: (targetId: string) => agentsApi.delete(targetId),
+    onSuccess: async (_, targetId) => {
+      if (currentAgentId.current === targetId) setActionError(null);
+      await refreshQueries(targetId);
+      if (currentAgentId.current === targetId)
+        navigate("/agents", { replace: true });
     },
-    onError: (error) => setActionError(getErrorMessage(error)),
+    onError: (error, targetId) => {
+      if (currentAgentId.current === targetId)
+        setActionError(getErrorMessage(error));
+    },
   });
 
   if (agentQuery.isPending) {
     return (
       <div className={styles.page}>
-        <LoadingState title="正在加载节点详情" message="正在同步节点基础信息。" />
+        <LoadingState
+          title="正在加载节点详情"
+          message="正在同步节点基础信息。"
+        />
       </div>
     );
   }
 
-  if (agentQuery.isError) {
+  if (agentQuery.isError && !agentQuery.data) {
     return (
       <div className={styles.page}>
         <ErrorState
@@ -106,7 +141,9 @@ export function AgentDetailPage() {
   }
 
   const agent = agentQuery.data;
-  const boundServiceCount = (servicesQuery.data ?? []).filter((service) => service.agentId === agent.id).length;
+  const boundServiceCount = (servicesQuery.data ?? []).filter(
+    (service) => service.agentId === agent.id,
+  ).length;
   const deleteBlockedReason = agent.online
     ? "在线节点不可删除"
     : servicesQuery.isPending
@@ -118,21 +155,22 @@ export function AgentDetailPage() {
           : null;
 
   const handleDelete = async () => {
+    const targetId = agent.id;
     const confirmed = await dialog.confirm({
       title: "删除节点",
-      message: "确认删除这个节点？",
+      message: `确认删除节点「${agent.hostname || agent.ip || agent.id}」？此操作无法撤销。`,
       confirmText: "确认删除",
       cancelText: "取消",
       danger: true,
     });
     if (confirmed) {
-      deleteMutation.mutate();
+      deleteMutation.mutate(targetId);
     }
   };
 
   return (
     <div className={styles.page}>
-      <section className={styles.sectionHeader}>
+      <section className={styles.pageHeader}>
         <div>
           <h1 className={styles.sectionTitle}>节点详情</h1>
           <p className={styles.sectionCopy}>
@@ -146,37 +184,52 @@ export function AgentDetailPage() {
           disablePending={disableMutation.isPending}
           resetPending={resetMutation.isPending}
           deletePending={deleteMutation.isPending}
-          onEnable={() => enableMutation.mutate()}
-          onDisable={() => disableMutation.mutate()}
-          onResetToken={() => resetMutation.mutate()}
+          credentialVisible={Boolean(issuedCredential)}
+          onEnable={() => enableMutation.mutate(agent.id)}
+          onDisable={() => disableMutation.mutate(agent.id)}
+          onResetToken={async () => {
+            const targetId = agent.id;
+            if (
+              await dialog.confirm({
+                title: "重置节点令牌",
+                message: `重置「${agent.hostname || agent.ip || agent.id}」的令牌后，旧令牌立即失效。确认重置？`,
+                confirmText: "重置令牌",
+                danger: true,
+              })
+            )
+              resetMutation.mutate(targetId);
+          }}
           onDelete={() => void handleDelete()}
           onBack={() => navigate("/agents")}
-          onRefresh={() => void Promise.all([agentQuery.refetch(), servicesQuery.refetch()])}
+          onRefresh={() =>
+            void Promise.all([agentQuery.refetch(), servicesQuery.refetch()])
+          }
         />
       </section>
 
+      <QueryRefreshNotice
+        query={agentQuery}
+        onRetry={() => void agentQuery.refetch()}
+      />
+
       {actionError ? <InlineNotice message={actionError} tone="error" /> : null}
-      {deleteBlockedReason ? <InlineNotice message={deleteBlockedReason} tone="info" /> : null}
+      {deleteBlockedReason ? (
+        <InlineNotice message={deleteBlockedReason} tone="info" />
+      ) : null}
 
       {issuedCredential ? (
-        <section className={styles.credentialCard}>
-          <span className={styles.eyebrow}>一次性令牌</span>
-          <div>
-            <strong>ID</strong>
-            <div className={styles.credentialValue}>{issuedCredential.id}</div>
-          </div>
-          <div>
-            <strong>令牌</strong>
-            <div className={styles.credentialValue}>{issuedCredential.token}</div>
-          </div>
-        </section>
+        <CredentialResult
+          id={issuedCredential.id}
+          token={issuedCredential.token}
+          onClose={() => setIssuedCredential(null)}
+        />
       ) : null}
 
       <AgentInfo
         agent={agent}
         services={servicesQuery.data ?? []}
         servicesPending={servicesQuery.isPending}
-        servicesError={servicesQuery.isError}
+        servicesError={servicesQuery.isError && !servicesQuery.data}
       />
 
       <HAProxyConfig agentId={agent.id} agentOnline={agent.online} />

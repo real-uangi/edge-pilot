@@ -2,7 +2,6 @@ import { useEffect, useMemo, useState } from "react";
 import {
   formatDateTime,
   formatDuration,
-  getTaskDuration,
   taskStatusLabel,
   taskStatusTone,
   taskStepLabel,
@@ -12,7 +11,7 @@ import {
 import { StatusPill } from "../../../shared/components/StatusPill";
 import { EmptyState } from "../../../shared/components/StateBlocks";
 import { TaskLogModal } from "./TaskLogModal";
-import type { TaskSnapshot, TaskAttempt, AuditLog } from "../types";
+import type { TaskSnapshot, AuditLog } from "../types";
 import styles from "../../../styles/admin.module.css";
 
 type ReleaseTaskLogInfo = {
@@ -30,10 +29,6 @@ interface TaskTimelineProps {
 
 function isTaskRunning(status: number): boolean {
   return status === 2 || status === 3;
-}
-
-function isTaskFinished(status: number): boolean {
-  return status === 4 || status === 5 || status === 6;
 }
 
 function isTaskSuccess(status: number): boolean {
@@ -70,15 +65,21 @@ function getConnectorClass(status: number): string {
   return "";
 }
 
-function DurationDisplay({ startedAt, completedAt, isRunning }: { startedAt: string | null; completedAt: string | null; isRunning: boolean }) {
+function DurationDisplay({
+  startedAt,
+  completedAt,
+  isRunning,
+}: {
+  startedAt: string | null;
+  completedAt: string | null;
+  isRunning: boolean;
+}) {
   const [, setTick] = useState(0);
 
-  const duration = useMemo(() => {
-    if (!startedAt) return null;
-    const start = new Date(startedAt).getTime();
-    const end = completedAt ? new Date(completedAt).getTime() : Date.now();
-    return end - start;
-  }, [startedAt, completedAt]);
+  const duration = startedAt
+    ? (completedAt ? new Date(completedAt).getTime() : Date.now()) -
+      new Date(startedAt).getTime()
+    : null;
 
   const durationText = duration != null ? formatDuration(duration) : "—";
 
@@ -113,7 +114,10 @@ interface PipelineNode {
   taskId?: string;
 }
 
-function buildPipelineNodes(tasks: TaskSnapshot[], audits: AuditLog[]): PipelineNode[] {
+function buildPipelineNodes(
+  tasks: TaskSnapshot[],
+  audits: AuditLog[],
+): PipelineNode[] {
   const nodes: PipelineNode[] = [];
 
   for (const task of tasks) {
@@ -146,7 +150,11 @@ function buildPipelineNodes(tasks: TaskSnapshot[], audits: AuditLog[]): Pipeline
   }
 
   for (const audit of audits) {
-    const trafficEvents = ["traffic_percent_updated", "switch_confirmed", "traffic_switched"];
+    const trafficEvents = [
+      "traffic_percent_updated",
+      "switch_confirmed",
+      "traffic_switched",
+    ];
     if (trafficEvents.includes(audit.eventType)) {
       nodes.push({
         id: `audit-${audit.id}`,
@@ -178,43 +186,73 @@ function PipelineNodeComponent({
   isLast: boolean;
   onClick: () => void;
 }) {
+  const content = (
+    <>
+      <span className={styles.pipelineCardHeader}>
+        <strong className={styles.pipelineCardTitle}>{node.title}</strong>
+        {node.type === "task-step" ? (
+          <StatusPill
+            label={taskStatusLabel(node.status)}
+            tone={taskStatusTone(node.status)}
+          />
+        ) : (
+          <span className={styles.pipelineAuditBadge}>操作记录</span>
+        )}
+      </span>
+      <span className={styles.pipelineCardMeta}>
+        <span className={styles.pipelineCardMetaItem}>
+          <span className={styles.pipelineCardMetaLabel}>时间</span>
+          <span>{formatDateTime(node.startedAt)}</span>
+        </span>
+        <span className={styles.pipelineCardMetaItem}>
+          <span className={styles.pipelineCardMetaLabel}>耗时</span>
+          <DurationDisplay
+            startedAt={node.startedAt}
+            completedAt={node.completedAt}
+            isRunning={node.isRunning}
+          />
+        </span>
+      </span>
+    </>
+  );
   return (
     <div className={styles.pipelineStep}>
-      <div className={styles.pipelineIndicator}>
-        <div className={`${styles.pipelineNode} ${getNodeClass(node.status)}`} />
-        {!isLast && (
-          <div className={`${styles.pipelineConnector} ${getConnectorClass(node.status)}`} />
-        )}
+      <div className={styles.pipelineIndicator} aria-hidden="true">
+        <div
+          className={`${styles.pipelineNode} ${getNodeClass(node.status)}`}
+        />
+        {!isLast ? (
+          <div
+            className={`${styles.pipelineConnector} ${getConnectorClass(node.status)}`}
+          />
+        ) : null}
       </div>
-      <div className={styles.pipelineCard} onClick={onClick} role="button" tabIndex={0} onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onClick(); } }}>
-        <div className={styles.pipelineCardHeader}>
-          <h3 className={styles.pipelineCardTitle}>{node.title}</h3>
-          {node.type === "task-step" && (
-            <StatusPill label={taskStatusLabel(node.status)} tone={taskStatusTone(node.status)} />
-          )}
-          {node.type === "audit" && (
-            <span className={styles.pipelineAuditBadge}>操作记录</span>
-          )}
+      {node.type === "task-step" && node.taskId ? (
+        <button
+          type="button"
+          className={`${styles.pipelineCard} ${styles.pipelineTaskButton}`}
+          onClick={onClick}
+          aria-label={`查看${node.title}的任务日志`}
+        >
+          {content}
+        </button>
+      ) : (
+        <div className={`${styles.pipelineCard} ${styles.pipelineAuditCard}`}>
+          {content}
         </div>
-        <div className={styles.pipelineCardMeta}>
-          <div className={styles.pipelineCardMetaItem}>
-            <span className={styles.pipelineCardMetaLabel}>时间</span>
-            <span>{formatDateTime(node.startedAt)}</span>
-          </div>
-          <div className={styles.pipelineCardMetaItem}>
-            <span className={styles.pipelineCardMetaLabel}>耗时</span>
-            <DurationDisplay startedAt={node.startedAt} completedAt={node.completedAt} isRunning={node.isRunning} />
-          </div>
-        </div>
-      </div>
+      )}
     </div>
   );
 }
 
 export function TaskTimeline({ tasks, audits }: TaskTimelineProps) {
-  const [selectedTask, setSelectedTask] = useState<TaskSnapshot | null>(null);
+  const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
+  const selectedTask = tasks.find((task) => task.id === selectedTaskId) ?? null;
 
-  const nodes = useMemo(() => buildPipelineNodes(tasks, audits), [tasks, audits]);
+  const nodes = useMemo(
+    () => buildPipelineNodes(tasks, audits),
+    [tasks, audits],
+  );
 
   const logInfo = useMemo<ReleaseTaskLogInfo | null>(() => {
     if (!selectedTask) {
@@ -233,7 +271,7 @@ export function TaskTimeline({ tasks, audits }: TaskTimelineProps) {
     <section className={styles.sectionCard}>
       <div className={styles.sectionHeader}>
         <div>
-          <h2 className={styles.sectionTitle}>任务流水线</h2>
+          <h2 className={styles.sectionSubtitle}>任务流水线</h2>
         </div>
       </div>
       {!nodes.length ? (
@@ -248,7 +286,7 @@ export function TaskTimeline({ tasks, audits }: TaskTimelineProps) {
               onClick={() => {
                 if (node.type === "task-step" && node.taskId) {
                   const task = tasks.find((t) => t.id === node.taskId);
-                  if (task) setSelectedTask(task);
+                  if (task) setSelectedTaskId(task.id);
                 }
               }}
             />
@@ -260,7 +298,7 @@ export function TaskTimeline({ tasks, audits }: TaskTimelineProps) {
         <TaskLogModal
           task={logInfo}
           taskName={taskTypeLabel(selectedTask.type)}
-          onClose={() => setSelectedTask(null)}
+          onClose={() => setSelectedTaskId(null)}
         />
       )}
     </section>

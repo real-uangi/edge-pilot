@@ -1,41 +1,41 @@
-@import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&family=Space+Grotesk:wght@500;600;700&display=swap");
-
 :root {
-  color-scheme: dark;
-  --ep-font-heading: "Space Grotesk", "Inter", system-ui, sans-serif;
-  --ep-font-body: "Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
-  --ep-font-mono: "JetBrains Mono", "SFMono-Regular", ui-monospace, Menlo, monospace;
-
-  --ep-bg: #10131a;
-  --ep-surface-lowest: #0b0e14;
-  --ep-surface: #10131a;
-  --ep-surface-low: #191c22;
-  --ep-surface-mid: #1d2026;
-  --ep-surface-high: #272a31;
-  --ep-surface-highest: #32353c;
-
-  --ep-text: #e1e2eb;
-  --ep-text-muted: #bbc9cf;
-  --ep-text-dim: #859399;
-  --ep-outline: #3c494e;
-  --ep-outline-ghost: rgba(60, 73, 78, 0.15);
-
-  --ep-primary: #a4e6ff;
-  --ep-primary-strong: #00d1ff;
-  --ep-primary-ink: #003543;
-  --ep-secondary: #4edea3;
-  --ep-secondary-soft: rgba(78, 222, 163, 0.16);
-  --ep-warning: #ffd5a5;
-  --ep-warning-soft: rgba(255, 176, 68, 0.14);
-  --ep-danger: #ffb4ab;
-  --ep-danger-soft: rgba(255, 180, 171, 0.14);
-
+  color-scheme: light;
+  --ep-font-heading:
+    -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC",
+    "Microsoft YaHei", sans-serif;
+  --ep-font-body:
+    -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC",
+    "Microsoft YaHei", sans-serif;
+  --ep-font-mono:
+    "SFMono-Regular", Consolas, "Liberation Mono", ui-monospace, monospace;
+  --ep-bg: #f7f7f5;
+  --ep-surface-lowest: #fafaf8;
+  --ep-surface: #ffffff;
+  --ep-surface-low: #ffffff;
+  --ep-surface-lower: #f7f7f5;
+  --ep-surface-mid: #f2f3f0;
+  --ep-surface-high: #e9ebe7;
+  --ep-surface-highest: #dfe2dd;
+  --ep-text: #202522;
+  --ep-text-muted: #59615b;
+  --ep-text-dim: #626b65;
+  --ep-outline: #c8cdc7;
+  --ep-outline-ghost: #e7e9e4;
+  --ep-primary: #292f2b;
+  --ep-primary-strong: #141a16;
+  --ep-primary-ink: #ffffff;
+  --ep-accent: #315d4a;
+  --ep-secondary: #24684c;
+  --ep-secondary-soft: #eaf4ee;
+  --ep-warning: #8a5a12;
+  --ep-warning-soft: #faf2e2;
+  --ep-danger: #ac3730;
+  --ep-danger-soft: #fbecea;
   --ep-radius-xs: 4px;
   --ep-radius-sm: 6px;
   --ep-radius-md: 8px;
   --ep-radius-lg: 10px;
   --ep-radius-xl: 12px;
-
   --ep-space-1: 4px;
   --ep-space-2: 8px;
   --ep-space-3: 12px;
@@ -43,14 +43,12 @@
   --ep-space-5: 20px;
   --ep-space-6: 24px;
   --ep-space-7: 32px;
-
   --ep-motion-fast: 120ms;
   --ep-motion-base: 180ms;
   --ep-ease-standard: cubic-bezier(0.2, 0, 0, 1);
-
-  --ep-shadow-soft: 0 10px 24px rgba(0, 0, 0, 0.32);
-  --ep-shadow-ambient: 0 16px 32px rgba(76, 214, 255, 0.08);
-  --ep-focus-ring: 0 0 0 1px rgba(164, 230, 255, 0.92), 0 0 0 4px rgba(164, 230, 255, 0.2);
+  --ep-shadow-soft: 0 12px 40px rgba(30, 42, 32, 0.08);
+  --ep-shadow-ambient: 0 2px 8px rgba(30, 42, 32, 0.04);
+  --ep-focus-ring: 0 0 0 3px rgba(55, 106, 80, 0.22);
 }
 
 * {
@@ -64,13 +62,16 @@ body,
   margin: 0;
 }
 
+html {
+  scrollbar-gutter: stable;
+}
+
 body {
   font-family: var(--ep-font-body);
-  background:
-    radial-gradient(circle at 88% 8%, rgba(76, 214, 255, 0.08), transparent 38%),
-    radial-gradient(circle at 16% 20%, rgba(78, 222, 163, 0.05), transparent 34%),
-    var(--ep-bg);
+  background: var(--ep-bg);
   color: var(--ep-text);
+  font-size: 14px;
+  line-height: 1.5;
   font-synthesis: none;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
@@ -85,7 +86,8 @@ h5,
 h6 {
   margin: 0;
   font-family: var(--ep-font-heading);
-  letter-spacing: 0.01em;
+  font-weight: 650;
+  letter-spacing: -0.025em;
 }
 
 a {
@@ -105,6 +107,21 @@ button {
   cursor: pointer;
 }
 
+button:disabled {
+  cursor: not-allowed;
+}
+
+input,
+select,
+textarea {
+  min-width: 0;
+}
+
+button,
+a {
+  -webkit-tap-highlight-color: transparent;
+}
+
 a,
 button,
 input,
@@ -115,7 +132,6 @@ textarea {
     border-color var(--ep-motion-base) var(--ep-ease-standard),
     color var(--ep-motion-fast) var(--ep-ease-standard),
     box-shadow var(--ep-motion-base) var(--ep-ease-standard),
-    transform var(--ep-motion-fast) var(--ep-ease-standard),
     opacity var(--ep-motion-fast) var(--ep-ease-standard);
 }
 
@@ -123,8 +139,11 @@ a:focus-visible,
 button:focus-visible,
 input:focus-visible,
 select:focus-visible,
-textarea:focus-visible {
-  outline: none;
+textarea:focus-visible,
+summary:focus-visible,
+[tabindex]:focus-visible {
+  outline: 2px solid var(--ep-accent);
+  outline-offset: 2px;
   box-shadow: var(--ep-focus-ring);
 }
 
@@ -135,40 +154,76 @@ samp {
   font-family: var(--ep-font-mono);
 }
 
+code {
+  overflow-wrap: anywhere;
+}
+
+input[type="checkbox"],
+input[type="radio"] {
+  accent-color: var(--ep-primary);
+}
+
+::selection {
+  background: #dce8df;
+  color: var(--ep-text);
+}
+
 table {
   width: 100%;
   border-collapse: separate;
-  border-spacing: 0 6px;
+  border-spacing: 0;
+  font-variant-numeric: tabular-nums;
 }
 
 th,
 td {
   text-align: left;
-  padding: 10px 12px;
-  vertical-align: top;
+  padding: 12px 14px;
+  vertical-align: middle;
   font-size: 13px;
 }
 
 th {
-  color: var(--ep-text-dim);
-  font-size: 11px;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  font-weight: 600;
+  padding-top: 10px;
+  padding-bottom: 10px;
+  color: var(--ep-text-muted);
+  background: var(--ep-surface-lowest);
+  font-size: 12px;
+  font-weight: 550;
+  white-space: nowrap;
+  border-bottom: 1px solid var(--ep-outline-ghost);
 }
 
 tbody td {
-  background: var(--ep-surface-low);
+  background: var(--ep-surface);
+  border-bottom: 1px solid var(--ep-outline-ghost);
 }
 
-tbody tr td:first-child {
-  border-radius: var(--ep-radius-sm) 0 0 var(--ep-radius-sm);
-}
-
-tbody tr td:last-child {
-  border-radius: 0 var(--ep-radius-sm) var(--ep-radius-sm) 0;
+tbody tr:last-child td {
+  border-bottom: 0;
 }
 
 tbody tr:hover td {
-  background: var(--ep-surface-high);
+  background: var(--ep-surface-lowest);
+}
+
+@media (max-width: 767px) {
+  html {
+    scrollbar-gutter: auto;
+  }
+  th,
+  td {
+    padding: 12px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }

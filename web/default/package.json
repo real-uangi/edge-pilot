@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc -p tsconfig.app.json --noEmit",
+    "check:styles": "node scripts/check-styles.mjs"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.2.2",

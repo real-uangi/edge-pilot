@@ -10,7 +10,7 @@ import {
   useRef,
   useState,
 } from "react";
-import { createPortal } from "react-dom";
+import { Modal } from "./Modal";
 import { ActionButton } from "./ActionButton";
 import styles from "./DialogProvider.module.css";
 
@@ -43,8 +43,16 @@ interface DialogController {
 
 type DialogRequest =
   | { kind: "alert"; options: AlertDialogOptions; resolve: () => void }
-  | { kind: "confirm"; options: ConfirmDialogOptions; resolve: (value: boolean) => void }
-  | { kind: "prompt"; options: PromptDialogOptions; resolve: (value: string | null) => void };
+  | {
+      kind: "confirm";
+      options: ConfirmDialogOptions;
+      resolve: (value: boolean) => void;
+    }
+  | {
+      kind: "prompt";
+      options: PromptDialogOptions;
+      resolve: (value: string | null) => void;
+    };
 
 const dialogContext = createContext<DialogController | null>(null);
 
@@ -71,67 +79,74 @@ function normalizePromptInput(input: PromptInput): PromptDialogOptions {
 
 export function DialogProvider({ children }: PropsWithChildren) {
   const queueRef = useRef<DialogRequest[]>([]);
+  const activeRef = useRef<DialogRequest | null>(null);
   const confirmRef = useRef<HTMLButtonElement | null>(null);
+  const cancelRef = useRef<HTMLButtonElement | null>(null);
   const promptRef = useRef<HTMLInputElement | null>(null);
   const [activeDialog, setActiveDialog] = useState<DialogRequest | null>(null);
   const [promptValue, setPromptValue] = useState("");
-  const titleId = useId();
   const messageId = useId();
 
   const dequeue = useCallback(() => {
-    setActiveDialog(queueRef.current.shift() ?? null);
+    const next = queueRef.current.shift() ?? null;
+    activeRef.current = next;
+    setActiveDialog(next);
   }, []);
 
   const enqueue = useCallback((dialog: DialogRequest) => {
-    setActiveDialog((current) => {
-      if (current) {
-        queueRef.current.push(dialog);
-        return current;
-      }
-      return dialog;
-    });
+    if (activeRef.current) {
+      queueRef.current.push(dialog);
+    } else {
+      activeRef.current = dialog;
+      setActiveDialog(dialog);
+    }
   }, []);
 
   const controller = useMemo<DialogController>(
     () => ({
       alert: (input) =>
         new Promise<void>((resolve) => {
-          enqueue({ kind: "alert", options: normalizeAlertInput(input), resolve });
+          enqueue({
+            kind: "alert",
+            options: normalizeAlertInput(input),
+            resolve,
+          });
         }),
       confirm: (input) =>
         new Promise<boolean>((resolve) => {
-          enqueue({ kind: "confirm", options: normalizeConfirmInput(input), resolve });
+          enqueue({
+            kind: "confirm",
+            options: normalizeConfirmInput(input),
+            resolve,
+          });
         }),
       prompt: (input) =>
         new Promise<string | null>((resolve) => {
-          enqueue({ kind: "prompt", options: normalizePromptInput(input), resolve });
+          enqueue({
+            kind: "prompt",
+            options: normalizePromptInput(input),
+            resolve,
+          });
         }),
     }),
     [enqueue],
   );
 
   useEffect(() => {
-    if (!activeDialog) {
-      return;
-    }
-    const originalOverflow = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-    return () => {
-      document.body.style.overflow = originalOverflow;
-    };
-  }, [activeDialog]);
-
-  useEffect(() => {
-    if (!activeDialog) {
-      return;
-    }
-    if (activeDialog.kind === "prompt") {
-      setPromptValue(activeDialog.options.defaultValue ?? "");
-      requestAnimationFrame(() => promptRef.current?.focus());
-      return;
-    }
-    setPromptValue("");
-    requestAnimationFrame(() => confirmRef.current?.focus());
+    if (!activeDialog) return;
+    setPromptValue(
+      activeDialog.kind === "prompt"
+        ? (activeDialog.options.defaultValue ?? "")
+        : "",
+    );
+    const focus =
+      activeDialog.kind === "prompt"
+        ? promptRef
+        : activeDialog.kind === "confirm"
+          ? cancelRef
+          : confirmRef;
+    const frame = requestAnimationFrame(() => focus.current?.focus());
+    return () => cancelAnimationFrame(frame);
   }, [activeDialog]);
 
   const resolveAlert = () => {
@@ -162,21 +177,41 @@ export function DialogProvider({ children }: PropsWithChildren) {
   if (activeDialog) {
     const options = activeDialog.options;
     const title =
-      options.title ?? (activeDialog.kind === "alert" ? "提示" : activeDialog.kind === "confirm" ? "请确认" : "请输入");
+      options.title ??
+      (activeDialog.kind === "alert"
+        ? "提示"
+        : activeDialog.kind === "confirm"
+          ? "请确认"
+          : "请输入");
 
-    dialogElement = createPortal(
-      <div className={styles.backdrop}>
-        <div aria-describedby={messageId} aria-labelledby={titleId} aria-modal="true" className={styles.dialog} role="dialog">
-          <h2 className={styles.title} id={titleId}>
-            {title}
-          </h2>
+    const close = () => {
+      if (activeDialog.kind === "alert") resolveAlert();
+      else if (activeDialog.kind === "confirm") resolveConfirm(false);
+      else resolvePrompt(null);
+    };
+    dialogElement = (
+      <Modal
+        title={title}
+        descriptionId={messageId}
+        onClose={close}
+        initialFocus={
+          activeDialog.kind === "prompt"
+            ? promptRef
+            : activeDialog.kind === "confirm"
+              ? cancelRef
+              : confirmRef
+        }
+      >
+        <div className={styles.content}>
           <p className={styles.message} id={messageId}>
             {options.message}
           </p>
 
           {activeDialog.kind === "prompt" ? (
             <label className={styles.promptField}>
-              <span className={styles.promptLabel}>{options.inputLabel ?? "输入内容"}</span>
+              <span className={styles.promptLabel}>
+                {options.inputLabel ?? "输入内容"}
+              </span>
               <input
                 className={styles.input}
                 onChange={(event) => setPromptValue(event.target.value)}
@@ -197,6 +232,7 @@ export function DialogProvider({ children }: PropsWithChildren) {
           <div className={styles.actions}>
             {activeDialog.kind === "alert" ? null : (
               <ActionButton
+                ref={cancelRef}
                 label={options.cancelText ?? "取消"}
                 onClick={() => {
                   if (activeDialog.kind === "confirm") {
@@ -209,7 +245,10 @@ export function DialogProvider({ children }: PropsWithChildren) {
               />
             )}
             <ActionButton
-              label={options.confirmText ?? (activeDialog.kind === "alert" ? "知道了" : "确认")}
+              label={
+                options.confirmText ??
+                (activeDialog.kind === "alert" ? "知道了" : "确认")
+              }
               onClick={() => {
                 if (activeDialog.kind === "alert") {
                   resolveAlert();
@@ -226,8 +265,7 @@ export function DialogProvider({ children }: PropsWithChildren) {
             />
           </div>
         </div>
-      </div>,
-      document.body,
+      </Modal>
     );
   }
 

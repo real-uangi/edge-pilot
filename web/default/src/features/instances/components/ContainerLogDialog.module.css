@@ -1,0 +1,38 @@
+.search {
+  min-width: 180px;
+  flex: 1;
+}
+.content {
+  height: min(52dvh, 560px);
+  min-height: 180px;
+  overflow: auto;
+  padding: 16px;
+  border-radius: 8px;
+  background: #171c23;
+  color: #e1e6ed;
+  font: 13px/1.65 var(--ep-font-mono);
+  tab-size: 2;
+  overscroll-behavior: contain;
+}
+.stdout,
+.stderr {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.stderr {
+  color: #ffb4ab;
+}
+.empty {
+  color: #bbc9cf;
+  padding: 24px 0;
+  text-align: center;
+}
+@media (max-width: 767px) {
+  .search {
+    flex-basis: 100%;
+  }
+  .content {
+    padding: 12px;
+    font-size: 12px;
+  }
+}

@@ -1,5 +1,6 @@
 import { ActionButton } from "../../../shared/components/ActionButton";
-import type { AgentRecord, AgentCredentialRecord } from "../types";
+import type { AgentRecord } from "../types";
+import styles from "../../../styles/admin.module.css";
 
 interface AgentActionsProps {
   agent: AgentRecord;
@@ -8,6 +9,7 @@ interface AgentActionsProps {
   disablePending: boolean;
   resetPending: boolean;
   deletePending: boolean;
+  credentialVisible: boolean;
   onEnable: () => void;
   onDisable: () => void;
   onResetToken: () => void;
@@ -23,6 +25,7 @@ export function AgentActions({
   disablePending,
   resetPending,
   deletePending,
+  credentialVisible,
   onEnable,
   onDisable,
   onResetToken,
@@ -30,17 +33,32 @@ export function AgentActions({
   onBack,
   onRefresh,
 }: AgentActionsProps) {
+  const busy = enablePending || disablePending || resetPending || deletePending;
   return (
-    <div className="buttonRow">
+    <div className={styles.buttonRow}>
       <ActionButton label="返回" onClick={onBack} />
       <ActionButton label="刷新" onClick={onRefresh} />
-      <ActionButton label="启用" variant="ghost" pending={enablePending} onClick={onEnable} />
-      <ActionButton label="停用" variant="danger" pending={disablePending} onClick={onDisable} />
+      {agent.enabled === false ? (
+        <ActionButton
+          label="启用节点"
+          disabled={busy}
+          pending={enablePending}
+          onClick={onEnable}
+        />
+      ) : (
+        <ActionButton
+          label="停用节点"
+          disabled={busy}
+          pending={disablePending}
+          onClick={onDisable}
+        />
+      )}
       <ActionButton
         label="重置令牌"
         pending={resetPending}
         pendingLabel="重置中"
-        variant="primary"
+        variant="ghost"
+        disabled={busy || credentialVisible}
         onClick={onResetToken}
       />
       <ActionButton
@@ -48,7 +66,7 @@ export function AgentActions({
         pending={deletePending}
         pendingLabel="删除中"
         variant="danger"
-        disabled={Boolean(deleteBlockedReason)}
+        disabled={busy || Boolean(deleteBlockedReason)}
         onClick={onDelete}
       />
     </div>

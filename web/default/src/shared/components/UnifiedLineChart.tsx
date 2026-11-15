@@ -30,19 +30,19 @@ export interface UnifiedLineChartProps {
 const chartTheme = {
   axis: {
     ticks: {
-      line: { stroke: "rgba(60,73,78,0.3)" },
-      text: { fill: "#bbc9cf", fontSize: 11 },
+      line: { stroke: "#d9ded7" },
+      text: { fill: "#59615b", fontSize: 12 },
     },
     legend: {
-      text: { fill: "#859399", fontSize: 11 },
+      text: { fill: "#6a736c", fontSize: 12 },
     },
   },
   grid: {
-    line: { stroke: "rgba(60,73,78,0.2)" },
+    line: { stroke: "#eceee9" },
   },
   crosshair: {
     line: {
-      stroke: "#a4e6ff",
+      stroke: "#6a8070",
       strokeWidth: 1.5,
       strokeOpacity: 0.95,
       strokeDasharray: "4 3",
@@ -59,7 +59,7 @@ const chartTheme = {
   },
 } as const;
 
-const defaultPalette = ["#00d1ff", "#4edea3", "#ffb778", "#ff8e89", "#b5a4ff"];
+const defaultPalette = ["#315d4a", "#326a91", "#9a6a26", "#ac4941", "#78619b"];
 
 export function UnifiedLineChart({
   title,
@@ -76,19 +76,29 @@ export function UnifiedLineChart({
   showGridX = false,
   emptyMessage = "暂无趋势数据",
 }: UnifiedLineChartProps) {
-  const normalizedSeries = normalizeSeries({ series, data, id, color, xAxisMode });
+  const normalizedSeries = normalizeSeries({
+    series,
+    data,
+    id,
+    color,
+    xAxisMode,
+  });
   const seriesMeta = normalizedSeries.map((item, index) => ({
     id: String(item.id),
     color: item.color ?? defaultPalette[index % defaultPalette.length],
   }));
-  const hasData = normalizedSeries.some((item) => item.data.length > 0);
+  const hasData = normalizedSeries.some((item) =>
+    item.data.some((point) => point.y !== null),
+  );
   const showLegend = legend ?? normalizedSeries.length > 1;
 
   if (!hasData) {
     return (
       <div className={styles.card}>
         {title ? <div className={styles.title}>{title}</div> : null}
-        <div className={styles.empty}>{emptyMessage}</div>
+        <div className={styles.empty} style={{ minHeight: height }}>
+          {emptyMessage}
+        </div>
       </div>
     );
   }
@@ -134,15 +144,29 @@ export function UnifiedLineChart({
       <div className={styles.wrap} style={{ height }}>
         <ResponsiveLine
           data={normalizedSeries}
-          margin={{ top: 12, right: 16, bottom: 28, left: 44 }}
+          role="img"
+          ariaLabel={title ? `${title}趋势图` : "指标趋势图"}
+          animate={false}
+          margin={{ top: 12, right: 16, bottom: 28, left: 64 }}
           curve="monotoneX"
           xScale={
             xAxisMode === "time"
-              ? { type: "time", format: "native", precision: "second", useUTC: false }
+              ? {
+                  type: "time",
+                  format: "native",
+                  precision: "second",
+                  useUTC: false,
+                }
               : { type: "point" }
           }
           xFormat={xAxisMode === "time" ? "time:%Y-%m-%d %H:%M:%S" : undefined}
-          yScale={{ type: "linear", min: 0, max: "auto", stacked: false, reverse: false }}
+          yScale={{
+            type: "linear",
+            min: 0,
+            max: "auto",
+            stacked: false,
+            reverse: false,
+          }}
           axisTop={null}
           axisRight={null}
           axisBottom={{
@@ -165,7 +189,9 @@ export function UnifiedLineChart({
           enableSlices="x"
           useMesh
           theme={chartTheme}
-          sliceTooltip={(slice) => renderSliceTooltip(slice, xAxisMode, formatTooltipY, seriesMeta)}
+          sliceTooltip={(slice) =>
+            renderSliceTooltip(slice, xAxisMode, formatTooltipY, seriesMeta)
+          }
         />
       </div>
     </div>
@@ -180,14 +206,24 @@ function renderSliceTooltip(
 ) {
   const payload = slice as {
     points?: Array<{
-      data?: { x?: unknown; xFormatted?: unknown; y?: unknown; yFormatted?: unknown };
+      data?: {
+        x?: unknown;
+        xFormatted?: unknown;
+        y?: unknown;
+        yFormatted?: unknown;
+      };
       serieId?: string | number;
       serie?: { id?: string | number };
       color?: string;
     }>;
     slice?: {
       points?: Array<{
-        data?: { x?: unknown; xFormatted?: unknown; y?: unknown; yFormatted?: unknown };
+        data?: {
+          x?: unknown;
+          xFormatted?: unknown;
+          y?: unknown;
+          yFormatted?: unknown;
+        };
         serieId?: string | number;
         serie?: { id?: string | number };
         color?: string;
@@ -213,9 +249,15 @@ function renderSliceTooltip(
       <div className={styles.tooltipMeta}>{xLabel}</div>
       <div className={styles.tooltipRows}>
         {rows.map((row, index) => (
-          <div className={styles.tooltipRow} key={`${row.seriesLabel}-${index}`}>
+          <div
+            className={styles.tooltipRow}
+            key={`${row.seriesLabel}-${index}`}
+          >
             <div className={styles.tooltipHead}>
-              <span className={styles.tooltipDot} style={{ backgroundColor: row.color }} />
+              <span
+                className={styles.tooltipDot}
+                style={{ backgroundColor: row.color }}
+              />
               <span>{row.seriesLabel}</span>
             </div>
             <div className={styles.tooltipValue}>{row.yLabel}</div>
@@ -227,7 +269,11 @@ function renderSliceTooltip(
 }
 
 function resolveSeriesLabel(
-  point: { serieId?: string | number; serie?: { id?: string | number }; color?: string },
+  point: {
+    serieId?: string | number;
+    serie?: { id?: string | number };
+    color?: string;
+  },
   index: number,
   seriesMeta: Array<{ id: string; color: string }>,
 ): string {
@@ -236,7 +282,9 @@ function resolveSeriesLabel(
     return raw;
   }
   if (point.color) {
-    const byColor = seriesMeta.find((item) => item.color.toLowerCase() === point.color!.toLowerCase());
+    const byColor = seriesMeta.find(
+      (item) => item.color.toLowerCase() === point.color!.toLowerCase(),
+    );
     if (byColor) {
       return byColor.id;
     }
@@ -252,7 +300,9 @@ function resolveSeriesColor(
   if (point.color) {
     return point.color;
   }
-  return seriesMeta[index]?.color ?? defaultPalette[index % defaultPalette.length];
+  return (
+    seriesMeta[index]?.color ?? defaultPalette[index % defaultPalette.length]
+  );
 }
 
 function compareAscii(a: string, b: string): number {
@@ -315,7 +365,11 @@ function normalizeSeries({
   }));
 }
 
-function normalizeX(value: ChartPoint["x"], index: number, xAxisMode: "time" | "index") {
+function normalizeX(
+  value: ChartPoint["x"],
+  index: number,
+  xAxisMode: "time" | "index",
+) {
   if (xAxisMode === "index") {
     if (value == null) {
       return String(index + 1);
