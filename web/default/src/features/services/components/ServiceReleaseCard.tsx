@@ -45,7 +45,8 @@ export function ServiceReleaseCard({ service, disabled }: ServiceReleaseCardProp
       navigate(`/releases/${release.id}`);
     },
   });
-  const tags = [...new Set(tagsQuery.data?.pages.flatMap((page) => page.tags) ?? [])];
+  const tags = [...new Set(tagsQuery.data?.pages.flatMap((page) => page.tags) ?? [])]
+    .sort((a, b) => b.localeCompare(a, undefined, { numeric: true }));
   const filteredTags = tags.filter((tag) => tag !== "latest" && tag.toLowerCase().includes(filter.toLowerCase()));
   const controlsDisabled = disabled || createMutation.isPending;
 
