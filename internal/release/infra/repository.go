@@ -233,6 +233,18 @@ func (r *repository) ListTasksByRelease(releaseID uuid.UUID) ([]model.Task, erro
 	return tasks, nil
 }
 
+func (r *repository) ListRecentSuccessfulDeployTasks(serviceID uuid.UUID, excludeReleaseID uuid.UUID, limit int) ([]model.Task, error) {
+	var tasks []model.Task
+	if err := r.conn.Where("service_id = ? AND release_id <> ? AND type = ? AND status = ? AND completed_at IS NOT NULL",
+		serviceID, excludeReleaseID, model.TaskTypeDeployGreen, model.TaskStatusSucceeded).
+		Order("completed_at desc").
+		Limit(limit).
+		Find(&tasks).Error; err != nil {
+		return nil, err
+	}
+	return tasks, nil
+}
+
 func (r *repository) ListRecoverableTasksByAgent(agentID string) ([]model.Task, error) {
 	var tasks []model.Task
 	if err := r.conn.Model(&model.Task{}).
@@ -306,6 +318,17 @@ func (r *repository) ListRuntimeInstancesByService(serviceID uuid.UUID) ([]model
 func (r *repository) ListTaskAttemptsByTask(taskID uuid.UUID) ([]model.TaskAttempt, error) {
 	var attempts []model.TaskAttempt
 	if err := r.conn.Where("task_id = ?", taskID).Order("created_at asc").Find(&attempts).Error; err != nil {
+		return nil, err
+	}
+	return attempts, nil
+}
+
+func (r *repository) ListTaskAttemptsByTasks(taskIDs []uuid.UUID) ([]model.TaskAttempt, error) {
+	if len(taskIDs) == 0 {
+		return []model.TaskAttempt{}, nil
+	}
+	var attempts []model.TaskAttempt
+	if err := r.conn.Where("task_id IN ?", taskIDs).Order("created_at asc").Find(&attempts).Error; err != nil {
 		return nil, err
 	}
 	return attempts, nil

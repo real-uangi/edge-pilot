@@ -961,151 +961,6 @@
   color: var(--ep-text-muted);
 }
 
-.pipelineContainer {
-  display: flex;
-  flex-direction: column;
-  padding: 4px 0;
-}
-
-.pipelineStep {
-  display: flex;
-  position: relative;
-  gap: 0;
-}
-
-.pipelineStep:last-child .pipelineConnector {
-  display: none;
-}
-
-.pipelineIndicator {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  width: 24px;
-  flex: 0 0 24px;
-  position: relative;
-}
-
-.pipelineNode {
-  position: relative;
-  z-index: 2;
-  width: 12px;
-  height: 12px;
-  flex: 0 0 auto;
-  margin-top: 18px;
-  border: 2px solid var(--ep-outline);
-  border-radius: 50%;
-  background: var(--ep-surface);
-}
-
-.pipelineNodeSuccess {
-  border-color: var(--ep-secondary);
-  background: var(--ep-secondary);
-}
-
-.pipelineNodeFailed {
-  border-color: var(--ep-danger);
-  background: var(--ep-danger);
-}
-
-.pipelineNodeRunning {
-  border-color: var(--ep-accent);
-  background: var(--ep-accent);
-  animation: skeletonPulse 1.4s var(--ep-ease-standard) infinite;
-}
-
-.pipelineNodeWarning {
-  border-color: var(--ep-warning);
-  background: var(--ep-warning);
-}
-
-.pipelineConnector {
-  width: 1px;
-  flex: 1;
-  min-height: 20px;
-  background: var(--ep-outline-ghost);
-}
-
-.pipelineConnectorDone {
-  background: #a9c7b5;
-}
-
-.pipelineConnectorFailed {
-  background: #e9b3ad;
-}
-
-.pipelineCard {
-  position: relative;
-  min-width: 0;
-  flex: 1;
-  margin: 0 0 12px 12px;
-  padding: 14px 16px;
-  border: 1px solid var(--ep-outline-ghost);
-  border-radius: var(--ep-radius-md);
-  background: var(--ep-surface);
-  cursor: pointer;
-  text-align: left;
-}
-
-.pipelineCard:hover {
-  background: var(--ep-surface-lowest);
-  border-color: var(--ep-outline);
-}
-
-.pipelineCardHeader {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  flex-wrap: wrap;
-  margin-bottom: 8px;
-}
-
-.pipelineCardTitle {
-  margin: 0;
-  font-size: 14px;
-  font-weight: 600;
-}
-
-.pipelineCardMeta {
-  display: flex;
-  gap: 12px;
-  flex-wrap: wrap;
-  margin-top: 8px;
-  font-size: 12px;
-  color: var(--ep-text-muted);
-  line-height: 1.6;
-}
-
-.pipelineCardMetaItem {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-}
-
-.pipelineCardMetaLabel {
-  color: var(--ep-text-dim);
-}
-
-.pipelineDuration {
-  font-family: var(--ep-font-mono);
-  font-size: 12px;
-  color: var(--ep-text);
-  font-variant-numeric: tabular-nums;
-}
-
-.pipelineDurationRunning {
-  color: var(--ep-accent);
-}
-
-.pipelineAuditBadge {
-  padding: 3px 7px;
-  border-radius: var(--ep-radius-xs);
-  background: var(--ep-surface-mid);
-  font-size: 12px;
-  color: var(--ep-text-muted);
-}
-
 .notesList {
   display: grid;
   gap: 12px;
@@ -1372,13 +1227,6 @@
   .filterBar > .resultCount {
     flex-basis: 100%;
   }
-  .pipelineCard {
-    padding: 12px;
-    margin-left: 8px;
-  }
-  .pipelineCardMeta {
-    gap: 6px 12px;
-  }
   .stateCard {
     padding: 22px 18px;
   }
@@ -1527,22 +1375,6 @@
     border-color: #a5bba8;
     background: #f2f6f0;
   }
-}
-
-.pipelineAuditCard {
-  cursor: default;
-}
-
-.pipelineAuditCard:hover {
-  background: var(--ep-surface);
-  border-color: var(--ep-outline-ghost);
-}
-
-.pipelineTaskButton {
-  width: 100%;
-  text-align: left;
-  color: inherit;
-  font: inherit;
 }
 
 .secondaryButton[aria-pressed="true"] {

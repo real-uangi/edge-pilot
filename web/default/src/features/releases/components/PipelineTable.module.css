@@ -1,0 +1,349 @@
+.section {
+  display: grid;
+  gap: 16px;
+  min-width: 0;
+  padding: 20px;
+  border: 1px solid var(--ep-outline-ghost);
+  border-radius: var(--ep-radius-lg);
+  background: var(--ep-surface);
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+}
+
+.title {
+  font-size: 16px;
+  line-height: 1.5;
+}
+
+.estimateNote {
+  color: var(--ep-text-muted);
+  font-size: 12px;
+}
+
+.tableWrap {
+  max-width: 100%;
+  min-width: 0;
+  overflow-x: auto;
+  isolation: isolate;
+  border: 1px solid var(--ep-outline-ghost);
+  border-radius: var(--ep-radius-md);
+}
+
+.table {
+  width: 100%;
+  table-layout: fixed;
+  min-width: 1040px;
+}
+
+.table th,
+.table td {
+  border-right: 1px solid var(--ep-outline-ghost);
+  border-bottom: 1px solid var(--ep-outline-ghost);
+}
+
+.table th:last-child,
+.table td:last-child {
+  border-right: 0;
+}
+
+.table tbody tr:last-child th,
+.table tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+.table tbody tr {
+  height: 144px;
+}
+
+.runHeader,
+.runInfo {
+  position: sticky;
+  left: 0;
+  z-index: 1;
+  width: 168px;
+  text-align: left;
+  background: var(--ep-surface);
+}
+
+.runHeader {
+  background: var(--ep-surface-lowest);
+}
+
+.stageHeader {
+  width: 144px;
+  padding: 14px 16px;
+  text-align: left;
+}
+
+.stageName,
+.estimate {
+  display: block;
+}
+
+.stageName {
+  color: var(--ep-text);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.estimate {
+  margin-top: 4px;
+  color: var(--ep-text-muted);
+  font-size: 12px;
+  font-weight: 400;
+  font-variant-numeric: tabular-nums;
+}
+
+.runInfo {
+  padding: 16px;
+  white-space: normal;
+  font-weight: 400;
+}
+
+.runNumber,
+.runTime,
+.replayCount {
+  display: block;
+}
+
+.runNumber {
+  min-height: 38px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  margin-bottom: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ep-text);
+  text-align: left;
+  text-decoration: underline;
+  text-decoration-color: var(--ep-outline);
+  text-underline-offset: 3px;
+}
+
+.runTime,
+.replayCount {
+  margin-top: 8px;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--ep-text-muted);
+}
+
+.replayCount {
+  margin-top: 4px;
+  color: var(--ep-warning);
+}
+
+.stageCell {
+  position: relative;
+  padding: 0;
+  vertical-align: middle;
+}
+
+.cell {
+  display: grid;
+  position: absolute;
+  inset: 0;
+  isolation: isolate;
+  overflow: hidden;
+  width: 100%;
+  min-height: 0;
+  height: 100%;
+  padding: 20px 16px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: var(--ep-text);
+  text-align: left;
+}
+
+.cell:disabled {
+  cursor: default;
+}
+
+.cell:not(:disabled):hover {
+  background: var(--ep-surface-lowest);
+}
+
+.cell:focus-visible {
+  outline-offset: -3px;
+}
+
+.cellContent {
+  position: relative;
+  display: grid;
+  align-content: center;
+  gap: 6px;
+}
+
+.duration {
+  font-family: var(--ep-font-mono);
+  font-size: 20px;
+  font-weight: 600;
+  line-height: 1.3;
+  font-variant-numeric: tabular-nums;
+}
+
+.cellStatus {
+  color: var(--ep-text-muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.progressFill {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background: var(--ep-secondary-soft);
+  transform-origin: left center;
+  transition: transform 400ms var(--ep-ease-standard);
+  pointer-events: none;
+}
+
+.cell[data-status="running"] .progressFill {
+  background: var(--ep-surface-high);
+}
+
+.cell[data-status="failed"] .progressFill,
+.cell[data-status="timed_out"] .progressFill {
+  background: var(--ep-danger-soft);
+}
+
+.cell[data-error-without-estimate="true"] {
+  background: var(--ep-danger-soft);
+}
+
+.cell[data-status="failed"] .cellStatus,
+.cell[data-status="timed_out"] .cellStatus {
+  color: var(--ep-danger);
+}
+
+.cell[data-status="completed"] .cellStatus {
+  color: var(--ep-secondary);
+}
+
+.cell[data-status="waiting"] .cellStatus,
+.overEstimate {
+  color: var(--ep-warning);
+}
+
+.cell[data-status="pending"],
+.cell[data-status="unrecorded"],
+.cell[data-status="skipped"] {
+  color: var(--ep-text-muted);
+}
+
+.overEstimate {
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.indeterminate {
+  animation: progressSweep 1.8s ease-in-out infinite;
+}
+
+.eventsSection,
+.logSection {
+  display: grid;
+  gap: 12px;
+}
+
+.eventsSection {
+  margin-bottom: 24px;
+}
+
+.detailTitle {
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.eventsList {
+  display: grid;
+  gap: 0;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.event {
+  display: grid;
+  grid-template-columns: 144px minmax(0, 1fr);
+  gap: 4px 16px;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--ep-outline-ghost);
+}
+
+.event:first-child {
+  padding-top: 0;
+}
+
+.eventAt {
+  color: var(--ep-text-muted);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.eventTitle {
+  color: var(--ep-text);
+  font-size: 13px;
+  font-weight: 500;
+  overflow-wrap: anywhere;
+}
+
+.eventMessage {
+  grid-column: 2;
+  margin: 0;
+  color: var(--ep-text-muted);
+  font-size: 12px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+@keyframes progressSweep {
+  from { transform: translateX(-35%) scaleX(0.35); }
+  to { transform: translateX(100%) scaleX(0.35); }
+}
+
+@media (max-width: 767px) {
+  .section {
+    padding: 16px;
+  }
+
+  .runHeader,
+  .runInfo {
+    width: 140px;
+  }
+
+  .runInfo {
+    padding: 12px;
+  }
+
+  .runNumber {
+    min-height: 44px;
+  }
+
+  .event {
+    grid-template-columns: 1fr;
+  }
+
+  .eventMessage {
+    grid-column: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .progressFill {
+    transition: none;
+  }
+
+  .indeterminate {
+    animation: none;
+    transform: scaleX(0.35);
+  }
+}

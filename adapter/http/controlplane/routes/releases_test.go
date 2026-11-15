@@ -1,8 +1,10 @@
 package routes
 
 import (
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -11,6 +13,7 @@ import (
 	adminauthapp "github.com/real-uangi/edge-pilot/internal/adminauth/application"
 	"github.com/real-uangi/edge-pilot/internal/shared/config"
 	"github.com/real-uangi/edge-pilot/internal/shared/dto"
+	"github.com/real-uangi/edge-pilot/internal/shared/model"
 
 	"github.com/real-uangi/allingo/common/business"
 
@@ -19,11 +22,19 @@ import (
 )
 
 type fakeReleaseActions struct {
-	lastOperator string
-	lastPercent  int
-	startErr     error
-	manualInput  dto.CreateManualReleaseRequest
-	manualCalls  int
+	lastOperator    string
+	lastPercent     int
+	startErr        error
+	manualInput     dto.CreateManualReleaseRequest
+	manualCalls     int
+	tasks           []dto.TaskSnapshot
+	audits          []dto.AuditLog
+	pipeline        *dto.ReleasePipeline
+	pipelineErr     error
+	pipelineCalls   int
+	pipelineRelease *dto.ReleaseOutput
+	pipelineTasks   []dto.TaskSnapshot
+	pipelineAudits  []dto.AuditLog
 }
 
 func (f *fakeReleaseActions) CreateManual(input dto.CreateManualReleaseRequest, operator string) (*dto.ReleaseOutput, error) {
@@ -42,11 +53,19 @@ func (f *fakeReleaseActions) Get(id uuid.UUID) (*dto.ReleaseOutput, error) {
 }
 
 func (f *fakeReleaseActions) ListTaskSnapshots(releaseID uuid.UUID) ([]dto.TaskSnapshot, error) {
-	return nil, nil
+	return f.tasks, nil
 }
 
 func (f *fakeReleaseActions) ListReleaseAudits(releaseID uuid.UUID) ([]dto.AuditLog, error) {
-	return nil, nil
+	return f.audits, nil
+}
+
+func (f *fakeReleaseActions) GetPipeline(release *dto.ReleaseOutput, tasks []dto.TaskSnapshot, audits []dto.AuditLog) (*dto.ReleasePipeline, error) {
+	f.pipelineCalls++
+	f.pipelineRelease = release
+	f.pipelineTasks = tasks
+	f.pipelineAudits = audits
+	return f.pipeline, f.pipelineErr
 }
 
 func (f *fakeReleaseActions) GetReleaseNotesAggregate(releaseID uuid.UUID) ([]dto.ReleaseNotesItem, error) {
@@ -252,5 +271,87 @@ func TestAdminReleaseStartRoutePassesConflictMessage(t *testing.T) {
 	}
 	if !strings.Contains(recorder.Body.String(), "1-99%") {
 		t.Fatalf("expected conflict message in response body, got %s", recorder.Body.String())
+	}
+}
+
+func TestAdminReleaseDetailPipeline(t *testing.T) {
+	for _, tc := range []struct {
+		name        string
+		withAuth    bool
+		pipelineErr error
+	}{
+		{name: "adds pipeline and preserves existing fields", withAuth: true},
+		{name: "propagates pipeline error", withAuth: true, pipelineErr: business.NewErrorWithCode("pipeline unavailable", 503)},
+		{name: "requires admin session"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			gin.SetMode(gin.TestMode)
+			cfg := &config.AdminAuthConfig{
+				Username: "admin", Password: "secret", SessionSecret: "session-secret",
+				SessionTTL: time.Hour, CookieName: "ep_admin_session",
+			}
+			auth := adminauthapp.NewService(cfg)
+			token, _, err := auth.Login(dto.AdminLoginRequest{Username: "admin", Password: "secret"})
+			if err != nil {
+				t.Fatal(err)
+			}
+			releaseID, taskID := uuid.New(), uuid.New()
+			estimate := int64(1200)
+			fake := &fakeReleaseActions{
+				tasks:  []dto.TaskSnapshot{{ID: taskID, Status: model.TaskStatusRunning}},
+				audits: []dto.AuditLog{{ID: uuid.New(), EventType: "task_dispatched"}},
+				pipeline: &dto.ReleasePipeline{
+					Stages: []dto.PipelineStage{{ID: "image", Label: "镜像准备", Kind: "automatic", EstimatedDurationMS: &estimate, SampleCount: 3}},
+					Runs:   []dto.PipelineRun{{TaskID: taskID, Sequence: 1, Status: model.TaskStatusRunning, Cells: []dto.PipelineCell{{StageID: "image", Status: "running"}}}},
+				},
+				pipelineErr: tc.pipelineErr,
+			}
+			engine := gin.New()
+			admin := engine.Group("/api/admin")
+			admin.Use(adaptermiddleware.RequireAdminSession(auth, cfg))
+			registerAdminReleaseRoutes(admin, fake)
+			req := httptest.NewRequest(http.MethodGet, "/api/admin/releases/"+releaseID.String(), nil)
+			if tc.withAuth {
+				req.AddCookie(&http.Cookie{Name: cfg.CookieName, Value: token})
+			}
+			recorder := httptest.NewRecorder()
+			engine.ServeHTTP(recorder, req)
+			if !tc.withAuth {
+				if recorder.Code != http.StatusUnauthorized || fake.pipelineCalls != 0 {
+					t.Fatalf("unauthorized status = %d, pipeline calls = %d", recorder.Code, fake.pipelineCalls)
+				}
+				return
+			}
+			if recorder.Code != http.StatusOK {
+				t.Fatalf("detail status = %d body=%s", recorder.Code, recorder.Body.String())
+			}
+			if fake.pipelineCalls != 1 || fake.pipelineRelease.ID != releaseID || !reflect.DeepEqual(fake.pipelineTasks, fake.tasks) || !reflect.DeepEqual(fake.pipelineAudits, fake.audits) {
+				t.Fatalf("pipeline did not receive the loaded release, tasks and audits: %+v", fake)
+			}
+			if tc.pipelineErr != nil {
+				if !strings.Contains(recorder.Body.String(), `"code":503`) || !strings.Contains(recorder.Body.String(), "pipeline unavailable") {
+					t.Fatalf("expected pipeline error, body=%s", recorder.Body.String())
+				}
+				return
+			}
+			var response struct {
+				Data map[string]json.RawMessage `json:"data"`
+			}
+			if err := json.Unmarshal(recorder.Body.Bytes(), &response); err != nil {
+				t.Fatal(err)
+			}
+			for _, key := range []string{"release", "tasks", "audits", "releaseNotesAggregate", "pipeline"} {
+				if _, exists := response.Data[key]; !exists {
+					t.Errorf("detail response is missing %q: %s", key, recorder.Body.String())
+				}
+			}
+			var pipeline dto.ReleasePipeline
+			if err := json.Unmarshal(response.Data["pipeline"], &pipeline); err != nil {
+				t.Fatal(err)
+			}
+			if !reflect.DeepEqual(pipeline, *fake.pipeline) {
+				t.Fatalf("pipeline = %+v, want %+v", pipeline, *fake.pipeline)
+			}
+		})
 	}
 }

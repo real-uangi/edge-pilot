@@ -309,6 +309,14 @@ func (r *fakeProxyReleaseRepo) GetTask(uuid.UUID) (*model.Task, error) { return 
 
 func (r *fakeProxyReleaseRepo) ListTasksByRelease(uuid.UUID) ([]model.Task, error) { return nil, nil }
 
+func (r *fakeProxyReleaseRepo) ListRecentSuccessfulDeployTasks(uuid.UUID, uuid.UUID, int) ([]model.Task, error) {
+	return nil, nil
+}
+
+func (r *fakeProxyReleaseRepo) ListTaskAttemptsByTasks([]uuid.UUID) ([]model.TaskAttempt, error) {
+	return nil, nil
+}
+
 func (r *fakeProxyReleaseRepo) ListRecoverableTasksByAgent(string) ([]model.Task, error) {
 	return nil, nil
 }

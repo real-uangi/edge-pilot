@@ -2,6 +2,8 @@ package infra
 
 import (
 	"database/sql/driver"
+	"errors"
+	"regexp"
 	"testing"
 	"time"
 
@@ -140,6 +142,85 @@ func TestListQueuedBefore(t *testing.T) {
 	}
 	if err := mock.ExpectationsWereMet(); err != nil {
 		t.Fatalf("ExpectationsWereMet() error = %v", err)
+	}
+}
+
+func TestListRecentSuccessfulDeployTasksFiltersAndLimitsSamples(t *testing.T) {
+	repo, mock := newMockedRepository(t)
+	serviceID, currentReleaseID, taskID := uuid.New(), uuid.New(), uuid.New()
+	completedAt := time.Now().UTC()
+	mock.ExpectQuery(regexp.QuoteMeta(`SELECT * FROM "ep_task" WHERE (service_id = $1 AND release_id <> $2 AND type = $3 AND status = $4 AND completed_at IS NOT NULL) AND "ep_task"."deleted_at" IS NULL ORDER BY completed_at desc LIMIT $5`)).
+		WithArgs(serviceID, currentReleaseID, model.TaskTypeDeployGreen, model.TaskStatusSucceeded, 10).
+		WillReturnRows(sqlmock.NewRows([]string{"id", "service_id", "type", "status", "completed_at"}).
+			AddRow(taskID, serviceID, model.TaskTypeDeployGreen, model.TaskStatusSucceeded, completedAt))
+
+	tasks, err := repo.ListRecentSuccessfulDeployTasks(serviceID, currentReleaseID, 10)
+	if err != nil {
+		t.Fatalf("ListRecentSuccessfulDeployTasks() error = %v", err)
+	}
+	if len(tasks) != 1 || tasks[0].ID != taskID || tasks[0].CompletedAt == nil || !tasks[0].CompletedAt.Equal(completedAt) {
+		t.Fatalf("unexpected samples: %+v", tasks)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestListRecentSuccessfulDeployTasksPropagatesQueryError(t *testing.T) {
+	repo, mock := newMockedRepository(t)
+	wantErr := errors.New("sample query failed")
+	mock.ExpectQuery(`SELECT \* FROM "ep_task"`).WillReturnError(wantErr)
+	_, err := repo.ListRecentSuccessfulDeployTasks(uuid.New(), uuid.New(), 10)
+	if !errors.Is(err, wantErr) {
+		t.Fatalf("error = %v, want %v", err, wantErr)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestListTaskAttemptsByTasksLoadsOnlySelectedTasksInOrder(t *testing.T) {
+	repo, mock := newMockedRepository(t)
+	firstTaskID, secondTaskID := uuid.New(), uuid.New()
+	firstID, secondID := uuid.New(), uuid.New()
+	createdAt := time.Now().UTC()
+	mock.ExpectQuery(regexp.QuoteMeta(`SELECT * FROM "ep_task_attempt" WHERE task_id IN ($1,$2) AND "ep_task_attempt"."deleted_at" IS NULL ORDER BY created_at asc`)).
+		WithArgs(firstTaskID, secondTaskID).
+		WillReturnRows(sqlmock.NewRows([]string{"id", "task_id", "created_at", "message"}).
+			AddRow(firstID, firstTaskID, createdAt, "accepted").
+			AddRow(secondID, secondTaskID, createdAt.Add(time.Second), "image_pulled"))
+
+	attempts, err := repo.ListTaskAttemptsByTasks([]uuid.UUID{firstTaskID, secondTaskID})
+	if err != nil {
+		t.Fatalf("ListTaskAttemptsByTasks() error = %v", err)
+	}
+	if len(attempts) != 2 || attempts[0].ID != firstID || attempts[1].ID != secondID {
+		t.Fatalf("unexpected attempts: %+v", attempts)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestListTaskAttemptsByTasksEmptyDoesNotQuery(t *testing.T) {
+	// No connection is needed when there are no sample tasks.
+	repo := &repository{}
+	attempts, err := repo.ListTaskAttemptsByTasks(nil)
+	if err != nil || len(attempts) != 0 {
+		t.Fatalf("ListTaskAttemptsByTasks(nil) = %+v, %v", attempts, err)
+	}
+}
+
+func TestListTaskAttemptsByTasksPropagatesQueryError(t *testing.T) {
+	repo, mock := newMockedRepository(t)
+	wantErr := errors.New("attempt query failed")
+	mock.ExpectQuery(`SELECT \* FROM "ep_task_attempt"`).WillReturnError(wantErr)
+	_, err := repo.ListTaskAttemptsByTasks([]uuid.UUID{uuid.New()})
+	if !errors.Is(err, wantErr) {
+		t.Fatalf("error = %v, want %v", err, wantErr)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatal(err)
 	}
 }
 

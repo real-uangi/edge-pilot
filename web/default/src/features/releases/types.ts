@@ -41,6 +41,7 @@ export interface TaskSnapshot {
   dockerHealth: string;
   failureLogs: string;
   cleanupCompleted: boolean | null;
+  createdAt: string;
   dispatchedAt: string | null;
   startedAt: string | null;
   completedAt: string | null;
@@ -73,5 +74,53 @@ export interface ReleaseDetail {
   release: ReleaseRecord;
   tasks: TaskSnapshot[];
   audits: AuditLog[];
+  pipeline: ReleasePipeline;
   releaseNotesAggregate: ReleaseNotesItem[];
+}
+
+export interface ReleasePipeline {
+  stages: PipelineStage[];
+  runs: PipelineRun[];
+}
+
+export interface PipelineStage {
+  id: string;
+  label: string;
+  kind: "automatic" | "manual" | "event";
+  estimatedDurationMs: number | null;
+  sampleCount: number;
+}
+
+export interface PipelineRun {
+  taskId: string;
+  sequence: number;
+  status: number;
+  startedAt: string;
+  completedAt: string | null;
+  replayCount: number;
+  cells: PipelineCell[];
+}
+
+export interface PipelineCell {
+  stageId: string;
+  status:
+    | "pending"
+    | "running"
+    | "completed"
+    | "failed"
+    | "timed_out"
+    | "waiting"
+    | "unrecorded"
+    | "skipped";
+  durationMs: number | null;
+  runningSince: string | null;
+  events: PipelineEvent[];
+}
+
+export interface PipelineEvent {
+  id: string;
+  kind: "task" | "audit";
+  code: string;
+  message: string;
+  at: string;
 }

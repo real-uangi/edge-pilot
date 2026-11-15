@@ -27,10 +27,12 @@ type Repository interface {
 	UpdateTask(*model.Task) error
 	GetTask(uuid.UUID) (*model.Task, error)
 	ListTasksByRelease(uuid.UUID) ([]model.Task, error)
+	ListRecentSuccessfulDeployTasks(serviceID uuid.UUID, excludeReleaseID uuid.UUID, limit int) ([]model.Task, error)
 	ListRecoverableTasksByAgent(string) ([]model.Task, error)
 	ListActiveTasks() ([]model.Task, error)
 	CreateTaskAttempt(*model.TaskAttempt) error
 	ListTaskAttemptsByTask(uuid.UUID) ([]model.TaskAttempt, error)
+	ListTaskAttemptsByTasks([]uuid.UUID) ([]model.TaskAttempt, error)
 	ListAuditsByAggregate(string, string) ([]model.AuditLog, error)
 	UpsertRuntimeInstance(*model.RuntimeInstance) error
 	GetRuntimeInstanceByServiceAndSlot(uuid.UUID, model.Slot) (*model.RuntimeInstance, error)

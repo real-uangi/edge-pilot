@@ -2,6 +2,7 @@ package application
 
 import (
 	"errors"
+	"reflect"
 	"sort"
 	"strings"
 	"testing"
@@ -21,6 +22,173 @@ import (
 	"github.com/google/uuid"
 	commondb "github.com/real-uangi/allingo/common/db"
 )
+
+func TestListTaskSnapshotsNormalizesAttemptTimes(t *testing.T) {
+	t0 := time.Date(2026, time.November, 15, 12, 0, 0, 0, time.UTC)
+	t1 := t0.Add(time.Second)
+	t2 := t0.Add(2 * time.Second)
+	t3 := t0.Add(3 * time.Second)
+	tests := []struct {
+		name          string
+		status        model.TaskStatus
+		completedAt   *time.Time
+		attempts      []model.TaskAttempt
+		wantStarted   []time.Time
+		wantCompleted []*time.Time
+	}{
+		{
+			name:   "active chain leaves only latest attempt open",
+			status: model.TaskStatusRunning,
+			attempts: []model.TaskAttempt{
+				{Model: commondb.Model{CreatedAt: t0}, Status: model.TaskStatusDispatched, Message: "dispatched", StartedAt: &t0},
+				{Model: commondb.Model{CreatedAt: t1}, Status: model.TaskStatusDispatched, Message: "replayed_after_reconnect", StartedAt: &t1},
+				{Model: commondb.Model{CreatedAt: t2}, Status: model.TaskStatusRunning, Message: "accepted", StartedAt: &t2},
+			},
+			wantStarted:   []time.Time{t0, t1, t2},
+			wantCompleted: []*time.Time{&t1, &t2, nil},
+		},
+		{
+			name:        "completed task closes final activity without terminal event",
+			status:      model.TaskStatusSucceeded,
+			completedAt: &t2,
+			attempts: []model.TaskAttempt{
+				{Model: commondb.Model{CreatedAt: t0}, Status: model.TaskStatusRunning, StartedAt: &t0},
+			},
+			wantStarted:   []time.Time{t0},
+			wantCompleted: []*time.Time{&t2},
+		},
+		{
+			name:        "terminal event uses completion before later creation time",
+			status:      model.TaskStatusFailed,
+			completedAt: &t1,
+			attempts: []model.TaskAttempt{
+				{Model: commondb.Model{CreatedAt: t0}, Status: model.TaskStatusRunning, StartedAt: &t0},
+				{Model: commondb.Model{CreatedAt: t2}, Status: model.TaskStatusFailed, CompletedAt: &t1},
+			},
+			wantStarted:   []time.Time{t0, t1},
+			wantCompleted: []*time.Time{&t1, &t1},
+		},
+		{
+			name:        "existing times remain unchanged",
+			status:      model.TaskStatusTimedOut,
+			completedAt: &t3,
+			attempts: []model.TaskAttempt{
+				{Model: commondb.Model{CreatedAt: t0}, Status: model.TaskStatusRunning, StartedAt: &t0, CompletedAt: &t1},
+				{Model: commondb.Model{CreatedAt: t3}, Status: model.TaskStatusTimedOut, StartedAt: &t2, CompletedAt: &t3},
+			},
+			wantStarted:   []time.Time{t0, t2},
+			wantCompleted: []*time.Time{&t1, &t3},
+		},
+		{
+			name:   "missing start uses creation time",
+			status: model.TaskStatusRunning,
+			attempts: []model.TaskAttempt{
+				{Model: commondb.Model{CreatedAt: t0}, Status: model.TaskStatusDispatched},
+				{Model: commondb.Model{CreatedAt: t1}, Status: model.TaskStatusRunning},
+			},
+			wantStarted:   []time.Time{t0, t1},
+			wantCompleted: []*time.Time{&t1, nil},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			repo := newFakeReleaseRepo()
+			task := &model.Task{ID: uuid.New(), ReleaseID: uuid.New(), Status: tt.status, CompletedAt: tt.completedAt}
+			repo.tasks[task.ID] = task
+			originals := make([]model.TaskAttempt, len(tt.attempts))
+			for i := range tt.attempts {
+				tt.attempts[i].ID = uuid.New()
+				tt.attempts[i].TaskID = task.ID
+				originals[i] = tt.attempts[i]
+				if originals[i].StartedAt != nil {
+					value := *originals[i].StartedAt
+					originals[i].StartedAt = &value
+				}
+				if originals[i].CompletedAt != nil {
+					value := *originals[i].CompletedAt
+					originals[i].CompletedAt = &value
+				}
+			}
+			// Store in reverse order so the fake must honor repository ordering.
+			for i := len(tt.attempts) - 1; i >= 0; i-- {
+				repo.taskAttempts = append(repo.taskAttempts, &tt.attempts[i])
+			}
+			service := &Service{repo: repo}
+			snapshots, err := service.ListTaskSnapshots(task.ReleaseID)
+			if err != nil {
+				t.Fatalf("ListTaskSnapshots() error = %v", err)
+			}
+			if len(snapshots) != 1 || len(snapshots[0].Attempts) != len(tt.attempts) {
+				t.Fatalf("unexpected snapshots: %+v", snapshots)
+			}
+			if snapshots[0].Status != task.Status || !reflect.DeepEqual(snapshots[0].CompletedAt, task.CompletedAt) {
+				t.Fatalf("task status or completion changed: %+v", snapshots[0])
+			}
+			for i, got := range snapshots[0].Attempts {
+				if got.ID != tt.attempts[i].ID || got.Status != tt.attempts[i].Status || got.Message != tt.attempts[i].Message {
+					t.Errorf("attempt %d identity or status changed: %+v", i, got)
+				}
+				if got.StartedAt == nil || !got.StartedAt.Equal(tt.wantStarted[i]) {
+					t.Errorf("attempt %d startedAt = %v, want %v", i, got.StartedAt, tt.wantStarted[i])
+				}
+				if !reflect.DeepEqual(got.CompletedAt, tt.wantCompleted[i]) {
+					t.Errorf("attempt %d completedAt = %v, want %v", i, got.CompletedAt, tt.wantCompleted[i])
+				}
+				if got.StartedAt != nil && got.CompletedAt != nil && got.CompletedAt.Before(*got.StartedAt) {
+					t.Errorf("attempt %d has negative duration", i)
+				}
+			}
+			if !reflect.DeepEqual(tt.attempts, originals) {
+				t.Fatalf("ListTaskSnapshots() mutated stored attempts: got %+v, want %+v", tt.attempts, originals)
+			}
+		})
+	}
+}
+
+func TestListTaskSnapshotsKeepsTaskAttemptTimelinesSeparate(t *testing.T) {
+	t0 := time.Date(2026, time.November, 15, 12, 0, 0, 0, time.UTC)
+	t1 := t0.Add(time.Second)
+	t2 := t0.Add(2 * time.Second)
+	repo := newFakeReleaseRepo()
+	releaseID := uuid.New()
+	activeTask := &model.Task{ID: uuid.New(), ReleaseID: releaseID, Status: model.TaskStatusRunning}
+	finishedTask := &model.Task{ID: uuid.New(), ReleaseID: releaseID, Status: model.TaskStatusSucceeded, CompletedAt: &t2}
+	otherReleaseTask := &model.Task{ID: uuid.New(), ReleaseID: uuid.New(), Status: model.TaskStatusRunning}
+	for _, task := range []*model.Task{activeTask, finishedTask, otherReleaseTask} {
+		repo.tasks[task.ID] = task
+	}
+	repo.taskAttempts = []*model.TaskAttempt{
+		{ID: uuid.New(), Model: commondb.Model{CreatedAt: t0}, TaskID: activeTask.ID, Status: model.TaskStatusRunning, StartedAt: &t0},
+		{ID: uuid.New(), Model: commondb.Model{CreatedAt: t1}, TaskID: finishedTask.ID, Status: model.TaskStatusRunning, StartedAt: &t1},
+		{ID: uuid.New(), Model: commondb.Model{CreatedAt: t2}, TaskID: otherReleaseTask.ID, Status: model.TaskStatusRunning, StartedAt: &t2},
+	}
+	service := &Service{repo: repo}
+	snapshots, err := service.ListTaskSnapshots(releaseID)
+	if err != nil {
+		t.Fatalf("ListTaskSnapshots() error = %v", err)
+	}
+	if len(snapshots) != 2 {
+		t.Fatalf("expected two task snapshots, got %d", len(snapshots))
+	}
+	for _, snapshot := range snapshots {
+		if len(snapshot.Attempts) != 1 {
+			t.Fatalf("task %s contains attempts from another task: %+v", snapshot.ID, snapshot.Attempts)
+		}
+		attempt := snapshot.Attempts[0]
+		switch snapshot.ID {
+		case activeTask.ID:
+			if attempt.ID != repo.taskAttempts[0].ID || attempt.CompletedAt != nil {
+				t.Errorf("active attempt was closed by another task: %+v", attempt)
+			}
+		case finishedTask.ID:
+			if attempt.ID != repo.taskAttempts[1].ID || attempt.CompletedAt == nil || !attempt.CompletedAt.Equal(t2) {
+				t.Errorf("finished attempt has incorrect completion: %+v", attempt)
+			}
+		default:
+			t.Errorf("unexpected task from another release: %s", snapshot.ID)
+		}
+	}
+}
 
 func TestCreateFromCICreatesQueuedReleaseWithoutDispatch(t *testing.T) {
 	serviceRepo := &fakeServiceRepo{}
@@ -2780,6 +2948,37 @@ func (r *fakeReleaseRepo) ListTasksByRelease(releaseID uuid.UUID) ([]model.Task,
 	return out, nil
 }
 
+func (r *fakeReleaseRepo) ListRecentSuccessfulDeployTasks(serviceID, excludeReleaseID uuid.UUID, limit int) ([]model.Task, error) {
+	out := make([]model.Task, 0)
+	for _, task := range r.tasks {
+		if task.ServiceID == serviceID && task.ReleaseID != excludeReleaseID &&
+			task.Type == model.TaskTypeDeployGreen && task.Status == model.TaskStatusSucceeded &&
+			task.CompletedAt != nil {
+			out = append(out, *task)
+		}
+	}
+	sort.SliceStable(out, func(i, j int) bool { return out[i].CompletedAt.After(*out[j].CompletedAt) })
+	if len(out) > limit {
+		out = out[:limit]
+	}
+	return out, nil
+}
+
+func (r *fakeReleaseRepo) ListTaskAttemptsByTasks(taskIDs []uuid.UUID) ([]model.TaskAttempt, error) {
+	ids := make(map[uuid.UUID]struct{}, len(taskIDs))
+	for _, id := range taskIDs {
+		ids[id] = struct{}{}
+	}
+	out := make([]model.TaskAttempt, 0)
+	for _, attempt := range r.taskAttempts {
+		if _, ok := ids[attempt.TaskID]; ok {
+			out = append(out, *attempt)
+		}
+	}
+	sort.SliceStable(out, func(i, j int) bool { return out[i].CreatedAt.Before(out[j].CreatedAt) })
+	return out, nil
+}
+
 func (r *fakeReleaseRepo) ListRecoverableTasksByAgent(agentID string) ([]model.Task, error) {
 	out := make([]model.Task, 0)
 	for _, task := range r.tasks {
@@ -2856,7 +3055,16 @@ func (r *fakeReleaseRepo) CreateAudit(log *model.AuditLog) error {
 }
 
 func (r *fakeReleaseRepo) ListTaskAttemptsByTask(taskID uuid.UUID) ([]model.TaskAttempt, error) {
-	return nil, nil
+	out := make([]model.TaskAttempt, 0)
+	for _, attempt := range r.taskAttempts {
+		if attempt.TaskID == taskID {
+			out = append(out, *attempt)
+		}
+	}
+	sort.Slice(out, func(i, j int) bool {
+		return out[i].CreatedAt.Before(out[j].CreatedAt)
+	})
+	return out, nil
 }
 
 func (r *fakeReleaseRepo) ListAuditsByAggregate(aggregateType string, aggregateID string) ([]model.AuditLog, error) {

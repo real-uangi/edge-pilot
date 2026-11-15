@@ -100,11 +100,14 @@ export function taskStepLabel(step: string): string {
     {
       accepted: "接受任务",
       dispatched: "派发任务",
-      "replayed_after_reconnect": "重连后重派",
+      dispatch_deferred: "等待派发",
+      dispatch_failed: "派发失败",
+      "replayed_after_reconnect": "重新派发",
       recovered_running: "恢复运行",
       image_pulled: "拉取镜像",
       image_pull_failed: "拉取镜像失败",
       container_started: "启动服务",
+      container_reused_waiting: "复用容器，等待就绪",
       startup_grace_started: "启动宽限期",
       health_probe_retry: "健康探测",
       healthy: "健康检查通过",
@@ -115,12 +118,22 @@ export function taskStepLabel(step: string): string {
       task_timed_out: "任务超时",
       managed_container_conflict: "容器冲突",
       proxy_stack_not_ready: "代理栈未就绪",
+      execution_failed: "执行失败",
       noop: "无操作",
     }[step] ?? step
   );
 }
 
 export function auditEventLabel(eventType: string, message: string): string {
+  const stageEvents: Record<string, string> = {
+    ready_to_switch: "等待确认切流",
+    rollback_completed: "回滚完成",
+    rolled_back: "回滚完成",
+    release_superseded: "已被后续发布替代",
+  };
+  if (stageEvents[eventType]) {
+    return stageEvents[eventType];
+  }
   if (eventType === "traffic_percent_updated") {
     const match = message.match(/percent=(\d+)/);
     const percent = match ? match[1] : "?";

@@ -528,15 +528,30 @@ func (s *Service) ListTaskSnapshots(releaseID uuid.UUID) ([]dto.TaskSnapshot, er
 		if err != nil {
 			return nil, err
 		}
-		attemptDTOs := make([]dto.TaskAttempt, 0, len(attempts))
-		for _, a := range attempts {
-			attemptDTOs = append(attemptDTOs, dto.TaskAttempt{
+		attemptDTOs := make([]dto.TaskAttempt, len(attempts))
+		nextStepAt := tasks[i].CompletedAt
+		// Attempts are append-only events; bound each step by the next event or task completion.
+		for j := len(attempts) - 1; j >= 0; j-- {
+			a := attempts[j]
+			startedAt := a.StartedAt
+			if startedAt == nil {
+				startedAt = a.CompletedAt
+			}
+			if startedAt == nil {
+				startedAt = &a.CreatedAt
+			}
+			completedAt := a.CompletedAt
+			if completedAt == nil {
+				completedAt = nextStepAt
+			}
+			attemptDTOs[j] = dto.TaskAttempt{
 				ID:          a.ID,
 				Status:      a.Status,
 				Message:     a.Message,
-				StartedAt:   a.StartedAt,
-				CompletedAt: a.CompletedAt,
-			})
+				StartedAt:   startedAt,
+				CompletedAt: completedAt,
+			}
+			nextStepAt = startedAt
 		}
 		out = append(out, dto.TaskSnapshot{
 			ID:               tasks[i].ID,
@@ -547,6 +562,7 @@ func (s *Service) ListTaskSnapshots(releaseID uuid.UUID) ([]dto.TaskSnapshot, er
 			DockerHealth:     tasks[i].DockerHealth,
 			FailureLogs:      tasks[i].FailureLogs,
 			CleanupCompleted: tasks[i].CleanupCompleted,
+			CreatedAt:        tasks[i].CreatedAt,
 			DispatchedAt:     tasks[i].DispatchedAt,
 			StartedAt:        tasks[i].StartedAt,
 			CompletedAt:      tasks[i].CompletedAt,

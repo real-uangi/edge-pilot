@@ -218,7 +218,7 @@ export function ReleaseDetailPage() {
           }
         />
       ) : null}
-      <TaskTimeline tasks={tasks} audits={detailQuery.data.audits || []} />
+      <TaskTimeline tasks={tasks} pipeline={detailQuery.data.pipeline} />
       {detailQuery.data.releaseNotesAggregate?.length > 0 ? (
         <section className={styles.sectionCard}>
           <h2 className={styles.sectionSubtitle}>发布变更</h2>

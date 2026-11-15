@@ -93,6 +93,7 @@ type TaskSnapshot struct {
 	DockerHealth     string           `json:"dockerHealth"`
 	FailureLogs      string           `json:"failureLogs"`
 	CleanupCompleted *bool            `json:"cleanupCompleted"`
+	CreatedAt        time.Time        `json:"createdAt"`
 	DispatchedAt     *time.Time       `json:"dispatchedAt"`
 	StartedAt        *time.Time       `json:"startedAt"`
 	CompletedAt      *time.Time       `json:"completedAt"`
